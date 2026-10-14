@@ -6,6 +6,7 @@
 //
 //   pnpm run scenario            (node e2e/scenario.mjs)
 //   OBI_SPHERE_E2E_KEEP=1        keep the run folder (logs, state) afterwards
+//   OBI_DIR=<obi checkout>       check e2e/fixtures/ against obi's (default: ../obi, when there)
 //
 // It runs, with SCENARIO.md's fixed values and calls:
 //   step 1  Sphere up, team created, two Obis invited
@@ -26,11 +27,11 @@ import { dirname, join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 import { Obi, Owner, SphereClient, directoryKeys, spec } from "./client.mjs";
+import { loadFixtures } from "./fixtures.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SERVER_DIR = resolve(here, "..");
 const CHECKOUT = resolve(SERVER_DIR, "..");
-const fixture = (name) => JSON.parse(readFileSync(join(here, "fixtures", name), "utf8"));
 
 // SCENARIO.md, "The fixed values".
 const SPHERE = { id: "e2e", name: "E2E sphere" };
@@ -39,8 +40,18 @@ const B = { obi: "obi-ernesto", owner: "ernesto", name: "Ernesto's Obi", accepts
 const POLICY_RULES = [{ id: "team-reviews", from_owner: "*", to_owner: "*", actions: ["review_request"], repos: ["obi-e2e/fixture-app"] }];
 const OBI_SCOPES = "send:review_request reply receive directory:read audit:read";
 const ADMIN_SCOPES = "admin directory:read audit:read";
-const BRIEF = fixture("brief.json");
-const EXPECTED_RESULT = fixture("result.json");
+// SCENARIO.md's brief and result, checked against obi's own files when an obi checkout is at hand
+// (e2e/fixtures.mjs): a copy that no longer matches stops the run before any step.
+const FIXTURES = (() => {
+  try {
+    return loadFixtures();
+  } catch (e) {
+    console.log(`  FAIL  fixtures: ${e.message}`);
+    process.exit(1);
+  }
+})();
+const BRIEF = FIXTURES.brief;
+const EXPECTED_RESULT = FIXTURES.result;
 const EXPIRES_IN = 3600;
 // The remembered decision's id obid A would name (`d-` and 12 lower-case hex): opaque to the Sphere.
 const D1 = "d-3f9a0c1b2e4d";
@@ -334,6 +345,7 @@ async function main() {
   console.log("Obi Sphere: the scenario's Sphere-side steps, with a scripted client");
   console.log(`  server   ${SERVER_DIR}`);
   console.log(`  run      ${RUN}`);
+  console.log(`  fixtures ${FIXTURES.checkedAgainst ? `match obi's, in ${FIXTURES.checkedAgainst}` : "the copies in e2e/fixtures/, not checked: no obi checkout (set OBI_DIR)"}`);
   ctx.before = snapshot(CHECKOUT);
   ctx.homeNames = topNames(homedir());
   ctx.tmpNames = topNames(tmpdir());

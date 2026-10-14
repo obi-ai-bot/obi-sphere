@@ -1,5 +1,6 @@
 # The Sphere server (server/): types, its tests inside workerd, the conformance suite against its
-# checker, and the scenario's Sphere-side steps against a local Sphere (`pnpm run local`).
+# checker, the scenario's Sphere-side steps and concurrent sends against a local Sphere
+# (`pnpm run local`), and its copies of obi's e2e fixtures against obi's (when it may read obi).
 name: Server
 
 on:
@@ -48,6 +49,40 @@ jobs:
           (cd spec && pnpm install --frozen-lockfile)
           (cd server && pnpm install --frozen-lockfile)
 
+      # server/e2e/fixtures/ are copies of obi's e2e fixtures (server/e2e/fixtures.mjs). obi is
+      # private: reading it needs the secret OBI_READ_TOKEN (a fine-grained token with Contents:
+      # read on obi-ai-bot/obi only), which a person creates. Without it the run says so with a
+      # warning and the comparison doesn't run; with it, check:fixtures and the scenario both
+      # compare the copies with obi's dev and fail on any difference.
+      - name: Is there a token for reading obi?
+        id: obi
+        env:
+          OBI_READ_TOKEN: ${{ secrets.OBI_READ_TOKEN }}
+        run: |
+          if [ -n "$OBI_READ_TOKEN" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::The secret OBI_READ_TOKEN is not set, so server/e2e/fixtures/ are not compared with obi's e2e fixtures here. Add a fine-grained token with Contents: read on obi-ai-bot/obi only, as this repository's Actions secret OBI_READ_TOKEN."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out obi's e2e fixtures
+        if: steps.obi.outputs.present == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: obi-ai-bot/obi
+          ref: dev
+          path: obi-fixtures
+          token: ${{ secrets.OBI_READ_TOKEN }}
+          sparse-checkout: e2e/fixtures/messages
+
+      - name: Fixtures match obi's
+        if: steps.obi.outputs.present == 'true'
+        working-directory: server
+        run: |
+          echo "OBI_DIR=$GITHUB_WORKSPACE/obi-fixtures" >> "$GITHUB_ENV"
+          OBI_DIR="$GITHUB_WORKSPACE/obi-fixtures" pnpm run check:fixtures
+
       - name: Validators match the spec's schemas
         working-directory: server
         run: pnpm run check:validators
@@ -71,3 +106,7 @@ jobs:
       - name: Scenario steps 1, 3, 5 and 7 against a local Sphere
         working-directory: server
         run: pnpm run scenario
+
+      - name: 200 concurrent sends against a local Sphere, all recorded, one chain
+        working-directory: server
+        run: pnpm run load -- --sends 200
