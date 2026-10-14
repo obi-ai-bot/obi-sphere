@@ -1,0 +1,125 @@
+// Health, Spheres and the operator (spec/sphere-api.md sections 1 to 3).
+
+import { env } from "cloudflare:test";
+import { describe, expect, it } from "vitest";
+import { handle } from "../src/app";
+import { BASE, Clock, OPERATOR, World, expectSchema, makeCall, newKey } from "./helpers";
+
+describe("health", () => {
+  it("answers without authentication", async () => {
+    const call = makeCall(new Clock());
+    const r = await call("GET", "/v0.1/health");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ ok: true, protocol: "obi/0.1" });
+    expectSchema("healthResponse", r.body);
+    expect(r.headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("answers 404 not_found for anything not in the API", async () => {
+    const call = makeCall(new Clock());
+    for (const [method, path] of [["GET", "/"], ["GET", "/v0.1/nothing"], ["DELETE", "/v0.1/health"], ["GET", "/v0.1/spheres"], ["POST", "/v0.1/spheres/e2e/audit"]] as const) {
+      const r = await call(method, path);
+      expect(r.status, `${method} ${path}`).toBe(404);
+      expect(r.body.error.code).toBe("not_found");
+    }
+  });
+});
+
+describe("POST /v0.1/spheres", () => {
+  it("creates a Sphere: admin bound, policy version 0 with no rules, empty chain", async () => {
+    const w = new World();
+    const r = await w.create();
+    expect(r.status).toBe(201);
+    expectSchema("sphere", r.body);
+    expect(r.body).toEqual({ sphere: "e2e", name: "E2E sphere", protocol: "obi/0.1", admin_owner: "wellington", created_at: "2026-10-14T12:00:00Z" });
+
+    const token = await w.ownerToken();
+    const policy = await w.call("GET", "/v0.1/spheres/e2e/policy", { token });
+    expect(policy.body).toEqual({ version: 0, updated_at: "2026-10-14T12:00:00Z", rules: [] });
+    const audit = await w.call("GET", "/v0.1/spheres/e2e/audit", { token });
+    expect(audit.body).toEqual({ sphere: "e2e", entries: [], head: { seq: 0, hash: "0".repeat(64) } });
+    const got = await w.call("GET", "/v0.1/spheres/e2e", { token });
+    expect(got.status).toBe(200);
+    expect(got.body).toEqual(r.body);
+  });
+
+  it("is 409 conflict when the id is taken", async () => {
+    const w = new World();
+    expect((await w.create()).status).toBe(201);
+    const again = await w.create();
+    expect(again.status).toBe(409);
+    expect(again.body.error.code).toBe("conflict");
+  });
+
+  it("needs the operator token: 401 when it is missing or wrong", async () => {
+    const w = new World();
+    const key = await newKey();
+    const body = { sphere: "e2e", name: "E2E sphere", admin: { owner: "wellington", owner_key: key.publicKey } };
+    for (const token of [undefined, "wrong-token-wrong-token-wrong-token-wrong", OPERATOR + "x"]) {
+      const r = await w.call("POST", "/v0.1/spheres", { token, body });
+      expect(r.status).toBe(401);
+      expect(r.body.error.code).toBe("unauthorized");
+    }
+  });
+
+  it("refuses every operator call (403 forbidden) when no operator token is configured", async () => {
+    const key = await newKey();
+    const body = JSON.stringify({ sphere: "e2e", name: "E2E sphere", admin: { owner: "wellington", owner_key: key.publicKey } });
+    for (const configured of [undefined, "short"]) {
+      const res = await handle(
+        new Request(`${BASE}/v0.1/spheres`, { method: "POST", headers: { Authorization: `Bearer ${configured ?? "x"}` }, body }),
+        { DB: env.DB, SPHERE_OPERATOR_TOKEN: configured },
+        { now: () => Date.now() },
+      );
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
+    }
+  });
+
+  it("is 400 bad_request for a body that doesn't match the schema", async () => {
+    const w = new World();
+    const key = await newKey();
+    const good = { sphere: "e2e", name: "E2E sphere", admin: { owner: "wellington", owner_key: key.publicKey } };
+    for (const body of [
+      {},
+      { ...good, extra: 1 },
+      { ...good, sphere: "E2E" },
+      { ...good, name: "two\nlines" },
+      { ...good, admin: { owner: "wellington" } },
+      { ...good, admin: { ...good.admin, owner_key: "short" } },
+    ]) {
+      const r = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, body });
+      expect(r.status, JSON.stringify(body)).toBe(400);
+      expect(r.body.error.code).toBe("bad_request");
+    }
+    const dup = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, raw: `{"sphere":"e2e","sphere":"x","name":"n","admin":{"owner":"a","owner_key":"${key.publicKey}"}}` });
+    expect(dup.status).toBe(400);
+    const notJson = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, raw: "{" });
+    expect(notJson.status).toBe(400);
+  });
+
+  it("is 413 payload_too_large past 131,072 bytes", async () => {
+    const w = new World();
+    const r = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, raw: `{"sphere":"${"a".repeat(131072)}"}` });
+    expect(r.status).toBe(413);
+    expect(r.body.error.code).toBe("payload_too_large");
+  });
+
+  it("answers GET /spheres/{sphere} 404 for a Sphere that doesn't exist, 401 for a token of another Sphere", async () => {
+    const w = new World();
+    await w.create();
+    const token = await w.ownerToken();
+    const missing = await w.call("GET", "/v0.1/spheres/nope", { token });
+    expect(missing.status).toBe(404);
+    expect(missing.body.error.code).toBe("not_found");
+
+    const other = new World("other");
+    other.clock.ms = w.clock.ms;
+    await other.create("ernesto");
+    const r = await w.call("GET", "/v0.1/spheres/other", { token });
+    expect(r.status).toBe(401);
+    expect(r.body.error.code).toBe("unauthorized");
+    expect((await w.call("GET", "/v0.1/spheres/e2e")).status).toBe(401);
+    expect((await w.call("GET", "/v0.1/spheres/e2e", { token: "not-a-token-not-a-token-not-a-token" })).status).toBe(401);
+  });
+});
