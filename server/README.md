@@ -1,19 +1,44 @@
 # Sphere server
 
-Nothing is implemented yet.
+The Sphere of the Obi-to-Obi protocol v0.1: a team's directory, invitations and pairing, tokens (OAuth on-behalf-of), policy, store-and-forward relay and audit chain. It implements [`../spec/sphere-api.md`](../spec/sphere-api.md) and nothing else; where this code and the spec disagree, the spec wins.
 
-## Intended stack
+TypeScript on Cloudflare Workers with one D1 database, the same toolchain as Obi's control plane (`cloud/control-plane/` in obi-ai-bot/obi): pnpm, wrangler, and vitest inside workerd (Miniflare) through `@cloudflare/vitest-plugin`.
 
-- TypeScript on Cloudflare Workers.
-- D1 (SQLite) for the directory, policy, relay queue and audit chain.
-- The same stack as the existing control plane in the obi repo, under [`cloud/control-plane/`](https://github.com/obi-ai-bot/obi/tree/dev/cloud/control-plane). Whether that control plane merges into this server or stays in obi is an open decision.
+## Run it
 
-## What it will hold
+Node 22.18 or later and pnpm. The spec's packages are needed for the conformance suite and the scenario.
 
-- Directory of a team's Obis and their signed agent cards.
-- Policy: who may send which action to whose Obi.
-- Store-and-forward relay for offline Obis.
-- Signed, append-only audit chain.
-- Invitations into and out of a Sphere.
+```sh
+(cd ../spec && pnpm install --frozen-lockfile)
+pnpm install --frozen-lockfile
 
-The protocol it serves is in [`../spec/`](../spec/). The spec comes first; the server follows it.
+SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
+  pnpm run local -- --port 8787 --persist-to /path/to/state   # a Sphere on 127.0.0.1:8787
+```
+
+`pnpm run local` ([scripts/local.mjs](scripts/local.mjs)) applies the D1 migrations to the local database under `--persist-to`, then runs `wrangler dev` on `127.0.0.1:<port>` with the same `--persist-to` and the operator token as a Worker variable (`--var`), never in a file. It is ready when `GET /v0.1/health` answers `200`, and stops on SIGINT or SIGTERM. It writes only under `--persist-to`, `server/.wrangler/`, `node_modules/`, `$HOME` and `$TMPDIR`, and sends no metrics.
+
+## Check it
+
+| Command | What |
+|---|---|
+| `pnpm run check` | TypeScript. |
+| `pnpm test` | The Worker's tests inside workerd with a real D1 ([test/](test/)): every endpoint and the errors the spec gives for it (all but `rate_limited`, whose limits v0.1 leaves open), each send check in its order, the exchange rules, retries, rotation and revocation, concurrent writers, and every answer validated against its wire schema. |
+| `pnpm run conformance` | The spec's conformance suite in implementation mode (`node ../spec/conformance/run.mjs --impl "node conformance/check.ts"`), all case kinds: envelopes, cards and chains, judged by the server's own protocol code. |
+| `pnpm run scenario` | The Sphere-side steps of obi's `e2e/SCENARIO.md` (1, 3, 5 and 7, with what 2, 6 and 8 need of the Sphere) against a Sphere started with `pnpm run local`, by a scripted client ([e2e/client.mjs](e2e/client.mjs)) that plays both owners and both Obis with keys it generates. It checks every relayed message with the spec's reference `verifyEnvelope` and the chain with `verifyChain`. |
+| `pnpm run test:client` | The scripted client's own tests: what it signs passes the reference verifier. |
+| `pnpm run check:validators` | [src/protocol/validators.generated.js](src/protocol/validators.generated.js) is up to date with `../spec/schemas/v0.1` (`pnpm run gen:validators` rewrites it). |
+
+CI runs all of them ([.github/workflows/server.yml](../.github/workflows/server.yml)).
+
+## How it is built
+
+- [src/protocol/](src/protocol/): the protocol's checks, the same code in the Worker and in the conformance checker (Node runs the `.ts` files as they are): strict JSON (no duplicate names, integers only) and RFC 8785 canonical JSON, Ed25519 through WebCrypto, envelope checks (protocol.md section 10), the exchange rules, agent cards (identity.md 2.2), compact JWS, and the audit chain's hashes and verification. The JSON Schemas are compiled ahead of time by ajv into one module (Workers allow no code generation at run time).
+- [src/app.ts](src/app.ts) routes the API; [src/oauth.ts](src/oauth.ts) is the token exchange; [src/routes/](src/routes/) the rest, each check in the order the spec gives it.
+- [migrations/](migrations/): D1's tables. Every change a send depends on (the chain's head, members and keys, the policy) is one transaction guarded by the Sphere's revision, so concurrent writers never interleave: the chain stays one chain, an exchange gets at most one `accept`, an invitation is redeemed once.
+- Message text is data. The Sphere checks a message's schema and signature and relays it as the sender signed it; it never reads, logs or interprets a text field. Error answers never echo what a client sent beyond a cleaned, one-line excerpt.
+- Secrets: invitation secrets and access tokens are kept only as SHA-256; the operator token is a Worker secret, compared in constant time and never logged. No telemetry: observability is off in `wrangler.jsonc` and wrangler sends no metrics.
+
+## Deploying
+
+A person's step, never CI's: `wrangler d1 create obi-sphere`, paste its id into `wrangler.jsonc`, `pnpm run migrate:remote`, `wrangler secret put SPHERE_OPERATOR_TOKEN`, then `pnpm run deploy`.
