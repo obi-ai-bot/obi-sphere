@@ -354,6 +354,9 @@ async function main() {
       failed++;
       blocked = step.n;
       console.log(`  FAIL  ${label}: ${e.message}`);
+      // The Sphere's own log, which says why when it is the Sphere that failed.
+      const log = join(R.harness, "sphere.log");
+      if (existsSync(log)) console.log(`  --- the last lines of ${log}:\n${readFileSync(log, "utf8").split("\n").slice(-40).map((l) => `      ${l}`).join("\n")}`);
     }
   }
   return failed;
