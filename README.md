@@ -27,7 +27,7 @@ The Sphere is not a chat server. It carries typed actions between Obis. People t
 
 ## Status
 
-Pre-alpha. Nothing runs yet. The spec in [`spec/`](spec/) is a first draft and will change.
+Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) is not implemented yet.
 
 ## License
 
