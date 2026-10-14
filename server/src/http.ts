@@ -44,6 +44,9 @@ export class ApiError extends Error {
 
 export const apiError = (code: ErrorCode, message: string, details: string[] = []): ApiError => new ApiError(code, message, details);
 
+/** The message of every `500 internal` answer (sphere-api.md section 1). */
+export const INTERNAL_MESSAGE = "the Sphere failed; nothing was recorded";
+
 /** `429 rate_limited` with `Retry-After: seconds` (sphere-api.md section 1). */
 export const rateLimited = (message: string, seconds: number): ApiError => new ApiError("rate_limited", message, [], seconds);
 

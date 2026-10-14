@@ -132,7 +132,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     ]);
     if (!written) return null;
     return json(202, sendAnswer({ msg_id: env_.id, seq, hash, recorded_at: recordedAt }));
-  });
+  }, deps.retryBudgetMs);
 }
 
 // ---------------------------------------------------------------------------------------------

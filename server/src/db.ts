@@ -6,7 +6,7 @@
 // redoes its checks. So every change that a send depends on (the chain's head, members, keys,
 // the policy) is checked and made as if alone.
 
-import { apiError, rateLimited } from "./http.ts";
+import { INTERNAL_MESSAGE, apiError, rateLimited } from "./http.ts";
 import type { AgentCard } from "./protocol/card.ts";
 import { uuid } from "./protocol/crypto.ts";
 
@@ -102,9 +102,36 @@ export async function loadMemberJson(db: D1Database, sphere: string, obi: string
   return memberJson(member, owner, await getKeys(db, sphere, obi));
 }
 
+/** D1's message when a guarded write lost its turn: the write guard's named CHECK (migrations/). */
+const LOST_TURN = /CHECK constraint failed: lost_turn\b/;
+
+/**
+ * What a failed statement says about the schema, when it was a constraint (`UNIQUE constraint
+ * failed: deliveries.id`): only table, column and constraint names, never a value a client sent,
+ * so it is safe for the Worker's log. Null for any other failure.
+ */
+export function constraintFailure(e: unknown): string | null {
+  const m = /\b(?:UNIQUE|CHECK|NOT NULL|FOREIGN KEY|PRIMARY KEY) constraint failed: [A-Za-z0-9_.,=<>!()' ]{1,200}/.exec(String((e as Error)?.message ?? e));
+  return m ? m[0].trim() : null;
+}
+
+/**
+ * Logs a constraint failure that no check foresaw (a schema mistake, a duplicate generated id)
+ * and answers `500 internal`. Any other failure goes on to the router, which answers the same.
+ */
+export function unforeseen(e: unknown, where: string): never {
+  const reason = constraintFailure(e);
+  if (reason === null) throw e;
+  console.error(`sphere: ${where} failed, nothing was recorded: ${reason}`);
+  throw apiError("internal", INTERNAL_MESSAGE);
+}
+
 /**
  * Runs `statements` in one transaction if the Sphere's `rev` is still `rev`, moving it on.
- * Answers their results, or null when another write came first (nothing was changed).
+ * Answers their results, or null when another write came first: the write guard's `lost_turn`
+ * CHECK failed and nothing was changed. Only that is contention, worth reading again and
+ * retrying. Any other failure, a constraint included, is the Sphere's own fault: it is logged
+ * and answered `500 internal` at once, never retried into a `429`.
  */
 export async function guardedWrite(db: D1Database, sphere: string, rev: number, statements: D1PreparedStatement[]): Promise<D1Result[] | null> {
   const writer = uuid();
@@ -117,13 +144,16 @@ export async function guardedWrite(db: D1Database, sphere: string, rev: number, 
     ]);
     return results.slice(2, 2 + statements.length);
   } catch (e) {
-    if (/constraint/i.test(String((e as Error)?.message ?? e))) return null;
-    throw e;
+    if (LOST_TURN.test(String((e as Error)?.message ?? e))) return null;
+    return unforeseen(e, "a guarded write");
   }
 }
 
 /** How long a write keeps retrying against other writes to the same Sphere, in milliseconds. */
 export const RETRY_BUDGET_MS = 20_000;
+
+/** The message of the `429 rate_limited` a write answers when concurrent writes kept it out. */
+export const CONTENTION_MESSAGE = "the record could not be made because of concurrent writes to this Sphere; nothing was recorded";
 
 /**
  * Retries `attempt` (which reads, checks, and makes a guarded write) until its write lands.
@@ -132,9 +162,11 @@ export const RETRY_BUDGET_MS = 20_000;
  * each turn one wins and the others read again. The losers wait a random time below a ceiling
  * that doubles with each loss (exponential backoff with full jitter), so a crowd of writers
  * spreads itself out instead of all reading and writing again at once, which would slow the
- * winner of each turn down. When the budget runs out the answer is `429 rate_limited` with
- * `Retry-After` (sphere-api.md section 1): nothing was recorded, and the caller learns when to
- * try again instead of retrying blindly.
+ * winner of each turn down. When the budget runs out the record could not be made because of
+ * concurrent writes: the answer is `429 rate_limited` with `Retry-After` (sphere-api.md section
+ * 1), nothing was recorded, and the caller learns when to try again instead of retrying blindly.
+ * Every other failure is not contention and passes straight through (a check's own error, or
+ * `500 internal`).
  */
 export async function withRetries<T>(attempt: () => Promise<T | null>, budgetMs = RETRY_BUDGET_MS): Promise<T> {
   const deadline = Date.now() + budgetMs;
@@ -145,5 +177,5 @@ export async function withRetries<T>(attempt: () => Promise<T | null>, budgetMs 
     const ceiling = Math.min(2000, 4 * 2 ** Math.min(i, 9));
     await new Promise((r) => setTimeout(r, 1 + Math.floor(Math.random() * ceiling)));
   }
-  throw rateLimited("too many concurrent changes to this Sphere; nothing was recorded", 1);
+  throw rateLimited(CONTENTION_MESSAGE, 1);
 }

@@ -68,5 +68,5 @@ export async function putPolicy(request: Request, env: Env, deps: Deps, sphereId
     ]);
     if (!written) return null;
     return json(200, { version, updated_at: updatedAt, rules });
-  });
+  }, deps.retryBudgetMs);
 }

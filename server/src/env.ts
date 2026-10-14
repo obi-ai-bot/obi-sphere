@@ -12,4 +12,6 @@ export interface Deps {
   now(): number;
   /** How long a deliveries call with `wait` sleeps between looks at the queue, in milliseconds. */
   pollMs?: number;
+  /** How long a write keeps retrying against concurrent writes before `429 rate_limited`, in milliseconds (src/db.ts). */
+  retryBudgetMs?: number;
 }

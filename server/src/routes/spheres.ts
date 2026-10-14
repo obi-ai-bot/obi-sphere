@@ -1,7 +1,7 @@
 // Spheres (spec/sphere-api.md section 3) and health.
 
 import { bearer, requireOperator } from "../auth.ts";
-import { requireSphere, type SphereRow } from "../db.ts";
+import { constraintFailure, requireSphere, unforeseen, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
 import { keyIdOf } from "../protocol/crypto.ts";
@@ -41,8 +41,8 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
       env.DB.prepare("INSERT INTO owners (sphere, owner, owner_key, owner_key_id) VALUES (?1, ?2, ?3, ?4)").bind(req.sphere, req.admin.owner, req.admin.owner_key, ownerKeyId),
     ]);
   } catch (e) {
-    if (/constraint/i.test(String((e as Error)?.message ?? e))) throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
-    throw e;
+    if (constraintFailure(e) === "UNIQUE constraint failed: spheres.id") throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
+    unforeseen(e, "creating a Sphere");
   }
   return json(201, { sphere: req.sphere, name: req.name, protocol: PROTOCOL, admin_owner: req.admin.owner, created_at: createdAt });
 }

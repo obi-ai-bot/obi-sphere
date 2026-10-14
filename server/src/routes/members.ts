@@ -101,7 +101,7 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
     ]);
     if (!written) return null;
     return json(201, memberJson(member, owner, [key]));
-  });
+  }, deps.retryBudgetMs);
 }
 
 const fromHex = (h: string): Uint8Array => new Uint8Array((h.match(/../g) ?? []).map((b) => parseInt(b, 16)));
@@ -177,7 +177,7 @@ export async function updateCard(request: Request, env: Env, deps: Deps, sphereI
     }
     if (!(await guardedWrite(env.DB, sphere.id, sphere.rev, statements))) return null;
     return json(200, memberJson({ ...member, card: canonicalize(card), card_seq: p.card_seq }, owner, newKeys));
-  });
+  }, deps.retryBudgetMs);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -204,5 +204,5 @@ export async function revoke(request: Request, env: Env, deps: Deps, sphereId: s
     ]);
     if (!written) return null;
     return json(200, await loadMemberJson(env.DB, sphere.id, obi));
-  });
+  }, deps.retryBudgetMs);
 }

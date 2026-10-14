@@ -2,7 +2,7 @@
 // actor, when there is one, an Obi acting for them (spec/identity.md section 4.3).
 
 import { SCOPES, canonicalScope, isScope, tokenHash } from "./auth.ts";
-import { getMember, getOwner, getSphere } from "./db.ts";
+import { constraintFailure, getMember, getOwner, getSphere, unforeseen } from "./db.ts";
 import type { Deps, Env } from "./env.ts";
 import { MAX_BODY_BYTES, json, readBody } from "./http.ts";
 import { randomToken } from "./protocol/crypto.ts";
@@ -167,8 +167,8 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
       ),
     ]);
   } catch (e) {
-    if (/constraint/i.test(String((e as Error)?.message ?? e))) throw new OAuthError("invalid_grant", "this assertion was used before");
-    throw e;
+    if (constraintFailure(e)?.startsWith("UNIQUE constraint failed: used_jtis.")) throw new OAuthError("invalid_grant", "this assertion was used before");
+    unforeseen(e, "issuing a token");
   }
   return json(200, { access_token: accessToken, issued_token_type: ISSUED_TYPE, token_type: "Bearer", expires_in: expiresIn, scope });
 }

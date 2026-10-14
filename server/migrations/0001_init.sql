@@ -19,9 +19,10 @@ CREATE TABLE spheres (
 );
 
 -- A row lands here only inside a guarded write, and only when the guard held; the CHECK fails
--- the whole batch otherwise. The same batch deletes it again.
+-- the whole batch otherwise. The same batch deletes it again. The constraint has a name so that
+-- a lost turn (`CHECK constraint failed: lost_turn`) is told apart from every other failure.
 CREATE TABLE write_guard (
-  ok INTEGER NOT NULL CHECK (ok = 1)
+  ok INTEGER NOT NULL CONSTRAINT lost_turn CHECK (ok = 1)
 );
 
 -- The owner key bound for each owner (identity.md section 3).

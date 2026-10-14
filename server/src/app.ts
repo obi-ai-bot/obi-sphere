@@ -1,7 +1,7 @@
 // The Sphere's HTTP API (spec/sphere-api.md section 2): routing and error answers.
 
 import type { Deps, Env } from "./env.ts";
-import { ApiError, apiError, errorResponse } from "./http.ts";
+import { ApiError, INTERNAL_MESSAGE, apiError, errorResponse } from "./http.ts";
 import { tokenEndpoint } from "./oauth.ts";
 import { audit } from "./routes/audit.ts";
 import { getMemberRoute, invite, listMembers, redeem, revoke, updateCard } from "./routes/members.ts";
@@ -51,6 +51,6 @@ export async function handle(request: Request, env: Env, deps: Deps): Promise<Re
     if (e instanceof ApiError) return errorResponse(e);
     // Never echo what failed: it may hold what a client sent. The cause stays in the Worker's own log.
     console.error("sphere: internal error", e instanceof Error ? e.name : typeof e);
-    return errorResponse(apiError("internal", "the Sphere failed; nothing was recorded"));
+    return errorResponse(apiError("internal", INTERNAL_MESSAGE));
   }
 }
