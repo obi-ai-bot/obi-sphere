@@ -223,7 +223,8 @@ function checkCoverage(cases) {
   for (const t of ["status", "accept", "decline", "result"]) need.push(`envelope/invalid-reply-without-in-reply-to-${t}`);
   for (const n of ["bad-signature-flipped-bit", "expired", "unknown-type-message", "extra-envelope-field", "smuggle-body-instructions", "smuggle-body-prompt", "smuggle-body-message", "oversize-goal", "oversize-envelope"]) need.push(`envelope/invalid-${n}`);
   for (const n of ["valid-chain", "valid-chain-status-before-accept", "invalid-chain-accepted-twice", "invalid-chain-tampered-entry", "invalid-chain-reordered", "invalid-chain-broken-link"]) need.push(`audit/${n}`);
-  for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send"]) need.push(`envelope/${n}`);
+  for (const n of ["invalid-chain-review-result-without-accept", "invalid-chain-handoff-result-without-accept", "valid-chain-handoff-accepted", "valid-chain-question-answered-directly", "valid-chain-question-accepted-then-answered", "invalid-chain-result-for-another-kind", "valid-chain-decline-after-accept", "invalid-chain-reply-after-result"]) need.push(`audit/${n}`);
+  for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send", "invalid-wrong-recipient", "invalid-wrong-recipient-reply"]) need.push(`envelope/${n}`);
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");
   let ok = 0;
   for (const n of need) {

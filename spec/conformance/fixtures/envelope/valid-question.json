@@ -6,6 +6,7 @@
   "context": {
     "now": "2026-10-14T12:00:00Z",
     "sphere": "conf-sphere",
+    "receiver": "obi-a",
     "keys": {
       "ed25519:z6WLmvO2TG4LaAn2ppQXKN2Po5NJVyWEm4RIFgMBs-M": {
         "obi": "obi-a",

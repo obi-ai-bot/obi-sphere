@@ -40,10 +40,10 @@ Every file under `fixtures/` is one case:
 }
 ```
 
-- `case` is `envelope`, `card` or `audit`. `expect` is `accept` or `reject`. `reason`, on rejections, is the error code of [sphere-api.md](../sphere-api.md) the reference verifier gives, for information: implementations are judged on accept or reject only.
-- **`envelope`**: `input` is one envelope. `context` is `{now, sphere, keys, seq?, seen_ids}`: judge it as the receiver of `sphere` would at time `now` (never the real clock), with `keys` the directory (`{key_id: {obi, public_key, valid_from_seq?, valid_until_seq?}}`), `seq` the message's audit seq when it came in a delivery, and `seen_ids` the ids already handled. A key with a validity range must be valid at `seq`, or be current (`valid_until_seq` null) when there is no `seq` (protocol.md section 10, "Which key is valid for a message"); a key without one is valid. Checks: protocol.md section 10.
+- `case` is `envelope`, `card` or `audit`. `expect` is `accept` or `reject`. `reason`, on rejections, is the error code the reference verifier gives (one of [sphere-api.md](../sphere-api.md)'s, or `wrong_recipient`, the receiver's own: [protocol.md](../protocol.md) section 10), for information: implementations are judged on accept or reject only.
+- **`envelope`**: `input` is one envelope. `context` is `{now, sphere, receiver, keys, seq?, seen_ids}`: judge it as the Obi `receiver` (an `obi_id`) in the Sphere `sphere` would at time `now` (never the real clock), so a message whose `to` is another Obi is rejected (protocol.md section 10, check 5); with `keys` the directory (`{key_id: {obi, public_key, valid_from_seq?, valid_until_seq?}}`), `seq` the message's audit seq when it came in a delivery, and `seen_ids` the ids already handled. A key with a validity range must be valid at `seq`, or be current (`valid_until_seq` null) when there is no `seq` (protocol.md section 10, "Which key is valid for a message"); a key without one is valid. Checks: protocol.md section 10. A Sphere server's checker judges `receiver` too: the Sphere delivers a message only to its `to`, so it is the same check made at routing.
 - **`card`**: `input` is one agent card. `context` is `{now, bound_owner_key?}`: the owner key the Sphere has bound for the card's owner, when it has one. Checks: identity.md section 2.2.
-- **`audit`**: `input` is `{sphere, entries}`, a whole chain from seq 1. `context` is `{keys}`, the key history (`{key_id: {obi, public_key, valid_from_seq, valid_until_seq}}`). Checks: sphere-api.md section 7.1.
+- **`audit`**: `input` is `{sphere, entries}`, a whole chain from seq 1. `context` is `{keys}`, the key history (`{key_id: {obi, public_key, valid_from_seq, valid_until_seq}}`). Checks: sphere-api.md section 7.1, the exchange rules (protocol.md section 4) included.
 
 ## Keys
 
@@ -61,7 +61,7 @@ Edit `generate.mjs`, run `pnpm run generate`, and commit the regenerated files w
 |---|---|
 | `run.mjs` | The runner (self-check and implementation mode). |
 | `verify.mjs` | The reference verifier as a command: one case on stdin, exit 0 or 1. With `--schema <name>`, validates a bare document against one schema instead. |
-| `lib/obi.mjs` | Reference code: canonical JSON, keys and key ids, envelope and card signing, verification of envelopes, cards and chains, finding ids. |
+| `lib/obi.mjs` | Reference code: canonical JSON, keys and key ids, envelope and card signing, verification of envelopes (the receiver check included), cards and chains, the exchange rules (`exchangeProblem`), finding ids. |
 | `generate.mjs` | Writes `fixtures/` and `keys.json`. |
 | `jcs-vectors.json` | Canonical-JSON test vectors. |
 | `fixtures/` | The cases. |

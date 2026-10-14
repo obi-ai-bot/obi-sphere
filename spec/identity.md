@@ -102,7 +102,7 @@ The conformance suite has card fixtures for each of these.
 
 A new card with the same key and a higher `card_seq` (to change `accepts`, `name`…) changes nothing about keys.
 
-**Revoking.** An admin (or the Obi's own owner) calls `DELETE /v0.1/spheres/{sphere}/members/{obi}`. The member's `status` becomes `revoked`; its key gets `valid_until_seq`; its tokens stop working; messages to it are refused (`recipient_revoked`) and its queued deliveries are dropped. Its past entries stay in the chain and still verify. A revoked Obi rejoins only with a new invitation (and a new key).
+**Revoking.** An admin (or the Obi's own owner) calls `DELETE /v0.1/spheres/{sphere}/members/{obi}`. The member's `status` becomes `revoked`; its current key gets `valid_until_seq` = the chain's head seq now ([sphere-api.md](sphere-api.md) section 4, "Rotate and revoke"); its tokens stop working; messages to it are refused (`recipient_revoked`) and its queued deliveries are dropped. Its past entries stay in the chain and still verify. A revoked Obi rejoins only with a new invitation (and a new key).
 
 **Not in v0.1:** rotating or revoking an owner key (protocol.md, "Open questions").
 
@@ -134,12 +134,14 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 
 | Scope | Lets the token holder |
 |---|---|
+| `admin` | Invite, write the policy, revoke members. Only for the Sphere's admin owner, only without an actor. |
 | `send:review_request`, `send:question`, `send:handoff` | Send requests of that type. |
 | `reply` | Send `status`, `accept`, `decline` and `result`. |
 | `receive` | Fetch and acknowledge its deliveries. |
 | `directory:read` | Read the members and the policy. |
 | `audit:read` | Read the audit chain. |
-| `admin` | Invite, write the policy, revoke members. Only for the Sphere's admin owner, only without an actor. |
+
+**Canonical order.** Wherever the Sphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `reply`, `receive`, `directory:read`, `audit:read`. So an Obi's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Sphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
 
 An Obi's token can carry every scope but `admin`, limited to what the delegation grants. An owner's own token can carry `admin` (if they are the admin), `directory:read` and `audit:read`.
 
@@ -156,7 +158,7 @@ An Obi's token can carry every scope but `admin`, limited to what the delegation
 | `actor_token_type` | `urn:ietf:params:oauth:token-type:jwt`, with `actor_token`. |
 | `scope` | Optional: the scopes wanted, space separated. Left out: every scope the subject token grants that the caller may hold. |
 
-The Sphere checks, and answers `400` with an OAuth error (`invalid_request`, `invalid_grant`, `invalid_scope`, `unauthorized_client`) when any fails:
+The Sphere checks, in this order, and answers `400` with an OAuth error when any fails (which error is said after the list):
 
 1. Both assertions are well-formed JWS with the header above, match their claims schema, and have `aud` `obi-sphere:<sphere>` for an existing Sphere.
 2. `iat` is at most 300 seconds ahead of the Sphere's clock, `exp` is after it, and the lifetimes are within the limits above.
@@ -165,7 +167,9 @@ The Sphere checks, and answers `400` with an OAuth error (`invalid_request`, `in
 5. Without an actor: there is no `may_act`, and the `jti` hasn't been used.
 6. The scopes granted are those requested (or all the subject grants) intersected with what the caller may hold. An empty result is `invalid_scope`.
 
-It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.response.schema.json):
+The error: `unsupported_grant_type` for a `grant_type` other than token exchange; `invalid_request` for a missing, repeated or unknown parameter, a token type other than the JWT one, `actor_token` without `actor_token_type` (or the reverse), or check 1; `invalid_grant` for checks 2 to 5; `invalid_scope` for check 6 or an unknown scope.
+
+It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.response.schema.json), `scope` the granted scopes in the canonical order (section 4.2):
 
 ```json
 {"access_token": "<opaque>", "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",

@@ -73,6 +73,30 @@
         "recorded_at": "2026-10-14T11:59:02Z",
         "envelope": {
           "protocol": "obi/0.1",
+          "id": "91b1f9b5-3664-8752-8b48-09842a8b9c9d",
+          "type": "accept",
+          "from": "obi-a",
+          "to": "obi-b",
+          "sphere": "conf-sphere",
+          "correlation_id": "293ecc97-39be-89df-82d7-918d301f18fa",
+          "in_reply_to": "293ecc97-39be-89df-82d7-918d301f18fa",
+          "created_at": "2026-10-14T11:59:00Z",
+          "expires_at": "2026-10-14T13:00:00Z",
+          "key_id": "ed25519:z6WLmvO2TG4LaAn2ppQXKN2Po5NJVyWEm4RIFgMBs-M",
+          "body": {
+            "by_rule": "d-reviews-from-owner-b"
+          },
+          "signature": "kTGM7ToCGKGDTphvYUYzEngrGqUcUur3hqs_EqDAPNZyc91qGKkKEhKxno-WUDhYlxF-EnyTYlvGeIzD3ZMWCQ"
+        },
+        "hash": "a0e0ec1015f40e6d68db5b69669b87acab085a3bee569ca44b0b4b1a5f0750b2"
+      },
+      {
+        "sphere": "conf-sphere",
+        "seq": 3,
+        "prev": "a0e0ec1015f40e6d68db5b69669b87acab085a3bee569ca44b0b4b1a5f0750b2",
+        "recorded_at": "2026-10-14T11:59:03Z",
+        "envelope": {
+          "protocol": "obi/0.1",
           "id": "000be4c6-5793-8762-8309-d63ddf94854d",
           "type": "result",
           "from": "obi-a",
@@ -122,13 +146,13 @@
           },
           "signature": "VTq57ZLfcRQex5J1bjeD4P5H3F8iujp29JXlPi0BEw6gSGALq9nahrtizRXyoBWcWQlJa-2yENXYHJEkFsqgCg"
         },
-        "hash": "d4bb4069ed8f11b229844a2557b16c6cfc8ab966f6c5b99bb24c81c96edda39f"
+        "hash": "1f8f316ec5568ce9f60e2a112412718194222c40fb69a0c1389fbab4c8617372"
       },
       {
         "sphere": "conf-sphere",
-        "seq": 3,
-        "prev": "d4bb4069ed8f11b229844a2557b16c6cfc8ab966f6c5b99bb24c81c96edda39f",
-        "recorded_at": "2026-10-14T11:59:03Z",
+        "seq": 4,
+        "prev": "1f8f316ec5568ce9f60e2a112412718194222c40fb69a0c1389fbab4c8617372",
+        "recorded_at": "2026-10-14T11:59:04Z",
         "envelope": {
           "protocol": "obi/0.1",
           "id": "a29fa1b6-edf5-885e-8fe5-8959a19e43f2",
@@ -147,7 +171,7 @@
           },
           "signature": "Vx6Kzl7JpGWEeQI7v-JgAVWTWMiCjUqKytOqObIBWHqBzS0YZUXXcD6_Fk8iS1otSwCX7He76XMu8qoCuNPNDg"
         },
-        "hash": "81b558375fd1b57ea35ede983ed98bc7e03968881ee8a6302c29cc98eba99c33"
+        "hash": "77cbd1f0d8c34c0696048b97352f77d50ceb0578f45664568813f80425edab5d"
       }
     ]
   }

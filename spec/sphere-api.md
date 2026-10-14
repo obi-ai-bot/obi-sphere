@@ -17,7 +17,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 
 | Code | HTTP | When |
 |---|---|---|
-| `bad_request` | 400 | The body doesn't match the endpoint's schema, or a query parameter is out of range. |
+| `bad_request` | 400 | The body doesn't match the endpoint's schema, or a query parameter is not a decimal integer in its range (section 6.2, section 7). |
 | `invalid_envelope` | 400 | A message fails protocol.md section 10, checks 2 or 3, or isn't JSON. |
 | `wrong_sphere` | 400 | The message names another Sphere than the path. |
 | `unknown_key` | 400 | `key_id` isn't the sender's current key. |
@@ -34,7 +34,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `not_found` | 404 | No such Sphere, member or invitation. |
 | `unknown_recipient` | 404 | `to` isn't a member. |
 | `duplicate` | 409 | A message with this `id` and a different signature was relayed before. |
-| `bad_reply` | 409 | A reply that doesn't continue an open exchange of its sender's (section 6.1, check 12). |
+| `bad_reply` | 409 | A reply that breaks the exchange rules (protocol.md section 4; section 6.1, check 12). |
 | `conflict` | 409 | The resource exists already, a stale `expected_version` or `card_seq`, or a key id another member uses. |
 | `payload_too_large` | 413 | The body is over 131,072 bytes, or the message's canonical form over 65,536. |
 | `rate_limited` | 429 | Too many calls; `Retry-After` says when to try again. v0.1 doesn't fix the limits. |
@@ -71,7 +71,7 @@ A path for a Sphere that doesn't exist is `404 not_found`; a token for another S
 {"sphere": "e2e", "name": "E2E sphere", "admin": {"owner": "wellington", "owner_key": "<base64url>"}}
 ```
 
-It binds `owner_key` to the admin owner, sets the policy to version 0 with no rules (every request refused), and starts an empty audit chain (head seq 0, head hash 64 zeros). Answers `201`:
+It binds `owner_key` to the admin owner, sets the policy to version 0 with no rules (every request refused) and `updated_at` equal to the Sphere's `created_at`, and starts an empty audit chain (head seq 0, head hash 64 zeros). Answers `201`:
 
 ```json
 {"sphere": "e2e", "name": "E2E sphere", "protocol": "obi/0.1", "admin_owner": "wellington", "created_at": "2026-10-14T12:00:00Z"}
@@ -93,7 +93,7 @@ POST /v0.1/spheres/e2e/invitations
      "secret": "<43 base64url characters>", "expires_at": "2026-10-14T13:00:00Z"}
 ```
 
-The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. An `obi` id that is or was a member is `409 conflict`: ids are never reused.
+The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. An `obi` id that is or was a member is `409 conflict`: ids are never reused.
 
 **Redeem (pair the Obi).** The Obi presents the secret, its owner's key and its owner-signed card:
 
@@ -111,7 +111,7 @@ The Sphere checks, in order:
 5. If the owner already has a bound key, it is `owner_key` (`403 forbidden`); otherwise `owner_key` is bound to the owner now.
 6. No other member uses the card's `key_id` (`409 conflict`).
 
-Then, in one transaction: the invitation is used up, the member is `active`, and its key's `valid_from_seq` is the chain's head seq + 1. Answers `201` with the member:
+Then, in one transaction: the invitation is used up, the member is `active` with `joined_at` the Sphere's clock now, and its key's `valid_from_seq` is the chain's head seq + 1 and `valid_until_seq` null. Answers `201` with the member:
 
 ```json
 {"obi": "obi-ernesto", "owner": "ernesto", "owner_key": "…", "owner_key_id": "ed25519:…", "status": "active",
@@ -121,7 +121,11 @@ Then, in one transaction: the invitation is used up, the member is `active`, and
 
 **Directory.** `GET /members` lists every member, active and revoked, ordered by `joined_at` then `obi`. A member has `revoked_at` (when it was revoked) exactly when its `status` is `revoked`, and no `revoked_at` while it is `active`. Receivers use it to find a sender's owner and keys, and check each card themselves (identity.md 2.2) before trusting it.
 
-**Rotate and revoke.** `PUT /members/{obi}/card` and `DELETE /members/{obi}`: identity.md section 3. A card update needs a higher `card_seq` (`409 conflict` otherwise), the same `sphere`, `obi_id`, `owner` and bound `owner_key` (`400 card_invalid`), and a `key_id` no other member uses (`409 conflict`). Revoking an already revoked member answers it as it is.
+**Rotate and revoke.** `PUT /members/{obi}/card` and `DELETE /members/{obi}`: identity.md section 3. A card update needs a higher `card_seq` (`409 conflict` otherwise), the same `sphere`, `obi_id`, `owner` and bound `owner_key` (`400 card_invalid`), and a `key_id` no other member uses (`409 conflict`). The key values, with *h* the chain's head seq at the moment the change is made (in the same transaction as the change):
+
+- **Rotation** (a new `key_id`): the old key's `valid_until_seq` becomes *h*; the new key is added with `valid_from_seq` *h* + 1 and `valid_until_seq` null. A card with the same `key_id` changes no key.
+- **Revocation**: the current key's `valid_until_seq` becomes *h*, `status` becomes `revoked` and `revoked_at` the Sphere's clock now. Keys closed earlier keep their values. When nothing was recorded since the key was opened, *h* is its `valid_from_seq` − 1: an empty range, so no entry verifies with it.
+- Revoking an already revoked member changes nothing and answers it as it is (`200`).
 
 ## 5. Policy
 
@@ -130,7 +134,7 @@ The policy is a fixed table of **allow** rules ([policy.schema.json](schemas/v0.
 - `from_owner` is `*` or the sending Obi's owner;
 - `to_owner` is `*` or the receiving Obi's owner;
 - `actions` contains the request's type;
-- `repos` contains `*`, or `<owner>/*` for the body's repo's owner, or the body's `repo` itself (compared ignoring ASCII case). A request without a `repo` (a question can have none) matches only `*`.
+- `repos` contains `*`, or `<owner>/*` where `<owner>` is the owner part of the body's `repo`, or the body's `repo` itself; each comparison of a repository or its owner part ignores ASCII case. A request without a `repo` (a question can have none) matches only `*`.
 
 Replies are not governed by rules: a reply is allowed when it continues an open exchange (section 6.1, check 12).
 
@@ -141,7 +145,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
  "rules": [{"id": "team-reviews", "from_owner": "*", "to_owner": "*", "actions": ["review_request", "question"], "repos": ["*"]}]}
 ```
 
-`PUT /policy` replaces it whole: `{"expected_version": 0, "rules": [ … ]}`. The version must be the current one (`409 conflict` otherwise); rule ids must be unique (`400 bad_request`). The new policy has `version` + 1 and applies to every message sent after the answer.
+`PUT /policy` replaces it whole: `{"expected_version": 0, "rules": [ … ]}`. The version must be the current one (`409 conflict` otherwise); rule ids must be unique (`400 bad_request`). The new policy has `version` + 1, `updated_at` the Sphere's clock when it was written, and the rules in the order given; it applies to every message sent after the answer.
 
 ## 6. Messages
 
@@ -162,7 +166,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
 | 9 | `key_id` is the sender's current key (protocol.md section 10, "Which key is valid for a message"), and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
 | 10 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
 | 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). | as written |
-| 12 | A request is allowed by the policy (section 5). A reply's `in_reply_to` names a request in this Sphere's chain whose `from` is the reply's `to` and whose `to` is the reply's `from`; that exchange has no `decline` or `result` yet; and an `accept` comes only when that exchange has no `accept` yet (a `status` before it is fine: protocol.md section 4). | `403 policy_denied`, `409 bad_reply` |
+| 12 | A request is allowed by the policy (section 5). A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded: the reply is from the request's `to` and to its `from`; the exchange has no `decline` or `result` yet; an `accept` comes only when there is no `accept` yet; a `result`'s `for` is the request's type; a `result` for a `review_request` or `handoff` comes only after its `accept`. | `403 policy_denied`, `409 bad_reply` |
 | 13 | Record it: in one transaction, append the audit entry (section 7) and queue a delivery for `to`. | `500 internal` (nothing recorded) |
 
 Check 8 comes before the key and expiry checks so that a sender whose answer was lost can always learn that its message was recorded: retrying the same bytes answers `200` with the original `seq`, whatever happened since. Only the sender can learn it (check 6), and only for bytes the Sphere already checked when it recorded them.
@@ -184,11 +188,11 @@ The Sphere never changes the envelope: what it records and delivers is byte-for-
 ```
 
 - `seq` is the audit seq of the envelope's entry (section 7), and `relayed_at` is that entry's `recorded_at`, the same value. A receiver judges the sender's key by this `seq` (protocol.md section 10, "Which key is valid for a message").
-- `limit` is 1 to 100 (50 when left out); `wait` is 0 to 25 seconds (0 when left out). With `wait` above 0 and nothing queued, the Sphere MAY hold the request until a delivery arrives or `wait` passes, and MAY answer an empty list sooner; clients just ask again.
+- `limit` is 1 to 100 (50 when left out); `wait` is 0 to 25 seconds (0 when left out). Each is a decimal integer; anything else, or a value outside its range, is `400 bad_request`. With `wait` above 0 and nothing queued, the Sphere MAY hold the request until a delivery arrives or `wait` passes, and MAY answer an empty list sooner; clients just ask again.
 - Delivery is **at least once**: a delivery comes back on every fetch until it is acknowledged. Receivers deduplicate by the envelope's `id` (protocol.md section 11, step 2).
 - A delivery whose envelope expires before it is acknowledged is dropped from the queue. It stays in the audit chain.
 
-`POST /v0.1/spheres/{sphere}/deliveries/ack` with `{"delivery_ids": ["…", "…"]}` acknowledges deliveries, and answers how many of them were waiting for this Obi: `{"acked": 2}`. Ids that are unknown, already acknowledged or another Obi's count 0 and are not an error. A receiver acknowledges only after it has recorded what it decided (protocol.md section 11).
+`POST /v0.1/spheres/{sphere}/deliveries/ack` with `{"delivery_ids": ["…", "…"]}` (1 to 100 distinct ids) acknowledges deliveries, and answers how many of them were waiting for this Obi: `{"acked": 2}`. Ids that are unknown, already acknowledged, dropped (expired, or the receiver revoked) or another Obi's count 0 and are not an error. A receiver acknowledges only after it has recorded what it decided (protocol.md section 11).
 
 ## 7. Audit chain
 
@@ -219,6 +223,10 @@ Every message the Sphere relays is one entry in its append-only audit chain, in 
 
 An empty chain's head is `{"seq": 0, "hash": "000…000"}`.
 
+- `from_seq` is 1 to 9,007,199,254,740,991 and `limit` 1 to 1,000, each a decimal integer; anything else is `400 bad_request`.
+- `entries` holds the entries with `from_seq` ≤ `seq` ≤ `head.seq`, the first `limit` of them. When `from_seq` is beyond the head (`from_seq` > `head.seq`, an empty chain included) the answer is `200` with `entries` `[]` and the head: not an error, so a reader that has seen everything just asks again later.
+- `head` is the chain's head when the Sphere answered, which may be past the page's last entry; the next page starts at the last entry's `seq` + 1.
+
 ### 7.1 Verifying the chain
 
 Take the entries from seq 1 (fetch more pages until the last answer's `head.seq` is reached), and the key history of every member from `GET /members`: for each key, `{key_id: {obi, public_key, valid_from_seq, valid_until_seq}}`. The chain is valid when, for the *i*-th entry (counting from 1), with `prev_hash` starting at 64 zeros:
@@ -229,7 +237,7 @@ Take the entries from seq 1 (fetch more pages until the last answer's `head.seq`
 4. Its envelope passes protocol.md section 10 checks 2 and 3, names the chain's Sphere, was created at most 300 seconds after `recorded_at`, and expires after `recorded_at`.
 5. Its `key_id` is a key of the envelope's `from`, valid at this seq (`valid_from_seq` ≤ seq, and seq ≤ `valid_until_seq` unless that is null), whose public key hashes to `key_id`; and the signature verifies with it.
 6. No earlier entry has the same envelope `id`.
-7. A reply names, in `in_reply_to`, an earlier request whose `from` is the reply's `to` and whose `to` is the reply's `from`; no `decline` or `result` for that request comes before it; and an `accept` has no earlier `accept` for that request (a `status` may come before it).
+7. A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the earlier request its `in_reply_to` names and the earlier replies to it: it is from the request's `to` and to its `from`; no `decline` or `result` for that request comes before it; an `accept` has no earlier `accept`; a `result`'s `for` is the request's type; a `result` for a `review_request` or `handoff` has an earlier `accept`. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
 
 Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
 
@@ -246,5 +254,5 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
 
 - `pnpm run local` applies the D1 migrations to the local database under `--persist-to`, then runs `wrangler dev` on `127.0.0.1:<port>` with the same `--persist-to`, passing the operator token as a Worker variable (`--var SPHERE_OPERATOR_TOKEN:…`), never writing it to a file.
 - It is ready when `GET http://127.0.0.1:<port>/v0.1/health` answers `200`. It stops on SIGINT or SIGTERM.
-- It writes only under `--persist-to` and wrangler's own scratch folder `server/.wrangler/`, plus `$HOME` and `$TMPDIR`, which the harness points at folders of its own. It sends no telemetry (`WRANGLER_SEND_METRICS=false`).
+- It writes only under `--persist-to`, wrangler's own scratch folder `server/.wrangler/` and the `node_modules/` folders under `server/` (the installed packages and their caches, like `node_modules/.cache/`), plus `$HOME` and `$TMPDIR`, which the harness points at folders of its own. Nothing else in the checkout: a local Miniflare folder such as `.mf/` belongs under `--persist-to`. It sends no telemetry (`WRANGLER_SEND_METRICS=false`).
 - Everything else is the same as a deployed Sphere: same endpoints, checks, token lifetimes and audit chain.

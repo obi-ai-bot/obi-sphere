@@ -230,8 +230,10 @@ export function resultProblems(body) {
   return problems;
 }
 
-// ctx: { now, sphere, keys: { [key_id]: { obi, public_key, valid_from_seq?, valid_until_seq? } },
+// ctx: { now, sphere, receiver, keys: { [key_id]: { obi, public_key, valid_from_seq?, valid_until_seq? } },
 //        seq?, seen_ids?: [] }
+// receiver is the obi_id of the Obi judging the message: a message addressed to another Obi is
+// rejected, however well it is signed (a Sphere that misroutes, or relays a captured message).
 // seq is the message's audit seq (a delivery's `seq`). A key with a validity range must be valid at
 // seq; without seq (a message not yet recorded, as the Sphere sees one at send) it must be current.
 export function keyValidAt(key, seq) {
@@ -253,6 +255,8 @@ export function verifyEnvelope(env, ctx) {
   const problems = semanticProblems(env);
   if (problems.length) return fail("invalid_envelope", problems.join("; "));
   if (env.sphere !== ctx.sphere) return fail("wrong_sphere", `for ${env.sphere}, not ${ctx.sphere}`);
+  if (typeof ctx.receiver !== "string") return fail("wrong_recipient", "the context names no receiver");
+  if (env.to !== ctx.receiver) return fail("wrong_recipient", `addressed to ${env.to}, not ${ctx.receiver}`);
   const key = ctx.keys?.[env.key_id];
   if (!key || key.obi !== env.from) return fail("unknown_key", `${env.key_id} is not a key of ${env.from}`);
   if (keyIdOf(key.public_key) !== env.key_id) return fail("unknown_key", "the directory's key does not hash to key_id");
@@ -309,13 +313,32 @@ export function appendEntry(entries, sphere, envelope, recordedAt) {
   return [...entries, { ...entry, hash: entryHash(entry) }];
 }
 
+// The exchange rules (spec/protocol.md section 4), as the Sphere applies them at send
+// (sphere-api.md section 6.1, check 12) and a chain's verifier at each reply (section 7.1, check 7).
+// reply: the reply envelope; request: the envelope its in_reply_to names, or undefined;
+// earlier: the replies to that request that came before it, in order. Answers why the reply
+// breaks the rules, or null when it doesn't.
+export function exchangeProblem(reply, request, earlier) {
+  if (!request || !REQUEST_TYPES.includes(request.type)) return "replies to no earlier request";
+  if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
+  const accepted = earlier.some((e) => e.type === "accept");
+  // At most one accept per exchange; a status may come before it or after it.
+  if (reply.type === "accept" && accepted) return "accepted twice";
+  if (reply.type === "result") {
+    if (reply.body.for !== request.type) return `a result for ${reply.body.for} answers a ${request.type}`;
+    // Only a question may be answered by a result without an accept.
+    if (request.type !== "question" && !accepted) return `a ${request.type} is answered by a result only after an accept`;
+  }
+  return null;
+}
+
 // chain: { sphere, entries }, ctx: { keys: { [key_id]: { obi, public_key, valid_from_seq, valid_until_seq } } }
 export function verifyChain(chain, ctx) {
   if (!chain || typeof chain.sphere !== "string" || !Array.isArray(chain.entries)) return fail("bad_request", "a chain is {sphere, entries}");
   let prev = ZERO_HASH;
   let lastTime = -Infinity;
   const byId = new Map();
-  const finished = new Set();
   for (const [i, entry] of chain.entries.entries()) {
     const at = `entry ${i + 1}`;
     const errors = schemaErrors("audit-entry", entry);
@@ -339,13 +362,8 @@ export function verifyChain(chain, ctx) {
     if (!verifyBytes(key.public_key, envelopeSigningInput(env), env.signature)) return fail("bad_signature", `${at}: the sender's signature does not verify`);
     if (byId.has(env.id)) return fail("duplicate", `${at}: ${env.id} is in the chain twice`);
     if (REPLY_TYPES.includes(env.type)) {
-      const request = byId.get(env.in_reply_to);
-      if (!request || !REQUEST_TYPES.includes(request.type)) return fail("bad_reply", `${at}: replies to no earlier request`);
-      if (request.from !== env.to || request.to !== env.from) return fail("bad_reply", `${at}: only the request's receiver replies, to its sender`);
-      if (finished.has(request.id)) return fail("bad_reply", `${at}: the exchange already ended`);
-      // At most one accept per exchange; a status may come before it or after it.
-      if (env.type === "accept" && [...byId.values()].some((e) => e.type === "accept" && e.in_reply_to === request.id)) return fail("bad_reply", `${at}: accepted twice`);
-      if (TERMINAL_TYPES.includes(env.type)) finished.add(request.id);
+      const problem = exchangeProblem(env, byId.get(env.in_reply_to), [...byId.values()].filter((e) => REPLY_TYPES.includes(e.type) && e.in_reply_to === env.in_reply_to));
+      if (problem) return fail("bad_reply", `${at}: ${problem}`);
     }
     byId.set(env.id, env);
     prev = entry.hash;

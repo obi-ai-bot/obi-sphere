@@ -106,8 +106,13 @@ export function buildFixtures() {
   valid.result_handoff = signed(unsigned("result", handoffResult));
   valid.accept_empty = signed(unsigned("accept", {}));
 
-  const envCase = (name, description, input, expect, reason, ctx = context) =>
-    add("envelope", name, { description, expect, ...(reason ? { reason } : {}), context: ctx, input });
+  // Every envelope case is judged by one Obi, the context's `receiver`: the message's `to` unless
+  // the case says otherwise (obi-a when the message has no `to` at all).
+  const envCase = (name, description, input, expect, reason, ctx = context) => {
+    const { now, sphere, ...rest } = ctx;
+    const receiver = ctx.receiver ?? (typeof input.to === "string" ? input.to : "obi-a");
+    add("envelope", name, { description, expect, ...(reason ? { reason } : {}), context: { now, sphere, receiver, ...rest }, input });
+  };
   const ok = (name, description, input, ctx) => envCase(`valid-${name}`, description, input, "accept", null, ctx);
   const bad = (name, description, input, reason, ctx) => envCase(`invalid-${name}`, description, input, "reject", reason, ctx);
 
@@ -181,7 +186,7 @@ export function buildFixtures() {
   bad("unknown-key", "Signed and named with a key the directory does not have.", signEnvelope(unsigned("review_request", clone(bodies.review_request), { key_id: M.keyId }), M.privateKey), "unknown_key");
   bad("key-of-another-obi", "obi-b's message names obi-a's key (and is signed with it).", signEnvelope(unsigned("review_request", clone(bodies.review_request), { key_id: A.keyId }), A.privateKey), "unknown_key");
 
-  // Keys judged by the message's audit seq (protocol.md section 10, check 5): obi-a rotated its key
+  // Keys judged by the message's audit seq (protocol.md section 10, check 6): obi-a rotated its key
   // after seq 6, and a status it signed with the old key was recorded at seq 6.
   const rotatedDirectory = {
     [A.keyId]: { obi: "obi-a", public_key: A.publicKey, valid_from_seq: 1, valid_until_seq: 6 },
@@ -213,6 +218,12 @@ export function buildFixtures() {
   bad("wrong-sphere", "Sent in another Sphere than the receiver's.", signed(unsigned("review_request", clone(bodies.review_request), { sphere: "other-sphere" })), "wrong_sphere");
   bad("uppercase-uuid", "UUIDs are lower case.", signed(unsigned("status", { state: "working" }, { id: uuidFor("upper").toUpperCase() })), "invalid_envelope");
   bad("duplicate-id", "The receiver has seen this id before.", valid.review_request, "duplicate", { ...context, seen_ids: [requestId] });
+
+  // The receiver (protocol.md section 10, check 5): a message is acted on only by the Obi it names
+  // in `to`, however well it is signed. A Sphere that misroutes a delivery, or relays a captured one
+  // to another member, gets it rejected.
+  bad("wrong-recipient", "obi-b's signed review request for obi-a, delivered to obi-c.", valid.review_request, "wrong_recipient", { ...context, receiver: "obi-c" });
+  bad("wrong-recipient-reply", "obi-a's signed result for obi-b, delivered back to obi-a.", valid.result, "wrong_recipient", { ...context, receiver: "obi-a" });
 
   // Types and fields that don't exist, including attempts to smuggle free text.
   bad("unknown-type-chat", "There is no chat type.", signed(unsigned("chat", { text: "hi" })), "invalid_envelope");
@@ -390,8 +401,21 @@ export function buildFixtures() {
   auditCase("invalid-chain-accepted-twice", "Two accepts with different ids for the same request.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.accept_empty]) }, "reject", "bad_reply");
   const dupEntry = { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.accept]) };
   auditCase("invalid-chain-same-message-twice", "The same accept recorded twice.", dupEntry, "reject", "duplicate");
-  const afterEnd = { sphere: SPHERE, entries: recordAll([valid.review_request, valid.result, valid.status]) };
+  const afterEnd = { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.result, valid.status]) };
   auditCase("invalid-chain-reply-after-result", "A status after the exchange ended with a result.", afterEnd, "reject", "bad_reply");
+  // The exchange rules (protocol.md section 4): a review_request or handoff is answered by a result
+  // only after an accept; a question may be answered directly; a result's `for` is its request's type;
+  // a decline may come before or after the accept.
+  auditCase("invalid-chain-review-result-without-accept", "A result answers a review request that was never accepted.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.result]) }, "reject", "bad_reply");
+  const replyTo = (request, type, body, name) => signed({ ...unsigned(type, body), in_reply_to: request.id, correlation_id: request.id, id: uuidFor(name) });
+  const handoffResultReply = replyTo(valid.handoff, "result", clone(handoffResult), "audit-handoff-result");
+  auditCase("invalid-chain-handoff-result-without-accept", "A result answers a handoff that was never accepted.", { sphere: SPHERE, entries: recordAll([valid.handoff, handoffResultReply]) }, "reject", "bad_reply");
+  auditCase("valid-chain-handoff-accepted", "A handoff, its accept, then its result.", { sphere: SPHERE, entries: recordAll([valid.handoff, replyTo(valid.handoff, "accept", {}, "audit-handoff-accept"), handoffResultReply]) }, "accept");
+  const directAnswer = replyTo(reqQ, "result", clone(answerResult), "audit-answer-direct");
+  auditCase("valid-chain-question-answered-directly", "A question answered by a result with no accept: only a question may be.", { sphere: SPHERE, entries: recordAll([reqQ, directAnswer]) }, "accept");
+  auditCase("valid-chain-question-accepted-then-answered", "A question, an accept, then the answer: the accept is optional for a question, not forbidden.", { sphere: SPHERE, entries: recordAll([reqQ, replyTo(reqQ, "accept", {}, "audit-question-accept"), directAnswer]) }, "accept");
+  auditCase("invalid-chain-result-for-another-kind", "A review result answers a question: a result's `for` must be its request's type.", { sphere: SPHERE, entries: recordAll([reqQ, replyTo(reqQ, "result", clone(bodies.result), "audit-question-review-result")]) }, "reject", "bad_reply");
+  auditCase("valid-chain-decline-after-accept", "A review request accepted, then declined: decline may end an accepted exchange.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.decline]) }, "accept");
   const strangerReply = { sphere: SPHERE, entries: recordAll([valid.review_request, signed(unsigned("accept", {}, { from: "obi-b", to: "obi-a", key_id: B.keyId, id: uuidFor("self-accept") }))]) };
   auditCase("invalid-chain-reply-by-sender", "The requester accepts its own request.", strangerReply, "reject", "bad_reply");
   const oldKeyLate = { sphere: SPHERE, entries: recordAll([...sequence, signEnvelope({ ...unsigned("result", answerResult), from: "obi-a", to: "obi-b", key_id: A.keyId, in_reply_to: reqQ.id, correlation_id: reqQ.id, id: uuidFor("audit-answer-old-key") }, A.privateKey)]) };

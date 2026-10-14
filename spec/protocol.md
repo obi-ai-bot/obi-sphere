@@ -38,7 +38,7 @@ Every message is one envelope that carries exactly one typed action in `body`. S
 | `id` | yes | Unique id of this message (UUID). The sender MUST NOT reuse it. |
 | `type` | yes | One of `review_request`, `question`, `handoff`, `status`, `accept`, `decline`, `result`. Nothing else. |
 | `from` | yes | The sending Obi's `obi_id`. |
-| `to` | yes | The receiving Obi's `obi_id`. Different from `from`. |
+| `to` | yes | The receiving Obi's `obi_id`. Different from `from`. Only that Obi may act on the message: any other Obi it reaches rejects it (section 10, check 5). |
 | `sphere` | yes | The Sphere it travels in. |
 | `correlation_id` | yes | The exchange it belongs to. On a request, equal to its own `id`. On a reply, equal to the request's `id`. |
 | `in_reply_to` | replies only | On `status`, `accept`, `decline` and `result`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
@@ -52,18 +52,27 @@ A whole envelope, in its canonical form (section 9), is at most 65,536 bytes.
 
 ## 4. Exchanges
 
-Requests start an exchange: `review_request`, `question`, `handoff`. Replies continue it: `status`, `accept`, `decline`, `result`. Only the request's receiver replies, and only to the request's sender.
+Requests start an exchange: `review_request`, `question`, `handoff`. Replies continue it: `status`, `accept`, `decline`, `result`.
 
 ```
-request ──► [status…] ──► accept ──► [status…] ──► result
-   │                         
-   └──────► [status…] ──► decline
+review_request, handoff:  request ─► [status…] ─► accept ─► [status…] ─► result or decline
+                             └─────► [status…] ─► decline
+question:                 the same, and also
+                          request ─► [status…] ─► result
 ```
 
-- `accept` comes at most once per exchange, and before the `result`. A `status` may come before the `accept` or after it: "at most once" means no second `accept`, not that the `accept` is the first reply.
-- `decline` or `result` ends the exchange. Nothing may follow it.
-- A `question` may be answered by a `result` directly, without `accept`.
-- Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
+**The exchange rules.** These are the only ones. A receiving Obi applies them to the replies it gets (section 11, step 3), the Sphere applies them at send ([sphere-api.md](sphere-api.md) section 6.1, check 12), a chain's verifier applies them to every reply in the chain ([sphere-api.md](sphere-api.md) section 7.1, check 7), and the reference verifier implements them once (`exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs)). A reply is allowed exactly when all of these hold:
+
+1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender.
+2. The exchange has not ended: no `decline` or `result` for that request came before it. A `decline` or a `result` ends the exchange; nothing may follow it.
+3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times.
+4. A `result`'s `for` is the request's type.
+5. A `result` for a `review_request` or a `handoff` comes only after that exchange's `accept`. Only a `question` may be answered by a `result` without an `accept` (an `accept` before it is allowed too).
+6. A `decline` may come at any point before the end, before or after an `accept`.
+
+Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
+
+The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `invalid-chain-result-for-another-kind`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-by-sender`).
 
 ## 5. Actions
 
@@ -190,7 +199,7 @@ The prefix keeps an envelope signature from ever being valid as any other kind o
 
 ## 10. Verifying a message
 
-The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.md), "Send"), and the receiving Obi checks it again: it MUST NOT trust the relay. A message is valid only when all of these hold, checked in this order (the error code is the one the Sphere answers with, and the one the conformance fixtures name):
+The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.md), "Send"), and the receiving Obi checks it again: it MUST NOT trust the relay. A message is valid only when all of these hold, checked in this order (the error code is the one the Sphere answers with, and the one the conformance fixtures name; `wrong_recipient` is the receiver's alone, below):
 
 | # | Check | Code |
 |---|---|---|
@@ -198,13 +207,16 @@ The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.m
 | 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type`. | `invalid_envelope` |
 | 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7). | `invalid_envelope` |
 | 4 | `sphere` is the receiver's Sphere. | `wrong_sphere` |
-| 5 | `key_id` is a key the directory lists for `from`, valid for this message (below), and that public key hashes to `key_id`. | `unknown_key` |
-| 6 | The signature verifies with that key over the signing input. | `bad_signature` |
-| 7 | `expires_at` is after now. | `expired` |
-| 8 | `created_at` is at most 300 seconds after now (clock skew). | `clock_skew` |
-| 9 | The receiver hasn't seen this `id` before. | `duplicate` |
+| 5 | `to` is the receiver's own `obi_id`. | `wrong_recipient` |
+| 6 | `key_id` is a key the directory lists for `from`, valid for this message (below), and that public key hashes to `key_id`. | `unknown_key` |
+| 7 | The signature verifies with that key over the signing input. | `bad_signature` |
+| 8 | `expires_at` is after now. | `expired` |
+| 9 | `created_at` is at most 300 seconds after now (clock skew). | `clock_skew` |
+| 10 | The receiver hasn't seen this `id` before. | `duplicate` |
 
-**Which key is valid for a message (check 5).** The directory gives each key a range of audit seqs (`valid_from_seq`, `valid_until_seq`; [identity.md](identity.md) section 3). A receiver judges a delivered message **by the delivery's `seq`**, the seq of its audit entry: the key is valid when `valid_from_seq` ≤ seq and, unless `valid_until_seq` is null, seq ≤ `valid_until_seq`. So a message the Sphere recorded with the sender's old key just before a rotation still verifies when it arrives after it. A message with no seq yet (the Sphere checking a send) needs the sender's current key (`valid_until_seq` null). The conformance fixtures `valid-key-rotated-after-relay`, `invalid-key-not-valid-at-seq` and `invalid-key-not-current-at-send` pin this; their `context` carries the `seq`.
+**The receiver (check 5).** A message is for the one Obi its `to` names. An Obi that receives a message addressed to another Obi MUST reject it, however well it is signed: otherwise a Sphere that misroutes a delivery, or relays a message it captured to a member it wasn't for, could make that member act on a request meant for someone else. The Sphere never answers `wrong_recipient` over HTTP: it queues a message only for its `to` ([sphere-api.md](sphere-api.md) section 6.1, check 11), so a send has no other receiver to be wrong about. The conformance fixtures `invalid-wrong-recipient` and `invalid-wrong-recipient-reply` pin it; every envelope fixture's `context` names its `receiver`.
+
+**Which key is valid for a message (check 6).** The directory gives each key a range of audit seqs (`valid_from_seq`, `valid_until_seq`; [identity.md](identity.md) section 3). A receiver judges a delivered message **by the delivery's `seq`**, the seq of its audit entry: the key is valid when `valid_from_seq` ≤ seq and, unless `valid_until_seq` is null, seq ≤ `valid_until_seq`. So a message the Sphere recorded with the sender's old key just before a rotation still verifies when it arrives after it. A message with no seq yet (the Sphere checking a send) needs the sender's current key (`valid_until_seq` null). The conformance fixtures `valid-key-rotated-after-relay`, `invalid-key-not-valid-at-seq` and `invalid-key-not-current-at-send` pin this; their `context` carries the `seq`.
 
 ## 11. How the receiving Obi decides
 
@@ -214,7 +226,7 @@ When a delivery arrives, the receiving Obi:
 
 1. **Verifies** it (section 10). If it isn't valid, the Obi acknowledges the delivery, records why locally, and sends nothing back: it does not answer a message it cannot authenticate. An expired request is the exception: the Obi MAY send `decline` with reason `expired`.
 2. **Deduplicates.** A message whose `id` it has already handled is acknowledged and ignored.
-3. **Replies** (`status`, `accept`, `decline`, `result`) are matched to the outgoing request named by `in_reply_to`, which MUST have been sent to the reply's `from`. A reply that matches nothing is acknowledged and dropped. A matched reply updates the exchange; a `result` is shown to the owner and is data like any other text.
+3. **Replies** (`status`, `accept`, `decline`, `result`) are matched to the outgoing request named by `in_reply_to`, which MUST have been sent to the reply's `from`. A reply that matches nothing, or that breaks the exchange rules (section 4) given the replies already recorded for that request, is acknowledged and dropped. A matched reply updates the exchange; a `result` is shown to the owner and is data like any other text.
 4. **Requests.** If the type isn't one its card `accepts`, it sends `decline` with reason `out_of_scope`.
 5. It looks for a **remembered decision** that covers the request. The key is `(type, sender's owner, repo)`, where the sender's owner comes from the directory (the sender's verified agent card), never from the message's text, and `repo` is the body's `repo` (or `*` when the body has none). A decision for that exact repo wins over one for every repo (`*`).
    - A remembered **accept**: go to step 7, and name the decision's id in `accept.by_rule` and `result.by_rule`.
