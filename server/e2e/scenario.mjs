@@ -155,6 +155,20 @@ const steps = [
         await sleep(250);
       }
       assert(same(health.body, { ok: true, protocol: "obi/0.1" }), `health: ${show(health.body)}`);
+      // 1.1b Nothing on the port reaches the D1 around the Sphere's checks: wrangler's Local
+      // Explorer and local observability (on by default, no token, any SQL) are off, so their
+      // paths are the Sphere's own 404.
+      const D1_LOCAL_ID = "00000000-0000-0000-0000-000000000000";
+      for (const [method, path, body] of [
+        ["GET", "/cdn-cgi/local/explorer"],
+        ["GET", "/cdn-cgi/local/explorer/api"],
+        ["GET", "/cdn-cgi/local/explorer/api/d1/database"],
+        ["POST", `/cdn-cgi/local/explorer/api/d1/database/${D1_LOCAL_ID}/raw`, { sql: "SELECT name FROM sqlite_master" }],
+        ["POST", "/cdn-cgi/local/explorer/api/local/observability/query", { sql: "SELECT 1" }],
+      ]) {
+        const r = await c.call(method, path, body === undefined ? {} : { body });
+        expectStatus(r, 404, `${method} ${path} (wrangler's Local Explorer must be off)`);
+      }
       // 1.2 The Sphere, with wellington (W) as admin.
       ctx.W = new Owner(c, A.owner);
       ctx.E = new Owner(c, B.owner);

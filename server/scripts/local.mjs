@@ -5,6 +5,12 @@
 // operator token from SPHERE_OPERATOR_TOKEN passed as a Worker variable (never written to a file).
 // It stops on SIGINT or SIGTERM. Wrangler sends no metrics.
 //
+// Wrangler's Local Explorer and local observability are turned off: on by default, they add
+// endpoints under /cdn-cgi/local/explorer on the Sphere's own port that take no token and run any
+// SQL, writes included, against the Sphere's D1. With them on, a local process could rewrite the
+// policy, add tokens or members, or change audit rows without a single check. Off, every request
+// goes through the Sphere's checks, as on a deployed Sphere (sphere-api.md section 8).
+//
 // Options: --port <n> (default 8787), --persist-to <dir> (default .wrangler/state, wrangler's
 // own). A lone `--` (pnpm passes it through) is ignored.
 
@@ -35,8 +41,18 @@ const persistTo = resolve(opt("--persist-to", join(server, ".wrangler", "state")
 mkdirSync(persistTo, { recursive: true });
 
 const wrangler = join(dirname(createRequire(import.meta.url).resolve("wrangler/package.json")), "bin", "wrangler.js");
-// Wrangler's own settings: no metrics, no update check, no colours in logs.
-const childEnv = { ...process.env, WRANGLER_SEND_METRICS: "false", WRANGLER_HIDE_BANNER: "true", NO_UPDATE_NOTIFIER: "1", FORCE_COLOR: "0", CI: process.env.CI ?? "1" };
+// Wrangler's own settings: no metrics, no update check, no colours in logs, and no Local Explorer
+// or local observability (see the top of this file). These win over the caller's environment.
+const childEnv = {
+  ...process.env,
+  WRANGLER_SEND_METRICS: "false",
+  WRANGLER_HIDE_BANNER: "true",
+  NO_UPDATE_NOTIFIER: "1",
+  FORCE_COLOR: "0",
+  CI: process.env.CI ?? "1",
+  X_LOCAL_EXPLORER: "false",
+  X_LOCAL_OBSERVABILITY: "false",
+};
 
 let child = null;
 let stopping = false;

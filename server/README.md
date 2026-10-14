@@ -16,7 +16,7 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
   pnpm run local -- --port 8787 --persist-to /path/to/state   # a Sphere on 127.0.0.1:8787
 ```
 
-`pnpm run local` ([scripts/local.mjs](scripts/local.mjs)) applies the D1 migrations to the local database under `--persist-to`, then runs `wrangler dev` on `127.0.0.1:<port>` with the same `--persist-to` and the operator token as a Worker variable (`--var`), never in a file. It is ready when `GET /v0.1/health` answers `200`, and stops on SIGINT or SIGTERM. It writes only under `--persist-to`, `server/.wrangler/`, `node_modules/`, `$HOME` and `$TMPDIR`, and sends no metrics.
+`pnpm run local` ([scripts/local.mjs](scripts/local.mjs)) applies the D1 migrations to the local database under `--persist-to`, then runs `wrangler dev` on `127.0.0.1:<port>` with the same `--persist-to` and the operator token as a Worker variable (`--var`), never in a file. It is ready when `GET /v0.1/health` answers `200`, and stops on SIGINT or SIGTERM. It writes only under `--persist-to`, `server/.wrangler/`, `node_modules/`, `$HOME` and `$TMPDIR`, and sends no metrics. Wrangler's Local Explorer and local observability are off, so nothing on the port reaches the D1 without going through the Sphere's checks (`/cdn-cgi/local/explorer` answers `404`).
 
 ## Check it
 
