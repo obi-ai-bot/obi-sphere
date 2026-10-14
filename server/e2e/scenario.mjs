@@ -18,9 +18,9 @@
 //   step 8  (the Sphere's side) a clean exit on SIGTERM, and no write outside the Sphere's write root
 // Each prints PASS or FAIL with the first expectation that didn't hold. Exit 0 only when all pass.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
@@ -131,6 +131,56 @@ function signalGroup(child, signal) {
   } catch {}
 }
 
+// The TCP ports that processes in process group `pgid` (the Sphere's: pnpm, node, wrangler, workerd)
+// listen on, as [{ address, port }]. Linux: /proc; macOS: lsof. Anywhere else it throws: the check
+// that uses it fails rather than passing unseen.
+function listeningSockets(pgid) {
+  if (process.platform === "darwin") {
+    let out = "";
+    try {
+      out = execFileSync("lsof", ["-nP", "-a", "-g", String(pgid), "-iTCP", "-sTCP:LISTEN", "-Fn"], { encoding: "utf8" });
+    } catch (e) {
+      if (e.status !== 1) throw new Error(`lsof: ${e.message}`);
+    }
+    return out.split("\n").filter((l) => l.startsWith("n")).map((l) => {
+      const at = l.lastIndexOf(":");
+      return { address: l.slice(1, at).replace(/^\[|\]$/g, ""), port: Number(l.slice(at + 1)) };
+    });
+  }
+  if (process.platform === "linux") {
+    const inodes = new Set();
+    for (const pid of readdirSync("/proc").filter((n) => /^[0-9]+$/.test(n))) {
+      try {
+        const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+        if (Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]) !== pgid) continue;
+        for (const fd of readdirSync(`/proc/${pid}/fd`)) {
+          const m = /^socket:\[([0-9]+)\]$/.exec(readlinkSync(`/proc/${pid}/fd/${fd}`, { encoding: "utf8" }));
+          if (m) inodes.add(m[1]);
+        }
+      } catch {}
+    }
+    const out = [];
+    for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+      if (!existsSync(table)) continue;
+      for (const line of readFileSync(table, "utf8").split("\n").slice(1)) {
+        const f = line.trim().split(/\s+/);
+        if (f.length < 10 || f[3] !== "0A" || !inodes.has(f[9])) continue;
+        const [hex, port] = f[1].split(":");
+        // /proc writes each 32-bit word of the address in host (little-endian) byte order.
+        const bytes = hex.match(/.{8}/g).flatMap((w) => w.match(/../g).reverse().map((b) => parseInt(b, 16)));
+        const v4 = (b) => b.join(".");
+        const address = bytes.length === 4 ? v4(bytes)
+          : bytes.slice(0, 15).every((b) => b === 0) && bytes[15] === 1 ? "::1"
+          : bytes.slice(0, 10).every((b) => b === 0) && bytes[10] === 255 && bytes[11] === 255 ? v4(bytes.slice(12))
+          : bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+        out.push({ address, port: parseInt(port, 16) });
+      }
+    }
+    return out;
+  }
+  throw new Error(`no way to list listening sockets on ${process.platform}`);
+}
+
 const steps = [
   {
     n: 1,
@@ -168,6 +218,18 @@ const steps = [
       ]) {
         const r = await c.call(method, path, body === undefined ? {} : { body });
         expectStatus(r, 404, `${method} ${path} (wrangler's Local Explorer must be off)`);
+      }
+      // 1.1c No DevTools inspector either (`wrangler dev` always opens one, no token, and a debugger
+      // on it runs code in the Worker with the D1 binding): every port the Sphere's processes
+      // listen on is on the loopback, and none answers as a DevTools endpoint.
+      const sockets = listeningSockets(sphereProcess.pid);
+      assert(sockets.some((x) => x.port === ctx.port), `the Sphere's own port ${ctx.port} isn't among its listening sockets: ${show(sockets)}`);
+      for (const { address, port } of sockets) {
+        assert(address === "127.0.0.1" || address === "::1", `the Sphere listens on ${address}:${port}, not on the loopback`);
+        for (const path of ["/json/version", "/json/list"]) {
+          const body = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(5000) }).then((res) => (res.ok ? res.text() : ""), () => "");
+          assert(!/webSocketDebuggerUrl|devtoolsFrontendUrl|"Protocol-Version"/.test(body), `port ${port} answers ${path} as a DevTools inspector: ${body.slice(0, 200)}`);
+        }
       }
       // 1.2 The Sphere, with wellington (W) as admin.
       ctx.W = new Owner(c, A.owner);

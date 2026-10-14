@@ -1,9 +1,18 @@
 #!/usr/bin/env node
 // `pnpm run local -- --port <port> --persist-to <dir>`: a Sphere on this machine
 // (spec/sphere-api.md section 8). It applies the D1 migrations to the local database under
-// --persist-to, then runs `wrangler dev` on 127.0.0.1:<port> with the same --persist-to, the
-// operator token from SPHERE_OPERATOR_TOKEN passed as a Worker variable (never written to a file).
-// It stops on SIGINT or SIGTERM. Wrangler sends no metrics.
+// --persist-to (`wrangler d1 migrations apply`), then starts the Worker on 127.0.0.1:<port> with the
+// same --persist-to through wrangler's own dev server (scripts/serve-local.mjs: its programmatic
+// API, the one `wrangler dev` is built on), the operator token from SPHERE_OPERATOR_TOKEN passed as
+// a Worker secret (never written to a file). It stops on SIGINT or SIGTERM, exiting 0. Wrangler
+// sends no metrics.
+//
+// No DevTools inspector: `wrangler dev` always opens one (127.0.0.1:9229 or the next free port; its
+// flags only move it, none turns it off). It takes no token, and a debugger attached to it runs code
+// inside the Worker with the Sphere's D1 binding, around every check. Started through the API with
+// `inspector: false`, the Worker has none. The other loopback ports wrangler opens are its own:
+// the Worker's direct socket (the same Sphere, the same checks) and Miniflare's internal ones,
+// which refuse any request without Miniflare's per-run secret (403).
 //
 // Wrangler's Local Explorer and local observability are turned off: on by default, they add
 // endpoints under /cdn-cgi/local/explorer on the Sphere's own port that take no token and run any
@@ -53,6 +62,8 @@ const childEnv = {
   X_LOCAL_EXPLORER: "false",
   X_LOCAL_OBSERVABILITY: "false",
 };
+// A VS Code debug terminal makes wrangler attach its own debugger; not here.
+delete childEnv.VSCODE_INSPECTOR_OPTIONS;
 
 let child = null;
 let stopping = false;
@@ -64,9 +75,9 @@ for (const signal of ["SIGINT", "SIGTERM"]) {
   });
 }
 
-function run(argv, label) {
+function run(script, argv, label) {
   return new Promise((resolveRun) => {
-    child = spawn(process.execPath, [wrangler, ...argv], { cwd: server, env: childEnv, stdio: ["ignore", "inherit", "inherit"] });
+    child = spawn(process.execPath, [script, ...argv], { cwd: server, env: childEnv, stdio: ["ignore", "inherit", "inherit"] });
     child.on("exit", (code, signal) => resolveRun({ code, signal }));
     child.on("error", (e) => {
       console.error(`local: ${label} failed to start: ${e.message}`);
@@ -75,15 +86,13 @@ function run(argv, label) {
   });
 }
 
-const migrated = await run(["d1", "migrations", "apply", "DB", "--local", "--persist-to", persistTo], "migrations");
+const migrated = await run(wrangler, ["d1", "migrations", "apply", "DB", "--local", "--persist-to", persistTo], "migrations");
 if (stopping) process.exit(0);
 if (migrated.code !== 0) {
   console.error("local: applying the D1 migrations failed");
   process.exit(migrated.code ?? 1);
 }
 
-const token = process.env.SPHERE_OPERATOR_TOKEN;
-const vars = token ? ["--var", `SPHERE_OPERATOR_TOKEN:${token}`] : [];
-if (!token) console.error("local: SPHERE_OPERATOR_TOKEN is not set: every operator call (creating a Sphere) will be refused");
-const served = await run(["dev", "--ip", "127.0.0.1", "--port", port, "--persist-to", persistTo, "--local", "--show-interactive-dev-session=false", ...vars], "wrangler dev");
+if (!process.env.SPHERE_OPERATOR_TOKEN) console.error("local: SPHERE_OPERATOR_TOKEN is not set: every operator call (creating a Sphere) will be refused");
+const served = await run(join(server, "scripts", "serve-local.mjs"), [port, persistTo], "the dev server");
 process.exit(stopping ? 0 : (served.code ?? 0));
