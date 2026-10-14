@@ -6,7 +6,7 @@
 // redoes its checks. So every change that a send depends on (the chain's head, members, keys,
 // the policy) is checked and made as if alone.
 
-import { apiError } from "./http.ts";
+import { apiError, rateLimited } from "./http.ts";
 import type { AgentCard } from "./protocol/card.ts";
 import { uuid } from "./protocol/crypto.ts";
 
@@ -122,12 +122,28 @@ export async function guardedWrite(db: D1Database, sphere: string, rev: number, 
   }
 }
 
-/** Retries `attempt` (which reads, checks, and makes a guarded write) until its write lands. */
-export async function withRetries<T>(attempt: () => Promise<T | null>, tries = 10): Promise<T> {
-  for (let i = 0; i < tries; i++) {
+/** How long a write keeps retrying against other writes to the same Sphere, in milliseconds. */
+export const RETRY_BUDGET_MS = 20_000;
+
+/**
+ * Retries `attempt` (which reads, checks, and makes a guarded write) until its write lands.
+ *
+ * Every write to a Sphere moves its one `rev` on, so concurrent writers to one Sphere take turns:
+ * each turn one wins and the others read again. The losers wait a random time below a ceiling
+ * that doubles with each loss (exponential backoff with full jitter), so a crowd of writers
+ * spreads itself out instead of all reading and writing again at once, which would slow the
+ * winner of each turn down. When the budget runs out the answer is `429 rate_limited` with
+ * `Retry-After` (sphere-api.md section 1): nothing was recorded, and the caller learns when to
+ * try again instead of retrying blindly.
+ */
+export async function withRetries<T>(attempt: () => Promise<T | null>, budgetMs = RETRY_BUDGET_MS): Promise<T> {
+  const deadline = Date.now() + budgetMs;
+  for (let i = 0; ; i++) {
     const result = await attempt();
     if (result !== null) return result;
-    await new Promise((r) => setTimeout(r, 5 + Math.floor(Math.random() * 20 * (i + 1))));
+    if (Date.now() >= deadline) break;
+    const ceiling = Math.min(2000, 4 * 2 ** Math.min(i, 9));
+    await new Promise((r) => setTimeout(r, 1 + Math.floor(Math.random() * ceiling)));
   }
-  throw apiError("internal", "too many concurrent changes; nothing was recorded");
+  throw rateLimited("too many concurrent changes to this Sphere; nothing was recorded", 1);
 }

@@ -3,7 +3,7 @@
 // sender signed. Text fields are data: nothing here reads them beyond the schema.
 
 import { bearer, requireActor, requireScope } from "../auth.ts";
-import { getKeys, getMember, guardedWrite, requireSphere, withRetries, type PolicyRule } from "../db.ts";
+import { guardedWrite, requireSphere, withRetries, type KeyRow, type MemberRow, type PolicyRule, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, parseBody, readBody } from "../http.ts";
 import { cardParams, type AgentCard } from "../protocol/card.ts";
@@ -59,41 +59,58 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
   else requireScope(caller, "reply");
   const canonical = canonicalize(env_);
 
+  // The signature is checked once per key: a retry after losing a turn to another write (db.ts,
+  // withRetries) doesn't check it again unless the sender's current key changed meanwhile.
+  const signatureOk = new Map<string, boolean>();
+  const reply = request_ ? null : env_.in_reply_to!;
+
   return withRetries(async () => {
-    const sphere = await requireSphere(env.DB, sphere0.id);
+    // Everything the checks read, in one transaction: one consistent snapshot, one round trip.
+    const reads = await env.DB.batch([
+      env.DB.prepare("SELECT * FROM spheres WHERE id = ?1").bind(sphere0.id),
+      env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere0.id, env_.id),
+      env.DB.prepare("SELECT * FROM member_keys WHERE sphere = ?1 AND obi = ?2 ORDER BY valid_from_seq, rowid").bind(sphere0.id, env_.from),
+      env.DB.prepare("SELECT * FROM members WHERE sphere = ?1 AND obi = ?2").bind(sphere0.id, env_.to),
+      env.DB.prepare("SELECT * FROM members WHERE sphere = ?1 AND obi = ?2").bind(sphere0.id, env_.from),
+      ...(reply === null
+        ? []
+        : [
+            env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere0.id, reply),
+            env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND in_reply_to = ?2 ORDER BY seq").bind(sphere0.id, reply),
+          ]),
+    ]);
+    const rows = <T,>(i: number) => reads[i]!.results as unknown as T[];
+    const sphere = rows<SphereRow>(0)[0];
+    if (!sphere) throw apiError("not_found", `no Sphere ${sphere0.id}`);
     // 8. A retry of a recorded message answers what its first send answered; another message
     // with the same id is a duplicate.
-    const recorded = await env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere.id, env_.id).first<AuditRow>();
+    const recorded = rows<AuditRow>(1)[0];
     if (recorded) {
       if (recorded.envelope === canonical) return json(200, sendAnswer(recorded));
       throw apiError("duplicate", `a different message with id ${env_.id} was relayed before`);
     }
     // 9. The sender's current key, and its signature.
-    const keys = await getKeys(env.DB, sphere.id, env_.from);
-    const current = keys.find((k) => k.valid_until_seq === null);
+    const current = rows<KeyRow>(2).find((k) => k.valid_until_seq === null);
     if (!current || current.key_id !== env_.key_id) throw apiError("unknown_key", `${env_.key_id} is not ${env_.from}'s current key`);
-    if (!(await verifyEnvelopeSignature(env_, current.public_key))) throw apiError("bad_signature", "the signature does not verify");
+    if (!signatureOk.has(current.public_key)) signatureOk.set(current.public_key, await verifyEnvelopeSignature(env_, current.public_key));
+    if (!signatureOk.get(current.public_key)) throw apiError("bad_signature", "the signature does not verify");
     // 10. Not expired, not from the future. The Sphere's clock never goes back along the chain.
     const now = Math.max(nowS(deps), sphere.head_recorded_at_s ?? 0);
     if (!(seconds(env_.expires_at) > now)) throw apiError("expired", `the message expired at ${env_.expires_at}`);
     if (seconds(env_.created_at) > now + CLOCK_SKEW_SECONDS) throw apiError("clock_skew", `created_at is more than ${CLOCK_SKEW_SECONDS} seconds ahead`);
     // 11. The recipient.
-    const to = await getMember(env.DB, sphere.id, env_.to);
+    const to = rows<MemberRow>(3)[0];
     if (!to) throw apiError("unknown_recipient", `${env_.to} is not a member`);
     if (to.status !== "active") throw apiError("recipient_revoked", `${env_.to} was revoked`);
     if (request_ && !cardParams(JSON.parse(to.card) as AgentCard).accepts.includes(env_.type)) throw apiError("policy_denied", `${env_.to}'s card doesn't accept ${env_.type}`);
     // 12. The policy for a request; the exchange rules for a reply.
     if (request_) {
-      const from = (await getMember(env.DB, sphere.id, env_.from))!;
+      const from = rows<MemberRow>(4)[0]!;
       const repo = typeof env_.body.repo === "string" ? env_.body.repo : undefined;
       if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, repo)) throw apiError("policy_denied", "no policy rule allows this request");
     } else {
-      const [requestRows, replyRows] = await env.DB.batch([
-        env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere.id, env_.in_reply_to!),
-        env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND in_reply_to = ?2 ORDER BY seq").bind(sphere.id, env_.in_reply_to!),
-      ]);
-      const req = (requestRows!.results as unknown as AuditRow[])[0];
-      const problem = exchangeProblem(exchangeMessage(env_), req && rowMessage(req), (replyRows!.results as unknown as AuditRow[]).map(rowMessage));
+      const req = rows<AuditRow>(5)[0];
+      const problem = exchangeProblem(exchangeMessage(env_), req && rowMessage(req), rows<AuditRow>(6).map(rowMessage));
       if (problem) throw apiError("bad_reply", problem);
     }
     // 13. Record: the audit entry and the delivery, in one transaction.

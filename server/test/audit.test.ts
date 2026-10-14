@@ -103,6 +103,19 @@ describe("the chain", () => {
     expect(await verifyChain({ sphere: "e2e", entries: audit.entries }, { keys })).toEqual({ ok: true });
   });
 
+  it("records every one of 200 concurrent sends: no send gives up while others write", async () => {
+    const w = await team();
+    const tokenB = await w.obiToken("obi-ernesto");
+    const n = 200;
+    const envs = await Promise.all(Array.from({ length: n }, () => w.envelope("obi-ernesto", "obi-wellington", "review_request", BRIEF)));
+    const answers = await Promise.all(envs.map((e) => w.send(e, tokenB)));
+    expect(answers.filter((a) => a.status !== 202).map((a) => `${a.status} ${a.body?.error?.code}`)).toEqual([]);
+    expect(answers.map((a) => a.body.seq).sort((a, b) => a - b)).toEqual(Array.from({ length: n }, (_, i) => i + 1));
+    const { audit, keys } = await chainOf(w);
+    expect(audit.entries.map((e: { envelope: { id: string } }) => e.envelope.id).sort()).toEqual(envs.map((e) => e.id).sort());
+    expect(await verifyChain({ sphere: "e2e", entries: audit.entries }, { keys })).toEqual({ ok: true });
+  }, 60_000);
+
   it("records at most one accept when two race", async () => {
     const w = await team();
     const tokenA = await w.obiToken("obi-wellington");

@@ -32,14 +32,20 @@ export function oneLine(text: string, max: number): string {
 export class ApiError extends Error {
   readonly code: ErrorCode;
   readonly details: string[];
-  constructor(code: ErrorCode, message: string, details: string[] = []) {
+  /** Seconds, for the `Retry-After` header of a `429 rate_limited`. */
+  readonly retryAfter: number | undefined;
+  constructor(code: ErrorCode, message: string, details: string[] = [], retryAfter?: number) {
     super(message);
     this.code = code;
     this.details = details;
+    this.retryAfter = retryAfter;
   }
 }
 
 export const apiError = (code: ErrorCode, message: string, details: string[] = []): ApiError => new ApiError(code, message, details);
+
+/** `429 rate_limited` with `Retry-After: seconds` (sphere-api.md section 1). */
+export const rateLimited = (message: string, seconds: number): ApiError => new ApiError("rate_limited", message, [], seconds);
 
 const JSON_HEADERS = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
@@ -49,7 +55,8 @@ export function json(status: number, body: unknown, headers: Record<string, stri
 
 export function errorResponse(e: ApiError): Response {
   const details = e.details.slice(0, 20).map((d) => oneLine(d, 300));
-  return json(STATUS[e.code], { error: { code: e.code, message: oneLine(e.message, 500), ...(details.length ? { details } : {}) } });
+  const headers: Record<string, string> = e.retryAfter !== undefined ? { "Retry-After": String(e.retryAfter) } : {};
+  return json(STATUS[e.code], { error: { code: e.code, message: oneLine(e.message, 500), ...(details.length ? { details } : {}) } }, headers);
 }
 
 /** The request's body bytes, or 413 payload_too_large past the limit. */
