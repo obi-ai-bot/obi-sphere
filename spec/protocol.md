@@ -60,7 +60,7 @@ request ──► [status…] ──► accept ──► [status…] ──► r
    └──────► [status…] ──► decline
 ```
 
-- `accept` comes at most once, and before the `result`.
+- `accept` comes at most once per exchange, and before the `result`. A `status` may come before the `accept` or after it: "at most once" means no second `accept`, not that the `accept` is the first reply.
 - `decline` or `result` ends the exchange. Nothing may follow it.
 - A `question` may be answered by a `result` directly, without `accept`.
 - Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
@@ -198,11 +198,13 @@ The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.m
 | 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type`. | `invalid_envelope` |
 | 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7). | `invalid_envelope` |
 | 4 | `sphere` is the receiver's Sphere. | `wrong_sphere` |
-| 5 | `key_id` is a key the directory lists for `from` (valid now), and that public key hashes to `key_id`. | `unknown_key` |
+| 5 | `key_id` is a key the directory lists for `from`, valid for this message (below), and that public key hashes to `key_id`. | `unknown_key` |
 | 6 | The signature verifies with that key over the signing input. | `bad_signature` |
 | 7 | `expires_at` is after now. | `expired` |
 | 8 | `created_at` is at most 300 seconds after now (clock skew). | `clock_skew` |
 | 9 | The receiver hasn't seen this `id` before. | `duplicate` |
+
+**Which key is valid for a message (check 5).** The directory gives each key a range of audit seqs (`valid_from_seq`, `valid_until_seq`; [identity.md](identity.md) section 3). A receiver judges a delivered message **by the delivery's `seq`**, the seq of its audit entry: the key is valid when `valid_from_seq` ≤ seq and, unless `valid_until_seq` is null, seq ≤ `valid_until_seq`. So a message the Sphere recorded with the sender's old key just before a rotation still verifies when it arrives after it. A message with no seq yet (the Sphere checking a send) needs the sender's current key (`valid_until_seq` null). The conformance fixtures `valid-key-rotated-after-relay`, `invalid-key-not-valid-at-seq` and `invalid-key-not-current-at-send` pin this; their `context` carries the `seq`.
 
 ## 11. How the receiving Obi decides
 

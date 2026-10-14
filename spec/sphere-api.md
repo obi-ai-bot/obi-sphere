@@ -56,7 +56,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `DELETE /v0.1/spheres/{sphere}/members/{obi}` | owner token | `admin`, or the Obi's own owner | | `200` member |
 | `GET /v0.1/spheres/{sphere}/policy` | bearer | `directory:read` or `admin` | | `200` [policy](schemas/v0.1/wire/policy.schema.json) |
 | `PUT /v0.1/spheres/{sphere}/policy` | owner token | `admin` | [policy-put.request](schemas/v0.1/wire/policy-put.request.schema.json) | `200` policy |
-| `POST /v0.1/spheres/{sphere}/messages` | Obi token | `send:<type>` or `reply` | the signed envelope | `202` [send.response](schemas/v0.1/wire/send.response.schema.json) |
+| `POST /v0.1/spheres/{sphere}/messages` | Obi token | `send:<type>` or `reply` | the signed envelope | `202` [send.response](schemas/v0.1/wire/send.response.schema.json) (`200`, the original answer, for a retry: section 6.1, check 8) |
 | `GET /v0.1/spheres/{sphere}/deliveries?limit=&wait=` | Obi token | `receive` | | `200` [deliveries.response](schemas/v0.1/wire/deliveries.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/deliveries/ack` | Obi token | `receive` | [ack.request](schemas/v0.1/wire/ack.request.schema.json) | `200` [ack.response](schemas/v0.1/wire/ack.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}/audit?from_seq=&limit=` | bearer | `audit:read` | | `200` [audit.response](schemas/v0.1/wire/audit.response.schema.json) |
@@ -119,7 +119,7 @@ Then, in one transaction: the invitation is used up, the member is `active`, and
  "keys": [{"key_id": "ed25519:…", "public_key": "…", "valid_from_seq": 1, "valid_until_seq": null}]}
 ```
 
-**Directory.** `GET /members` lists every member, active and revoked, ordered by `joined_at` then `obi`. Receivers use it to find a sender's owner and keys, and check each card themselves (identity.md 2.2) before trusting it.
+**Directory.** `GET /members` lists every member, active and revoked, ordered by `joined_at` then `obi`. A member has `revoked_at` (when it was revoked) exactly when its `status` is `revoked`, and no `revoked_at` while it is `active`. Receivers use it to find a sender's owner and keys, and check each card themselves (identity.md 2.2) before trusting it.
 
 **Rotate and revoke.** `PUT /members/{obi}/card` and `DELETE /members/{obi}`: identity.md section 3. A card update needs a higher `card_seq` (`409 conflict` otherwise), the same `sphere`, `obi_id`, `owner` and bound `owner_key` (`400 card_invalid`), and a `key_id` no other member uses (`409 conflict`). Revoking an already revoked member answers it as it is.
 
@@ -158,12 +158,14 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
 | 5 | `sphere` is the path's Sphere. | `400 wrong_sphere` |
 | 6 | `from` is the token's actor. | `403 forbidden` |
 | 7 | The token has `send:<type>` for a request, `reply` for a reply. | `403 insufficient_scope` |
-| 8 | `key_id` is the sender's current key, and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
-| 9 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
-| 10 | No message with this `id` is in the chain. If one is and its `signature` is the same, this is a retry: answer `200` with the original send's answer and record nothing. Otherwise `409 duplicate`. | `409 duplicate` |
+| 8 | No message with this `id` is in the chain. If one is and the body is the same JSON value as the recorded envelope (the same canonical JSON, signature included), this is a **retry**: answer `200` with the original send's answer and record nothing, even when the message has expired or the sender's key has changed since it was recorded. Otherwise `409 duplicate`. | `409 duplicate` |
+| 9 | `key_id` is the sender's current key (protocol.md section 10, "Which key is valid for a message"), and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
+| 10 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
 | 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). | as written |
-| 12 | A request is allowed by the policy (section 5). A reply's `in_reply_to` names a request in this Sphere's chain whose `from` is the reply's `to` and whose `to` is the reply's `from`; that exchange has no `decline` or `result` yet; and an `accept` is the exchange's first. | `403 policy_denied`, `409 bad_reply` |
+| 12 | A request is allowed by the policy (section 5). A reply's `in_reply_to` names a request in this Sphere's chain whose `from` is the reply's `to` and whose `to` is the reply's `from`; that exchange has no `decline` or `result` yet; and an `accept` comes only when that exchange has no `accept` yet (a `status` before it is fine: protocol.md section 4). | `403 policy_denied`, `409 bad_reply` |
 | 13 | Record it: in one transaction, append the audit entry (section 7) and queue a delivery for `to`. | `500 internal` (nothing recorded) |
+
+Check 8 comes before the key and expiry checks so that a sender whose answer was lost can always learn that its message was recorded: retrying the same bytes answers `200` with the original `seq`, whatever happened since. Only the sender can learn it (check 6), and only for bytes the Sphere already checked when it recorded them.
 
 It answers `202` with [send.response](schemas/v0.1/wire/send.response.schema.json):
 
@@ -181,6 +183,7 @@ The Sphere never changes the envelope: what it records and delivers is byte-for-
 {"deliveries": [{"delivery_id": "…", "seq": 7, "relayed_at": "2026-10-14T12:00:09Z", "envelope": { …as sent… }}]}
 ```
 
+- `seq` is the audit seq of the envelope's entry (section 7), and `relayed_at` is that entry's `recorded_at`, the same value. A receiver judges the sender's key by this `seq` (protocol.md section 10, "Which key is valid for a message").
 - `limit` is 1 to 100 (50 when left out); `wait` is 0 to 25 seconds (0 when left out). With `wait` above 0 and nothing queued, the Sphere MAY hold the request until a delivery arrives or `wait` passes, and MAY answer an empty list sooner; clients just ask again.
 - Delivery is **at least once**: a delivery comes back on every fetch until it is acknowledged. Receivers deduplicate by the envelope's `id` (protocol.md section 11, step 2).
 - A delivery whose envelope expires before it is acknowledged is dropped from the queue. It stays in the audit chain.
@@ -226,7 +229,7 @@ Take the entries from seq 1 (fetch more pages until the last answer's `head.seq`
 4. Its envelope passes protocol.md section 10 checks 2 and 3, names the chain's Sphere, was created at most 300 seconds after `recorded_at`, and expires after `recorded_at`.
 5. Its `key_id` is a key of the envelope's `from`, valid at this seq (`valid_from_seq` ≤ seq, and seq ≤ `valid_until_seq` unless that is null), whose public key hashes to `key_id`; and the signature verifies with it.
 6. No earlier entry has the same envelope `id`.
-7. A reply names, in `in_reply_to`, an earlier request whose `from` is the reply's `to` and whose `to` is the reply's `from`; no `decline` or `result` for that request comes before it; and an `accept` is the first for that request.
+7. A reply names, in `in_reply_to`, an earlier request whose `from` is the reply's `to` and whose `to` is the reply's `from`; no `decline` or `result` for that request comes before it; and an `accept` has no earlier `accept` for that request (a `status` may come before it).
 
 Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
 

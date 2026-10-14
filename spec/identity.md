@@ -172,7 +172,7 @@ It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.respo
  "token_type": "Bearer", "expires_in": 3600, "scope": "send:review_request reply receive directory:read audit:read"}
 ```
 
-The access token is opaque, 32 to 512 characters of `[A-Za-z0-9._~-]`, lives at most 3,600 seconds, and the Sphere stores only its SHA-256. Every other API call sends it as `Authorization: Bearer <access_token>`. The Sphere records, for each token, the owner (subject), the Obi (actor, if any) and the scopes; `from` on every message it relays must be the token's actor.
+The access token is opaque, 32 to 512 characters of `[A-Za-z0-9._~-]`, and the Sphere stores only its SHA-256. It lives at most 3,600 seconds and never past the `subject_token`'s `exp`: `expires_in` is the smaller of 3,600 and the seconds left until that `exp`. An Obi whose delegation is about to expire needs a new delegation from its owner, not just a new exchange. Every other API call sends it as `Authorization: Bearer <access_token>`. The Sphere records, for each token, the owner (subject), the Obi (actor, if any) and the scopes; `from` on every message it relays must be the token's actor.
 
 ### 4.4 What v0.1 requires and what it defers
 

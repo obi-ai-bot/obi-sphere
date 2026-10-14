@@ -180,6 +180,18 @@ export function buildFixtures() {
   bad("bad-signature-wrong-private-key", "Signed with Mallory's key, but names obi-b's key_id.", signEnvelope(unsigned("review_request", clone(bodies.review_request)), M.privateKey), "bad_signature");
   bad("unknown-key", "Signed and named with a key the directory does not have.", signEnvelope(unsigned("review_request", clone(bodies.review_request), { key_id: M.keyId }), M.privateKey), "unknown_key");
   bad("key-of-another-obi", "obi-b's message names obi-a's key (and is signed with it).", signEnvelope(unsigned("review_request", clone(bodies.review_request), { key_id: A.keyId }), A.privateKey), "unknown_key");
+
+  // Keys judged by the message's audit seq (protocol.md section 10, check 5): obi-a rotated its key
+  // after seq 6, and a status it signed with the old key was recorded at seq 6.
+  const rotatedDirectory = {
+    [A.keyId]: { obi: "obi-a", public_key: A.publicKey, valid_from_seq: 1, valid_until_seq: 6 },
+    [A2.keyId]: { obi: "obi-a", public_key: A2.publicKey, valid_from_seq: 7, valid_until_seq: null },
+    [B.keyId]: { obi: "obi-b", public_key: B.publicKey, valid_from_seq: 1, valid_until_seq: null },
+  };
+  const recordedBeforeRotation = signed(unsigned("status", { state: "working", note: "Recorded just before the key rotation." }));
+  ok("key-rotated-after-relay", "Signed with obi-a's old key and recorded at seq 6, the old key's last; delivered after the rotation. Valid: keys are judged at the delivery's seq.", recordedBeforeRotation, { ...context, keys: rotatedDirectory, seq: 6 });
+  bad("key-not-valid-at-seq", "The same message delivered as seq 7, after the old key's last seq.", recordedBeforeRotation, "unknown_key", { ...context, keys: rotatedDirectory, seq: 7 });
+  bad("key-not-current-at-send", "The same message with no seq yet, as the Sphere sees it at send: it needs the sender's current key.", recordedBeforeRotation, "unknown_key", { ...context, keys: rotatedDirectory });
   const pretty = unsigned("review_request", clone(bodies.review_request));
   const prettySig = b64url(signRaw(B.privateKey, Buffer.concat([Buffer.from("obi/0.1 envelope\n"), Buffer.from(JSON.stringify(pretty, null, 2))])));
   bad("signed-without-canonical-json", "Signed over pretty-printed JSON instead of JCS.", { ...pretty, signature: prettySig }, "bad_signature");
@@ -374,6 +386,8 @@ export function buildFixtures() {
   const gap = clone(chain);
   gap.entries.splice(1, 1);
   auditCase("invalid-chain-deleted-entry", "Entry 2 was removed.", gap, "reject", "conflict");
+  auditCase("valid-chain-status-before-accept", "A status, then the accept, then the result: status may come before the accept (protocol.md section 4).", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.status, valid.accept, valid.result]) }, "accept");
+  auditCase("invalid-chain-accepted-twice", "Two accepts with different ids for the same request.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.accept_empty]) }, "reject", "bad_reply");
   const dupEntry = { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.accept]) };
   auditCase("invalid-chain-same-message-twice", "The same accept recorded twice.", dupEntry, "reject", "duplicate");
   const afterEnd = { sphere: SPHERE, entries: recordAll([valid.review_request, valid.result, valid.status]) };

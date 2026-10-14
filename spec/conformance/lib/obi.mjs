@@ -230,7 +230,16 @@ export function resultProblems(body) {
   return problems;
 }
 
-// ctx: { now, sphere, keys: { [key_id]: { obi, public_key } }, seen_ids?: [] }
+// ctx: { now, sphere, keys: { [key_id]: { obi, public_key, valid_from_seq?, valid_until_seq? } },
+//        seq?, seen_ids?: [] }
+// seq is the message's audit seq (a delivery's `seq`). A key with a validity range must be valid at
+// seq; without seq (a message not yet recorded, as the Sphere sees one at send) it must be current.
+export function keyValidAt(key, seq) {
+  if (key.valid_from_seq === undefined && key.valid_until_seq === undefined) return true;
+  if (seq === undefined || seq === null) return key.valid_until_seq === null || key.valid_until_seq === undefined;
+  return seq >= (key.valid_from_seq ?? 1) && (key.valid_until_seq === null || key.valid_until_seq === undefined || seq <= key.valid_until_seq);
+}
+
 export function verifyEnvelope(env, ctx) {
   let size;
   try {
@@ -247,6 +256,7 @@ export function verifyEnvelope(env, ctx) {
   const key = ctx.keys?.[env.key_id];
   if (!key || key.obi !== env.from) return fail("unknown_key", `${env.key_id} is not a key of ${env.from}`);
   if (keyIdOf(key.public_key) !== env.key_id) return fail("unknown_key", "the directory's key does not hash to key_id");
+  if (!keyValidAt(key, ctx.seq)) return fail("unknown_key", ctx.seq === undefined ? `${env.key_id} is not ${env.from}'s current key` : `${env.key_id} was not valid at seq ${ctx.seq}`);
   if (!verifyBytes(key.public_key, envelopeSigningInput(env), env.signature)) return fail("bad_signature", "the signature does not verify");
   const now = seconds(ctx.now);
   if (!(seconds(env.expires_at) > now)) return fail("expired", `expired at ${env.expires_at}`);
@@ -325,7 +335,7 @@ export function verifyChain(chain, ctx) {
     if (!(seconds(env.expires_at) > time)) return fail("expired", `${at}: recorded after it expired`);
     const key = ctx.keys?.[env.key_id];
     if (!key || key.obi !== env.from || keyIdOf(key.public_key) !== env.key_id) return fail("unknown_key", `${at}: ${env.key_id} is not a key of ${env.from}`);
-    if (entry.seq < key.valid_from_seq || (key.valid_until_seq !== null && entry.seq > key.valid_until_seq)) return fail("unknown_key", `${at}: ${env.key_id} was not valid at seq ${entry.seq}`);
+    if (!keyValidAt(key, entry.seq)) return fail("unknown_key", `${at}: ${env.key_id} was not valid at seq ${entry.seq}`);
     if (!verifyBytes(key.public_key, envelopeSigningInput(env), env.signature)) return fail("bad_signature", `${at}: the sender's signature does not verify`);
     if (byId.has(env.id)) return fail("duplicate", `${at}: ${env.id} is in the chain twice`);
     if (REPLY_TYPES.includes(env.type)) {
@@ -333,6 +343,7 @@ export function verifyChain(chain, ctx) {
       if (!request || !REQUEST_TYPES.includes(request.type)) return fail("bad_reply", `${at}: replies to no earlier request`);
       if (request.from !== env.to || request.to !== env.from) return fail("bad_reply", `${at}: only the request's receiver replies, to its sender`);
       if (finished.has(request.id)) return fail("bad_reply", `${at}: the exchange already ended`);
+      // At most one accept per exchange; a status may come before it or after it.
       if (env.type === "accept" && [...byId.values()].some((e) => e.type === "accept" && e.in_reply_to === request.id)) return fail("bad_reply", `${at}: accepted twice`);
       if (TERMINAL_TYPES.includes(env.type)) finished.add(request.id);
     }

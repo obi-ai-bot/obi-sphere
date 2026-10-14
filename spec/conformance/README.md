@@ -40,7 +40,7 @@ Every file under `fixtures/` is one case:
 ```
 
 - `case` is `envelope`, `card` or `audit`. `expect` is `accept` or `reject`. `reason`, on rejections, is the error code of [sphere-api.md](../sphere-api.md) the reference verifier gives, for information: implementations are judged on accept or reject only.
-- **`envelope`**: `input` is one envelope. `context` is `{now, sphere, keys, seen_ids}`: judge it as the receiver of `sphere` would at time `now` (never the real clock), with `keys` the directory (`{key_id: {obi, public_key}}`) and `seen_ids` the ids already handled. Checks: protocol.md section 10.
+- **`envelope`**: `input` is one envelope. `context` is `{now, sphere, keys, seq?, seen_ids}`: judge it as the receiver of `sphere` would at time `now` (never the real clock), with `keys` the directory (`{key_id: {obi, public_key, valid_from_seq?, valid_until_seq?}}`), `seq` the message's audit seq when it came in a delivery, and `seen_ids` the ids already handled. A key with a validity range must be valid at `seq`, or be current (`valid_until_seq` null) when there is no `seq` (protocol.md section 10, "Which key is valid for a message"); a key without one is valid. Checks: protocol.md section 10.
 - **`card`**: `input` is one agent card. `context` is `{now, bound_owner_key?}`: the owner key the Sphere has bound for the card's owner, when it has one. Checks: identity.md section 2.2.
 - **`audit`**: `input` is `{sphere, entries}`, a whole chain from seq 1. `context` is `{keys}`, the key history (`{key_id: {obi, public_key, valid_from_seq, valid_until_seq}}`). Checks: sphere-api.md section 7.1.
 
