@@ -1,0 +1,4 @@
+# The packages whose install scripts may run: each checks that its platform binary is in place.
+allowBuilds:
+  esbuild: true
+  workerd: true
