@@ -51,9 +51,10 @@ jobs:
 
       # server/e2e/fixtures/ are copies of obi's e2e fixtures (server/e2e/fixtures.mjs). obi is
       # private: reading it needs the secret OBI_READ_TOKEN (a fine-grained token with Contents:
-      # read on obi-ai-bot/obi only), which a person creates. Without it the run says so with a
-      # warning and the comparison doesn't run; with it, check:fixtures and the scenario both
-      # compare the copies with obi's dev and fail on any difference.
+      # read on obi-ai-bot/obi only), which a person creates; until they do, this is blocked on
+      # them. Without it the comparison doesn't run and the run says so: a warning annotation and
+      # a line in the job summary. With it, check:fixtures and the scenario both compare the
+      # copies with obi's dev and fail on any difference.
       - name: Is there a token for reading obi?
         id: obi
         env:
@@ -61,9 +62,11 @@ jobs:
         run: |
           if [ -n "$OBI_READ_TOKEN" ]; then
             echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Fixture drift check: runs (server/e2e/fixtures/ against obi's dev, with OBI_READ_TOKEN)." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "::warning::The secret OBI_READ_TOKEN is not set, so server/e2e/fixtures/ are not compared with obi's e2e fixtures here. Add a fine-grained token with Contents: read on obi-ai-bot/obi only, as this repository's Actions secret OBI_READ_TOKEN."
+            echo "::warning title=Fixture drift check skipped::The secret OBI_READ_TOKEN is not set, so server/e2e/fixtures/ are not compared with obi's e2e fixtures here. Blocked on a person: add a fine-grained token with Contents: read on obi-ai-bot/obi only, as this repository's Actions secret OBI_READ_TOKEN."
             echo "present=false" >> "$GITHUB_OUTPUT"
+            echo ":warning: **Fixture drift check skipped** ($RUNNER_OS): the secret \`OBI_READ_TOKEN\` is not set, so \`server/e2e/fixtures/\` were not compared with obi's e2e fixtures. Blocked on a person: add a fine-grained token with Contents: read on obi-ai-bot/obi only as this repository's Actions secret \`OBI_READ_TOKEN\`." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Check out obi's e2e fixtures
