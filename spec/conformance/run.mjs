@@ -2,7 +2,8 @@
 // The conformance runner for the Obi-to-Obi protocol v0.1.
 //
 //   node conformance/run.mjs                    self-check: schemas, fixtures, reference verdicts
-//   node conformance/run.mjs --impl "<cmd>"     judge an implementation: each fixture on stdin,
+//   node conformance/run.mjs --impl "<cmd>"     judge an implementation: each case's {case, context,
+//                                               input} on stdin (never its expected verdict),
 //                                               exit 0 = accept, anything else = reject
 //   options: --kinds envelope,card,audit   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
@@ -47,6 +48,11 @@ const section = (title) => console.log(`\n== ${title}`);
 // ---------------------------------------------------------------------------------------------
 // Implementation mode.
 
+// What an implementation is given for a case: what to judge and what to judge it against, never
+// the answer (`expect`, `reason`) or the words that describe it (`name`, `description`).
+const IMPL_FIELDS = ["case", "context", "input"];
+const implInput = (testCase) => Object.fromEntries(IMPL_FIELDS.filter((k) => k in testCase).map((k) => [k, testCase[k]]));
+
 function runImpl(command, testCase) {
   return new Promise((resolve) => {
     const child = spawn("sh", ["-c", command], { stdio: ["pipe", "pipe", "pipe"] });
@@ -63,7 +69,7 @@ function runImpl(command, testCase) {
       resolve({ code, out, err });
     });
     child.stdin.on("error", () => {});
-    child.stdin.end(JSON.stringify(testCase));
+    child.stdin.end(JSON.stringify(implInput(testCase)));
   });
 }
 
@@ -167,6 +173,26 @@ function checkDeterminism() {
   if (/PRIVATE KEY|"d":/.test(Object.values(expected).join(""))) failed("fixtures", "a private key appears in the fixtures");
 }
 
+// The repository's .gitleaks.toml allowlists the test keys' public keys, which the generic
+// API-key rule mistakes for secrets. It must name exactly keys.json's public keys: a new test key
+// would otherwise make a secret scan refuse the fixtures, and a stale entry would hide a value
+// that is no longer a known public key.
+function checkSecretScanAllowlist() {
+  section("Secret-scan allowlist");
+  const path = join(here, "..", "..", ".gitleaks.toml");
+  let toml = "";
+  try {
+    toml = readFileSync(path, "utf8");
+  } catch {
+    failed("allowlist", "no .gitleaks.toml at the repository's root");
+    return;
+  }
+  const listed = [...toml.matchAll(/^\s*'''([A-Za-z0-9_-]{43})''',?\s*$/gm)].map((m) => m[1]).sort();
+  const keys = Object.values(JSON.parse(readFileSync(join(here, "keys.json"), "utf8")).keys).map((k) => k.public_key).sort();
+  if (canonicalize(listed) !== canonicalize(keys)) failed("allowlist", `.gitleaks.toml allowlists ${listed.join(", ") || "nothing"}; keys.json's public keys are ${keys.join(", ")}`);
+  else console.log(`.gitleaks.toml allowlists exactly the ${keys.length} public keys in keys.json, only under spec/conformance/.`);
+}
+
 function checkVerdicts() {
   section("Reference verdicts");
   const cases = loadCases();
@@ -207,15 +233,39 @@ function checkCoverage(cases) {
   console.log(`${ok} of ${need.length} required fixtures present.`);
 }
 
+// Implementation mode gives an implementation only {case, context, input}: a checker that just
+// echoed the fixture's `expect` would otherwise pass every case.
+async function checkImplInput() {
+  section("Implementation mode hides the expected verdicts");
+  const cases = loadCases();
+  const keys = `"${process.execPath}" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Object.keys(JSON.parse(s)).sort().join(",")))'`;
+  const echo = `"${process.execPath}" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.exit(JSON.parse(s).expect==="accept"?0:1))'`;
+  let ok = 0;
+  let echoRight = 0;
+  for (const c of cases) {
+    const r = await runImpl(keys, c.data);
+    const got = r.out.trim();
+    const want = IMPL_FIELDS.filter((k) => k in c.data).sort().join(",");
+    if (r.code === 0 && got === want) ok++;
+    else failed("impl input", `${c.path}: the implementation was given ${got || "nothing"} (exit ${r.code}), not ${want}`);
+    const e = await runImpl(echo, c.data);
+    if ((e.code === 0 ? "accept" : "reject") === c.data.expect) echoRight++;
+  }
+  if (echoRight === cases.length) failed("impl input", "a checker that only echoes the fixture's `expect` passed every case");
+  console.log(`${ok} of ${cases.length} cases reach the implementation as {${IMPL_FIELDS.join(", ")}} only. A checker that echoes \`expect\` gets ${echoRight} of ${cases.length} right (it must not get all).`);
+}
+
 async function selfCheck() {
   console.log("Obi-to-Obi protocol v0.1: conformance self-check");
   lintSchemas();
   checkJcs();
   checkDeterminism();
+  checkSecretScanAllowlist();
   const cases = checkVerdicts();
   checkCoverage(cases);
   section("Implementation mode, with the reference verifier");
   await implMode(`"${process.execPath}" "${join(here, "verify.mjs")}"`, undefined, "reference --impl");
+  await checkImplInput();
   console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
   return failures === 0;
 }

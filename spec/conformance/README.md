@@ -17,11 +17,12 @@ node conformance/run.mjs --impl "<command>" --kinds envelope,audit
 1. compiles every schema in `schemas/v0.1/` (draft 2020-12) and lints them: every object with properties sets `additionalProperties: false`; every string has a `maxLength` and a `pattern`, `enum` or `const`, unless it is data text; every data-text field (a reference to `line_text` or `block_text`) is annotated `x-obi-text: data` and sets its own bounds; the action types are exactly the seven of the protocol;
 2. checks the canonical-JSON vectors in `jcs-vectors.json` (RFC 8785);
 3. regenerates every fixture with `generate.mjs` and fails if a committed file differs, is missing, or is extra;
+   then checks that the repository's `.gitleaks.toml` allowlists exactly the public keys in `keys.json` (below, "Keys");
 4. judges every fixture with the reference verifier (`lib/obi.mjs`) and fails on any verdict, or rejection code, other than the fixture's;
 5. checks that the required fixtures exist (one valid envelope per action type, one per missing required field, and so on);
-6. runs implementation mode once with the reference verifier (`verify.mjs`), to prove the `--impl` contract.
+6. runs implementation mode once with the reference verifier (`verify.mjs`), to prove the `--impl` contract, and checks that an implementation is given only `{case, context, input}` (a checker that echoes the fixture's `expect` must fail).
 
-**Implementation mode** (`--impl "<command>"`): for every fixture, the runner starts `sh -c "<command>"`, writes the fixture (the whole case, below) to its stdin and closes it. **Exit status 0 means accept; anything else means reject.** Whatever the command prints is shown for cases it gets wrong. Each case has 20 seconds. The runner exits 1 if any case comes out otherwise than the fixture expects. `--kinds` limits it to some case kinds, for an implementation that only does part of the protocol (a Sphere server checks envelopes and cards and builds chains; obid checks all three).
+**Implementation mode** (`--impl "<command>"`): for every fixture, the runner starts `sh -c "<command>"`, writes the case's `case`, `context` and `input` (below) to its stdin as one JSON object and closes it. It never sends `expect`, `reason`, `name` or `description`: the implementation judges the case, it isn't told the answer. **Exit status 0 means accept; anything else means reject.** Whatever the command prints is shown for cases it gets wrong. Each case has 20 seconds. The runner exits 1 if any case comes out otherwise than the fixture expects. `--kinds` limits it to some case kinds, for an implementation that only does part of the protocol (a Sphere server checks envelopes and cards and builds chains; obid checks all three).
 
 ## Case format
 
@@ -47,6 +48,8 @@ Every file under `fixtures/` is one case:
 ## Keys
 
 The fixtures are signed with keys anyone can derive, so they are reproducible and nothing secret is committed. `keys.json` lists each key's seed string, public key and key id; the private key is Ed25519 (RFC 8032) from the 32-byte seed `SHA-256(UTF-8(seed string))`. For example `obi-a`'s seed string is `obi-conformance-test-key-obi-a`. **Never use these keys for anything else.**
+
+Their public keys look like API keys to generic secret-scan rules, so the repository's `.gitleaks.toml` allowlists exactly those values, only under `spec/conformance/`, for gitleaks's generic API-key rule; any other value there is still reported. A new test key goes into that list in the same pull request (the self-check fails until it does).
 
 ## Changing the fixtures
 
