@@ -130,6 +130,8 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 
 **Actor assertion** (the `actor_token`), signed by the Obi's current key: `iss` and `sub` the `obi_id`, `aud` as above, `iat`, `exp` (at most 300 seconds after `iat`), `jti` (a UUID, single-use: the Sphere remembers it until `exp`).
 
+**Single-use `jti`s are kept per Sphere.** The Sphere remembers each single-use `jti` (an owner's own assertion's, an actor assertion's) with its Sphere and its `iss` until the assertion's `exp`, and refuses it again within that Sphere (`invalid_grant`). A `jti` used in one Sphere says nothing about another Sphere on the same server, and one issuer's `jti` doesn't use up another's.
+
 ### 4.2 Scopes
 
 | Scope | Lets the token holder |
@@ -167,7 +169,7 @@ The Sphere checks, in this order, and answers `400` with an OAuth error when any
 5. Without an actor: there is no `may_act`, and the `jti` hasn't been used.
 6. The scopes granted are those requested (or all the subject grants) intersected with what the caller may hold. An empty result is `invalid_scope`.
 
-The error: `unsupported_grant_type` for a `grant_type` other than token exchange; `invalid_request` for a missing, repeated or unknown parameter, a token type other than the JWT one, `actor_token` without `actor_token_type` (or the reverse), or check 1; `invalid_grant` for checks 2 to 5; `invalid_scope` for check 6 or an unknown scope.
+The error: `unsupported_grant_type` for a `grant_type` other than token exchange; `invalid_request` for a body over 131,072 bytes (the size limit of every request body, sphere-api.md section 1, answered here as an OAuth error rather than `413`), a body that isn't `application/x-www-form-urlencoded`, a missing, repeated or unknown parameter, a token type other than the JWT one, `actor_token` without `actor_token_type` (or the reverse), or check 1; `invalid_grant` for checks 2 to 5; `invalid_scope` for check 6 or an unknown scope.
 
 It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.response.schema.json), `scope` the granted scopes in the canonical order (section 4.2):
 
@@ -186,4 +188,4 @@ Deferred: an identity provider for owners (OIDC) in front of the token endpoint;
 
 ### 4.5 In a local Sphere (the e2e test)
 
-A Sphere started locally with `wrangler dev` against local D1 works exactly the same way: same endpoint, same checks, same token lifetimes. Only the operator token that creates Spheres comes from the command line ([sphere-api.md](sphere-api.md), "Running a Sphere locally"). The harness plays both owners: it generates the two owner keys in memory for each run, signs each Obi's card and delegation, and hands them to each obid; each obid makes its own key and its own actor assertions. No model or code-host credential is involved.
+A Sphere started locally with `pnpm run local` (wrangler's programmatic dev server) against local D1 works exactly the same way: same endpoint, same checks, same token lifetimes, same single-use `jti`s per Sphere. Only the operator token that creates Spheres comes from the developer's machine: `SPHERE_OPERATOR_TOKEN` in `pnpm run local`'s environment, given to the Worker as a secret binding, never on a command line or in a file ([sphere-api.md](sphere-api.md), section 8, "Running a Sphere locally"). The harness plays both owners: it generates the two owner keys in memory for each run, signs each Obi's card and delegation, and hands them to each obid; each obid makes its own key and its own actor assertions. No model or code-host credential is involved.

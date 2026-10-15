@@ -5,7 +5,7 @@ Obi is a personal delegate for engineers. Each engineer has their own Obi. A Sph
 This repository has two parts:
 
 - **[`spec/`](spec/)**: the Obi-to-Obi protocol. What one Obi may send another, what each message must carry, and how the receiving Obi decides what to do with it.
-- **[`server/`](server/)**: one implementation of a Sphere server. It is self-hostable. Deskree also runs a hosted one.
+- **[`server/`](server/)**: one implementation of a Sphere server, TypeScript on Cloudflare Workers with D1. It is self-hostable. Deskree also runs a hosted one.
 
 ## What the Sphere server does
 
@@ -27,7 +27,20 @@ The Sphere is not a chat server. It carries typed actions between Obis. People t
 
 ## Status
 
-Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) is not implemented yet.
+Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) implements it: the directory, invitations, tokens, policy, relay and audit chain of [`spec/sphere-api.md`](spec/sphere-api.md), and it passes the conformance suite. Its own README, [`server/README.md`](server/README.md), lists its checks and how to deploy it.
+
+## Run a Sphere locally
+
+Node 22.18 or later and pnpm:
+
+```sh
+(cd spec && pnpm install --frozen-lockfile)
+cd server && pnpm install --frozen-lockfile
+SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
+  pnpm run local -- --port 8787 --persist-to /path/to/state
+```
+
+`pnpm run local` applies the D1 migrations to a local database under `--persist-to`, then starts the Worker on `127.0.0.1:8787` through wrangler's programmatic API against local D1 (Miniflare), with the operator token as a Worker secret binding, never in a file or on a command line. It is ready when `GET http://127.0.0.1:8787/v0.1/health` answers `200`, and stops on Ctrl-C. Nothing is deployed and nothing is sent anywhere: no telemetry, no wrangler metrics. What it guarantees is [`spec/sphere-api.md`](spec/sphere-api.md), section 8; Obi's end-to-end test (obi-ai-bot/obi, `make e2e`) starts it this way.
 
 ## License
 

@@ -7,11 +7,13 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 ## 1. Conventions
 
 - **Base URL.** Whatever the Sphere is served at, like `https://sphere.example.com` or `http://127.0.0.1:8787` locally. Every path below starts with `/v0.1`.
-- **JSON.** Request and response bodies are JSON (protocol.md, "JSON rules"), `Content-Type: application/json`, keys in `snake_case`. A request body is at most 131,072 bytes (`413 payload_too_large`). Unknown members are refused (`400`), as everywhere in the protocol.
+- **JSON.** Request and response bodies are JSON (protocol.md, "JSON rules"), `Content-Type: application/json`, keys in `snake_case`. A request body is at most 131,072 bytes (`413 payload_too_large`), except at the token endpoint, which takes a form and answers OAuth errors: a body over 131,072 bytes there is `400 invalid_request` (identity.md 4.3). Unknown members are refused (`400`), as everywhere in the protocol.
 - **Authentication.** One of:
   - **none**: `GET /v0.1/health`, the token endpoint, and redeeming an invitation (its secret is the credential);
   - **operator**: `Authorization: Bearer <operator token>`, only for creating Spheres. The operator token is the Worker secret `SPHERE_OPERATOR_TOKEN` (at least 32 characters). A Sphere server without one refuses every operator call (`403 forbidden`). It is compared in constant time and never logged;
   - **bearer**: `Authorization: Bearer <access token>` from the token endpoint (identity.md, "Delegation"). A token is for one Sphere; it carries a subject (the owner), maybe an actor (the Obi) and scopes. "Obi token" below means a token with an actor; "owner token" one without.
+  - An **owner token on an endpoint that needs an Obi token** (section 2: changing a card, fetching and acknowledging deliveries) is `403 forbidden`. Sending is the one exception: section 6.1, check 1, answers it `401 unauthorized`, before the body is read.
+  - The other way round, an **Obi token on an endpoint that needs an owner token** (section 2) is refused too: those are the owner's own steps, never an Obi's. Revoking a member, which needs no scope, answers it `403 forbidden`, even when the member is that Obi itself. Creating an invitation and replacing the policy check their scope first, and an Obi's token never holds `admin` (identity.md 4.2), so there it is `403 insufficient_scope`.
 - **Errors.** Every non-2xx answer except the token endpoint's is [error.schema.json](schemas/v0.1/wire/error.schema.json): `{"error": {"code": "<code>", "message": "<one line>", "details": ["…"]}}`. `message` and `details` are for people and are data. The token endpoint answers OAuth errors (RFC 6749 section 5.2): `{"error": "invalid_grant", "error_description": "…"}`.
 - **Times.** The Sphere's clock decides expiry and records `recorded_at`. It allows 300 seconds of skew for `created_at`, `iat` and `issued_at`.
 
@@ -27,7 +29,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `card_invalid` | 400 | An agent card fails identity.md section 2.2, or doesn't match its invitation or member. |
 | `unauthorized` | 401 | No token, an unknown, expired or revoked token, or a token for another Sphere; or a wrong operator token. |
 | `insufficient_scope` | 403 | The token lacks the scope the call needs. |
-| `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner key that differs from the bound one, no operator token configured). |
+| `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner token where an Obi token is needed, an Obi token revoking a member, an Obi's token on another Obi's card, an owner key that differs from the bound one, no operator token configured). |
 | `policy_denied` | 403 | No policy rule allows this request, or the receiver's card doesn't accept its type. |
 | `recipient_revoked` | 403 | The receiver was revoked. |
 | `invitation_invalid` | 403 | Unknown, expired, used, or the wrong secret: always the same answer. |
@@ -243,7 +245,7 @@ Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chai
 
 ## 8. Running a Sphere locally
 
-For development and the end-to-end test, the server in `server/` runs on the developer's machine with `wrangler dev` against local D1 (Miniflare). The server package provides one script for it, and the e2e harness relies on exactly this:
+For development and the end-to-end test, the server in `server/` runs on the developer's machine against local D1 (Miniflare), through wrangler's own dev server. The server package provides one script for it, and the e2e harness relies on exactly this:
 
 ```sh
 cd "$OBI_SPHERE_DIR/server"
@@ -252,7 +254,8 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
   pnpm run local -- --port 8787 --persist-to /path/to/state
 ```
 
-- `pnpm run local` applies the D1 migrations to the local database under `--persist-to`, then runs `wrangler dev` on `127.0.0.1:<port>` with the same `--persist-to`, passing the operator token as a Worker variable (`--var SPHERE_OPERATOR_TOKEN:…`), never writing it to a file.
+- `pnpm run local` applies the D1 migrations to the local database under `--persist-to`, then starts the Worker on `127.0.0.1:<port>` with the same `--persist-to` through **wrangler's programmatic API** (`unstable_startWorker`, the dev server `wrangler dev` itself runs on), not the `wrangler dev` command. The operator token is read from `SPHERE_OPERATOR_TOKEN` in its environment and given to the Worker as a **secret binding**, never on a command line and never written to a file. Without it, the Sphere refuses every operator call (`403 forbidden`, section 1).
+- Nothing on the Sphere's port reaches its D1 except through the Sphere's checks: the Worker runs with no DevTools inspector (`wrangler dev` always opens one and has no flag to turn it off, which is why the API is used), and with wrangler's Local Explorer and local observability off (their endpoints under `/cdn-cgi/local/explorer` take no token and run any SQL against the D1).
 - It is ready when `GET http://127.0.0.1:<port>/v0.1/health` answers `200`. It stops on SIGINT or SIGTERM.
 - It writes only under `--persist-to`, wrangler's own scratch folder `server/.wrangler/` and the `node_modules/` folders under `server/` (the installed packages and their caches, like `node_modules/.cache/`), plus `$HOME` and `$TMPDIR`, which the harness points at folders of its own. Nothing else in the checkout: a local Miniflare folder such as `.mf/` belongs under `--persist-to`. It sends no telemetry (`WRANGLER_SEND_METRICS=false`).
 - Everything else is the same as a deployed Sphere: same endpoints, checks, token lifetimes and audit chain.
