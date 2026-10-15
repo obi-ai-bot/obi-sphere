@@ -1,0 +1,25 @@
+// The Sphere server (spec/sphere-api.md): a Worker with one D1 database.
+// Locally: `pnpm run local -- --port <port> --persist-to <dir>` (scripts/local.mjs). Deploying is a
+// person's step: `wrangler d1 create obi-sphere`, paste its id below, `pnpm run migrate:remote`,
+// `wrangler secret put SPHERE_OPERATOR_TOKEN`, `pnpm run deploy`.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "obi-sphere",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // No telemetry: no Workers logs or traces kept by Cloudflare, and wrangler sends no metrics.
+  "observability": { "enabled": false },
+  "send_metrics": false,
+  // SPHERE_OPERATOR_TOKEN (at least 32 characters) is a secret, never here: `wrangler secret put`
+  // in production, a Worker secret set by scripts/serve-local.mjs locally. Without it every
+  // operator call is 403.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "obi-sphere",
+      // `wrangler d1 create obi-sphere` prints the id; paste it here before the first deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

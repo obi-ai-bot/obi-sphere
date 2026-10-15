@@ -1,0 +1,34 @@
+{
+  "name": "obi-sphere-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Sphere server: the Obi-to-Obi protocol v0.1's directory, invitations, tokens, policy, relay and audit chain, on Cloudflare Workers with D1.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "pnpm@11.23.0",
+  "scripts": {
+    "local": "node scripts/local.mjs",
+    "check": "tsc --noEmit",
+    "test": "vitest run --config worker.vitest.ts",
+    "test:client": "node --test e2e/client.test.mjs e2e/fixtures.test.mjs",
+    "conformance": "node scripts/conformance.mjs",
+    "scenario": "node e2e/scenario.mjs",
+    "load": "node e2e/load.mjs",
+    "check:fixtures": "node scripts/check-fixtures.mjs",
+    "gen:validators": "node scripts/gen-validators.mjs",
+    "check:validators": "node scripts/gen-validators.mjs --check",
+    "migrate:remote": "wrangler d1 migrations apply obi-sphere --remote",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "ajv": "8.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.149.0"
+  }
+}

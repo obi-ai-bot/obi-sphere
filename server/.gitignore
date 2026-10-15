@@ -1,0 +1,6 @@
+node_modules/
+.wrangler/
+# Local secrets for `wrangler dev`. Never committed; scripts/local.mjs passes the operator token
+# with --var instead.
+.dev.vars
+.dev.vars.*
