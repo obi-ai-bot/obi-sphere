@@ -13,6 +13,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
   - **operator**: `Authorization: Bearer <operator token>`, only for creating Spheres. The operator token is the Worker secret `SPHERE_OPERATOR_TOKEN` (at least 32 characters). A Sphere server without one refuses every operator call (`403 forbidden`). It is compared in constant time and never logged;
   - **bearer**: `Authorization: Bearer <access token>` from the token endpoint (identity.md, "Delegation"). A token is for one Sphere; it carries a subject (the owner), maybe an actor (the Obi) and scopes. "Obi token" below means a token with an actor; "owner token" one without.
   - An **owner token on an endpoint that needs an Obi token** (section 2: changing a card, fetching and acknowledging deliveries) is `403 forbidden`. Sending is the one exception: section 6.1, check 1, answers it `401 unauthorized`, before the body is read.
+  - The other way round, an **Obi token on an endpoint that needs an owner token** (section 2: creating an invitation, revoking a member, replacing the policy) is `403 forbidden` too: those are the owner's own steps, never an Obi's. Where the endpoint needs a scope (`admin` for invitations and the policy), the scope is checked first, so an Obi token without it is `403 insufficient_scope`.
 - **Errors.** Every non-2xx answer except the token endpoint's is [error.schema.json](schemas/v0.1/wire/error.schema.json): `{"error": {"code": "<code>", "message": "<one line>", "details": ["…"]}}`. `message` and `details` are for people and are data. The token endpoint answers OAuth errors (RFC 6749 section 5.2): `{"error": "invalid_grant", "error_description": "…"}`.
 - **Times.** The Sphere's clock decides expiry and records `recorded_at`. It allows 300 seconds of skew for `created_at`, `iat` and `issued_at`.
 
@@ -28,7 +29,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `card_invalid` | 400 | An agent card fails identity.md section 2.2, or doesn't match its invitation or member. |
 | `unauthorized` | 401 | No token, an unknown, expired or revoked token, or a token for another Sphere; or a wrong operator token. |
 | `insufficient_scope` | 403 | The token lacks the scope the call needs. |
-| `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner token where an Obi token is needed, an Obi's token on another Obi's card, an owner key that differs from the bound one, no operator token configured). |
+| `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner token where an Obi token is needed, an Obi token where an owner token is needed, an Obi's token on another Obi's card, an owner key that differs from the bound one, no operator token configured). |
 | `policy_denied` | 403 | No policy rule allows this request, or the receiver's card doesn't accept its type. |
 | `recipient_revoked` | 403 | The receiver was revoked. |
 | `invitation_invalid` | 403 | Unknown, expired, used, or the wrong secret: always the same answer. |
