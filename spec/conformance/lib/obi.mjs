@@ -199,8 +199,25 @@ export function semanticProblems(env) {
   if (REPLY_TYPES.includes(t) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
   const body = env.body;
   if (t === "result") problems.push(...resultProblems(body));
+  problems.push(...refProblems(body));
   for (const finding of body.findings ?? []) {
     if (finding.end_line !== undefined && finding.end_line < finding.line) problems.push(`finding ${finding.id}: end_line before line`);
+  }
+  return problems;
+}
+
+// The references in one list are distinct, repositories compared ignoring ASCII case
+// (spec/protocol.md section 5.9): `Acme/App` and `acme/app` name the same repository.
+const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+export function refProblems(body) {
+  const problems = [];
+  for (const list of ["about", "refs"]) {
+    const seen = new Set();
+    for (const ref of body[list] ?? []) {
+      const key = canonicalize({ ...ref, repo: asciiLower(ref.repo) });
+      if (seen.has(key)) problems.push(`${list}: the same reference twice`);
+      seen.add(key);
+    }
   }
   return problems;
 }

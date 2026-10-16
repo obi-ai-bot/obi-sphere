@@ -132,7 +132,7 @@ export function buildFixtures() {
   ok("result-handoff", "A handoff that is done.", valid.result_handoff);
   ok("expires-one-second-later", "Valid until one second after now.", signed(unsigned("status", { state: "queued" }, { expires_at: "2026-10-14T12:00:01Z" })));
   ok("created-within-skew", "Created 299 seconds ahead of the receiver's clock: inside the allowed skew.", signed(unsigned("status", { state: "queued" }, { created_at: "2026-10-14T12:04:59Z" })));
-  ok("text-with-newlines-and-unicode", "Block text keeps newlines, tabs and any language.", signed(unsigned("question", { text: "Décider l'arrondi · 丸め\nLine one\n\tLine two: ¿redondear? 🙂" })));
+  ok("text-with-newlines-and-unicode", "Block text keeps newlines, tabs and any language; one-line text keeps any language too.", signed(unsigned("question", { text: "Décider l'arrondi · 丸め\nLine one\n\tLine two: ¿redondear? 🙂", choices: ["Décider l'arrondi · 丸め", "Garder tout · そのまま 🙂"] })));
 
   // Questions and answers (protocol.md sections 5.2, 5.8 and 5.9).
   ok("question-text-only", "A question with nothing but its words.", signed(unsigned("question", { text: "What are you working on today?" })));
@@ -330,6 +330,8 @@ export function buildFixtures() {
   bad("ref-without-repo", "A pull request reference with no repository.", signed(unsigned("question", { text: "Is this ready?", about: [{ kind: "pr", pr: 260 }] })), "invalid_envelope");
   bad("ref-job-with-shell", "A job id with shell characters.", signed(unsigned("question", { text: "Is this done?", about: [{ ...jobRef, job: "9f08fd10;rm -rf ~" }] })), "invalid_envelope");
   bad("ref-repeated", "The same reference twice.", signed(unsigned("question", { text: "Is this ready?", about: [prRef, prRef] })), "invalid_envelope");
+  bad("ref-repeated-other-case", "The same reference twice, its repository spelled in another case: repositories compare ignoring ASCII case.", signed(unsigned("question", { text: "Is this ready?", about: [prRef, { ...prRef, repo: "OBI-CONF/Fixture-App" }] })), "invalid_envelope");
+  bad("answer-refs-repeated-other-case", "An answer citing the same pull request twice, in two cases.", signed(unsigned("answer", { ...clone(answerByObi), refs: [prRef, { ...prRef, repo: "Obi-Conf/fixture-app" }] })), "invalid_envelope");
   bad("too-many-refs", "11 references (the most is 10).", signed(unsigned("question", { text: "Are these ready?", about: Array.from({ length: 11 }, (_, i) => ({ ...prRef, pr: i + 1 })) })), "invalid_envelope");
 
   // ---- Agent cards --------------------------------------------------------------------------

@@ -103,7 +103,7 @@ Ask another Obi something its owner knows, has decided, or has let it tell. An `
 | `choices` | no | 2 or 3 distinct allowed answers (100 each). Data. |
 
 - **One question, one Obi.** An envelope has one `to`, so a question to several Obis is one question to each: its own envelope, `id` and exchange, answered or declined on its own. The asking Obi groups them for its owner (Obi shows them as one conversation, each answer as it arrives). A receiver doesn't learn who else was asked, and only the asker receives an answer: the Sphere relays each exchange between its two Obis and is not a chat server.
-- **Its repository.** Policy ([sphere-api.md](sphere-api.md) section 5) and remembered decisions (section 11, step 5) key a request by its repository. A question's repository is the one its `about` references name, when they all name the same one (compared ignoring ASCII case). A question about nothing, or about more than one repository, has none: only rules and decisions for every repository (`*`) cover it.
+- **Its repositories.** A question has no `repo`: the repositories it is about are those its `about` references name, compared ignoring ASCII case. Policy ([sphere-api.md](sphere-api.md) section 5) takes one repository per request: a question's is the one its references name when they all name the same one, and a question about nothing, or about more than one repository, has none, so only rules for every repository (`*`) allow it. Remembered decisions cover a question repository by repository (section 11, step 5).
 - **Words, not work.** A question asks for an answer in words. It never asks the receiver to run, change or publish anything, and nothing in it can make it (section 11, "Questions").
 
 ### 5.3 `handoff`
@@ -157,7 +157,7 @@ Answers a question and ends its exchange; its `in_reply_to` is the question. Sch
 | `text` | yes | The answer (2,000). Data. |
 | `refs` | no | 1 to 10 distinct references (5.9) to what the answer draws on: the pull request, the issue, the job. |
 | `choice` | no | The index of the choice picked, when the question had `choices`. |
-| `by_rule` | no | Only with `by: obi`: the sharing rule that let the Obi answer by itself. It SHOULD be given. |
+| `by_rule` | no | Only with `by: obi`: the one sharing rule the Obi answered under (section 11, "Questions"). It SHOULD be given. |
 
 The asker shows `by` with the words: "from Wellington's Obi" is not "from Wellington". It checks an answer against its own question (section 11, step 3).
 
@@ -172,7 +172,9 @@ A reference names one thing, typed, so that it can be checked and shown, never f
 | `issue` | `repo`, `issue` | An issue in it. |
 | `job` | `repo`, `job` | A job of the answering Obi in that repository: in a question's `about`, a job of the receiver's; in an answer's `refs`, one of the sender's. `job` is that Obi's own id for it (up to 64 letters, digits, `.`, `_` and `-`), opaque to everyone else. |
 
-There is no kind for a URL, a file path or a command. A receiver MAY show a reference as a link it builds itself for the code host it uses, and MUST NOT fetch, open or run anything because of one: a reference says what is meant, not what to do. One it can't see, or a job it doesn't have, is something it doesn't know (section 11, "Questions"), never something to guess at.
+There is no kind for a URL, a file path or a command. A receiver MAY show a reference as a link it builds itself for the code host it uses, and MUST NOT fetch, open or run anything because of one: a reference says what is meant, not what to do. One it can't see, or a job it doesn't have, is something it doesn't know (section 11, "Questions"), never something to guess at. A reference is judged by what it names, not by the repository it claims: before a job reference's repository decides anything (which sharing rule applies, which remembered decision covers the question), the receiver MUST check that the job is its own and runs in that repository, and treat the reference as unknown otherwise.
+
+The references in one list (`about`, `refs`) are distinct, with repositories compared ignoring ASCII case: `{"kind": "pr", "repo": "Acme/App", "pr": 7}` and `{"kind": "pr", "repo": "acme/app", "pr": 7}` are the same reference twice, and the message is invalid (section 10, check 3).
 
 ## 6. Acceptance conditions
 
@@ -235,7 +237,7 @@ The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.m
 |---|---|---|
 | 1 | Its canonical form is at most 65,536 bytes. | `payload_too_large` |
 | 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type`. | `invalid_envelope` |
-| 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7). | `invalid_envelope` |
+| 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7); the references in an `about` or a `refs` are distinct, repositories compared ignoring ASCII case (section 5.9). | `invalid_envelope` |
 | 4 | `sphere` is the receiver's Sphere. | `wrong_sphere` |
 | 5 | `to` is the receiver's own `obi_id`. | `wrong_recipient` |
 | 6 | `key_id` is a key the directory lists for `from`, valid for this message (below), and that public key hashes to `key_id`. | `unknown_key` |
@@ -257,17 +259,17 @@ When a delivery arrives, the receiving Obi:
 1. **Verifies** it (section 10). If it isn't valid, the Obi acknowledges the delivery, records why locally, and sends nothing back: it does not answer a message it cannot authenticate. An expired request is the exception: the Obi MAY send `decline` with reason `expired`.
 2. **Deduplicates.** A message whose `id` it has already handled is acknowledged and ignored.
 3. **Replies** (`status`, `accept`, `decline`, `result`, `answer`) are matched to the outgoing request named by `in_reply_to`, which MUST have been sent to the reply's `from`. A reply that matches nothing, or that breaks the exchange rules (section 4) given the replies already recorded for that request, is acknowledged and dropped, and so is an `answer` with a `choice` its question's `choices` don't have. A matched reply updates the exchange; a `result` or an `answer` is shown to the owner (an answer with who gave it: the other Obi, or its owner) and is data like any other text.
-4. **Requests.** If the type isn't one its card `accepts`, it sends `decline` with reason `out_of_scope`. If the sender's owner is over the receiver's limits ("Rate limits", below), it sends `decline` with reason `busy`, and nothing reaches the owner's inbox.
-5. It looks for a **remembered decision** that covers the request. The key is `(type, sender's owner, repo)`, where the sender's owner comes from the directory (the sender's verified agent card), never from the message's text, and `repo` is the body's `repo` (or `*` when the body has none). A decision for that exact repo wins over one for every repo (`*`).
+4. **Requests.** If the type isn't one its card `accepts`, it sends `decline` with reason `out_of_scope`.
+5. It looks for a **remembered decision** that covers the request. The key is `(type, sender's owner, repo)`, where the sender's owner comes from the directory (the sender's verified agent card), never from the message's text, and `repo` is the body's `repo` (or `*` when the body has none). A decision for that exact repo wins over one for every repo (`*`). A question has no `repo`: a remembered decision covers it when, for each repository its `about` names (5.2), there is one for that repository or one for every repo (`*`). A question about no repository is covered only by one for `*`.
    - A remembered **accept**: go to step 7, and name the decision's id in `accept.by_rule` and `result.by_rule`.
    - A remembered **decline**: send `decline` with reason `owner_declined` and the decision's id in `by_rule`.
    - For a `question`, only a remembered decline applies. What lets an Obi answer a question by itself is a sharing rule, not a remembered accept: a question goes on to "Questions", below.
-6. Otherwise it puts the request in its **owner's inbox** and waits. It does not guess, and it does not time out on its own; only `expires_at` ends the wait (the item is then settled by itself and the Obi MAY send `decline` with reason `expired`). The owner answers one of:
+6. Otherwise it puts the request in its **owner's inbox** and waits, unless the sender's owner already has as many requests waiting there as the receiver allows ("Rate limits", below): then it sends `decline` with reason `busy`, and nothing reaches the inbox. It does not guess, and it does not time out on its own; only `expires_at` ends the wait (the item is then settled by itself and the Obi MAY send `decline` with reason `expired`). The owner answers one of:
    - **Accept**: this time only.
    - **Accept, and remember for this repo**: accept, and keep an accept decision for `(type, sender's owner, repo)`.
    - **Decline**: this time only (`decline`, reason `owner_declined`).
    - **Decline, and remember for this repo**: decline, and keep a decline decision for that key.
-   The answer that keeps a decision is applied to later requests at step 5 without asking again. For a question the owner answers in words instead of accepting ("Questions", below).
+   The answer that keeps a decision is applied to later requests at step 5 without asking again. For a question the owner answers in words instead of accepting ("Questions", below), so there is no accept to remember; **Decline, and remember** keeps a decline for each repository the question is about, which covers a later question only when each repository that one is about has a decline (its own, or one for `*`). For a question about no repository it keeps one for every repo (`*`), which declines every later question from that owner: the Obi says so when it offers that answer.
 7. **Accepting.** It sends `accept`. It MAY send `status` while working. It does the work for its own owner, in a fresh, isolated workspace (Obi: a new git worktree per job), giving the request's data fields to its agent only as quoted data (section 8). For a review it checks out exactly `head_sha`; for `tests_pass` it runs its own check for the repository.
 8. **Publishing the answer.** Before anything leaves, every text field of the reply passes the receiver's secret scan. If the scan finds a possible secret, or cannot run, the text does not go out: the Obi sends a `result` with outcome `failed` (for a review or a handoff) or a `decline` with reason `other`, with no text fields. Otherwise it sends the `result` or the `answer`.
 
@@ -286,7 +288,7 @@ A question asks for words, and words about an owner's work are the owner's to gi
 
    An implementation MAY offer fewer of these. It MUST NOT let a rule cover anything else: no files, no vault, no settings, no remembered decisions, nothing from the owner's conversations with it, nothing from other people's questions or answers.
 
-   When the sharing rules for the asker's owner allow what answers the question, the Obi sends an `answer` with `by: obi`, the `refs` it drew on and the rule's id in `by_rule`. Whatever writes that answer (a model or a template) is given the question only as quoted data (section 8) and, as its only material, what those rules allow: nothing else the Obi knows, no tool that reads anything more, and no tool that changes anything. So a question, however it is worded, gets at most an answer made of what the owner already lets the asker know. An answer by the Obi says what its material says: it doesn't decide, promise, judge or speak for its owner ("PR #260 is open and its checks pass", not "it lands Thursday"). When the material doesn't answer the question, or the question needs the owner's judgment, the Obi asks its owner instead.
+   An answer by the Obi is made under one sharing rule. When one rule for the asker's owner allows what answers the question, and the sender's owner is under the self-answer limit ("Rate limits", below), the Obi sends an `answer` with `by: obi` and the `refs` it drew on, and SHOULD name that rule in `by_rule`. Whatever writes that answer is given the question only as quoted data: a model reads it from a quoted file (the first of section 8, rule 2's two forms, never a delimited block), and a template never reads it at all. Its only material is what that rule allows: nothing else the Obi knows, no tool that reads anything more, and no tool that changes anything. So a question, however it is worded, gets at most an answer made of what the owner already lets the asker know. An answer by the Obi says what its material says: it doesn't decide, promise, judge or speak for its owner ("PR #260 is open and its checks pass", not "it lands Thursday"). When no single rule allows what answers the question, or the question needs the owner's judgment, or the self-answer limit is spent, the Obi asks its owner instead.
 2. **By its owner.** Otherwise the question goes in the owner's inbox (step 6), and the Obi MAY send `status` with state `waiting_on_owner`. The owner answers in their own words (an `answer` with `by: owner`, and `choice` and `refs` when they give them), declines it (this time, or remembering the decline), or leaves it until `expires_at`. The owner MAY add a sharing rule as they answer, so that the next such question needs no one.
 
 An `accept` before the `answer` is allowed and never needed. Either answer passes step 8 before it leaves. Nothing else ever leaves because of a question.
@@ -295,9 +297,10 @@ An `accept` before the `answer` is allowed and never needed. Either answer passe
 
 Every request costs its receiver. A question its Obi answers by itself costs a model run on its owner's account; one it can't costs the owner's attention. So a receiving Obi limits what each sender can make it do, counting by the sender's owner (from the directory: an owner with several Obis counts once).
 
-- RECOMMENDED defaults, which the owner may change: at most **30 questions an hour** that the Obi answers by itself, and at most **5 requests** (of every type) waiting in the owner's inbox at once.
-- A question with the same `text` and `about` as an open one from the same owner counts against the limit like any other, and SHOULD be declined `busy` rather than asked of the owner twice.
-- Over a limit, the Obi sends `decline` with reason `busy` and puts nothing in the inbox. Past twice a limit it MAY stop replying to that sender: silence until `expires_at` is a decline already (section 4).
+- **The self-answer limit.** RECOMMENDED default, which the owner may change: **30 questions an hour**. A question counts when the Obi starts writing an answer by itself (a model or a template run), whether the run ends in an answer or in asking the owner; a question from someone no sharing rule is for, which goes straight to the owner, doesn't. Once it is spent, a question goes to the owner as one no rule allows, so it costs attention instead of a model run, and the inbox limit bounds that.
+- **The inbox limit.** RECOMMENDED default: **5 requests** of every type waiting in the owner's inbox at once. A request that would go to the inbox past it is declined `busy` and puts nothing in the inbox (step 6).
+- A question with the same `text` and `about` as an open one from the same owner SHOULD be declined `busy` rather than answered or asked of the owner twice.
+- A receiver MAY stop replying to a sender's owner who keeps sending while it is declining them `busy`: silence until `expires_at` is a decline already (section 4).
 - A sender SHOULD keep at most one open question to a receiver about the same thing. After a `busy` it SHOULD NOT ask that receiver again until one of its open requests to it has ended, or, with none open, for an hour.
 - The Sphere MAY limit sends too, and answers `429 rate_limited` with `Retry-After` when it does ([sphere-api.md](sphere-api.md) section 1). A Sphere's limits protect the Sphere and a receiver's protect its owner; neither replaces the other.
 

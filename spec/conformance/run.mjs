@@ -226,7 +226,9 @@ function checkCoverage(cases) {
   for (const n of ["invalid-chain-review-result-without-accept", "invalid-chain-handoff-result-without-accept", "valid-chain-handoff-accepted", "valid-chain-question-answered-directly", "valid-chain-question-accepted-then-answered", "invalid-chain-result-for-another-kind", "valid-chain-decline-after-accept", "invalid-chain-reply-after-result"]) need.push(`audit/${n}`);
   // Questions and answers: words are data (an injection attempt in text is a valid question), fields
   // and kinds outside the schema are not, and only an answer answers a question.
-  for (const n of ["valid-answer-by-obi", "valid-question-about-refs", "valid-question-injection-is-data", "invalid-smuggle-question-instructions", "invalid-smuggle-answer-action", "invalid-result-for-question", "invalid-ref-unknown-kind", "invalid-answer-by-owner-with-rule"]) need.push(`envelope/${n}`);
+  for (const n of ["valid-answer-by-obi", "valid-question-about-refs", "valid-question-injection-is-data", "invalid-smuggle-question-instructions", "invalid-smuggle-answer-action", "invalid-result-for-question", "invalid-ref-unknown-kind", "invalid-answer-by-owner-with-rule", "invalid-ref-repeated-other-case", "invalid-answer-refs-repeated-other-case"]) need.push(`envelope/${n}`);
+  // Text in any language, in one-line text and in block text alike.
+  need.push("envelope/valid-text-with-newlines-and-unicode");
   for (const n of ["valid-chain-question-asked-owner", "invalid-chain-answer-to-review-request", "invalid-chain-reply-after-answer", "invalid-chain-answered-twice"]) need.push(`audit/${n}`);
   for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send", "invalid-wrong-recipient", "invalid-wrong-recipient-reply"]) need.push(`envelope/${n}`);
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");

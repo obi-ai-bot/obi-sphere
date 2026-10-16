@@ -2,7 +2,7 @@
 // (section 4). Text fields are data: nothing here reads them beyond their schema.
 
 import { verifyEd25519, keyIdOrNull } from "./crypto.ts";
-import { JsonError, canonicalBytes, utf8, type JsonObject } from "./json.ts";
+import { JsonError, canonicalBytes, canonicalize, utf8, type JsonObject } from "./json.ts";
 import { schemaErrors } from "./schemas.ts";
 
 export const PROTOCOL = "obi/0.1";
@@ -97,6 +97,24 @@ export function resultProblems(body: JsonObject): string[] {
   return problems;
 }
 
+/**
+ * The references in one list are distinct, repositories compared ignoring ASCII case
+ * (protocol.md section 5.9): `Acme/App` and `acme/app` name the same repository.
+ */
+export function refProblems(body: JsonObject): string[] {
+  const problems: string[] = [];
+  const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  for (const list of ["about", "refs"]) {
+    const seen = new Set<string>();
+    for (const ref of (Array.isArray(body[list]) ? body[list] : []) as JsonObject[]) {
+      const key = canonicalize({ ...ref, repo: lower(ref.repo as string) });
+      if (seen.has(key)) problems.push(`${list}: the same reference twice`);
+      seen.add(key);
+    }
+  }
+  return problems;
+}
+
 /** protocol.md section 10, check 3: the rules no schema can say. Runs after the schema matched. */
 export function semanticProblems(env: Envelope): string[] {
   const problems: string[] = [];
@@ -110,6 +128,7 @@ export function semanticProblems(env: Envelope): string[] {
   if (isRequestType(env.type) && env.correlation_id !== env.id) problems.push("a request's correlation_id must equal its id");
   if (isReplyType(env.type) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
   if (env.type === "result") problems.push(...resultProblems(env.body));
+  problems.push(...refProblems(env.body));
   for (const f of (env.body.findings ?? []) as unknown as Finding[]) {
     if (f.end_line !== undefined && f.end_line < f.line) problems.push(`finding ${f.id}: end_line before line`);
   }
