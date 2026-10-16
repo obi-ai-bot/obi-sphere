@@ -13,6 +13,7 @@
     "local": "node scripts/local.mjs",
     "check": "tsc --noEmit",
     "test": "vitest run --config worker.vitest.ts",
+    "test:shutdown": "node --test scripts/local-shutdown.test.mjs",
     "test:client": "node --test e2e/client.test.mjs e2e/fixtures.test.mjs",
     "conformance": "node scripts/conformance.mjs",
     "scenario": "node e2e/scenario.mjs",

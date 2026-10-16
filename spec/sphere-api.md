@@ -251,11 +251,11 @@ For development and the end-to-end test, the server in `server/` runs on the dev
 cd "$OBI_SPHERE_DIR/server"
 pnpm install --frozen-lockfile
 SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
-  pnpm run local -- --port 8787 --persist-to /path/to/state
+  node scripts/local.mjs --port 8787 --persist-to /path/to/state
 ```
 
-- `pnpm run local` applies the D1 migrations to the local database under `--persist-to`, then starts the Worker on `127.0.0.1:<port>` with the same `--persist-to` through **wrangler's programmatic API** (`unstable_startWorker`, the dev server `wrangler dev` itself runs on), not the `wrangler dev` command. The operator token is read from `SPHERE_OPERATOR_TOKEN` in its environment and given to the Worker as a **secret binding**, never on a command line and never written to a file. Without it, the Sphere refuses every operator call (`403 forbidden`, section 1).
+- `node scripts/local.mjs` applies the D1 migrations to the local database under `--persist-to`, then starts the Worker on `127.0.0.1:<port>` with the same `--persist-to` through **wrangler's programmatic API** (`unstable_startWorker`, the dev server `wrangler dev` itself runs on), not the `wrangler dev` command. The operator token is read from `SPHERE_OPERATOR_TOKEN` in its environment and given to the Worker as a **secret binding**, never on a command line and never written to a file. Without it, the Sphere refuses every operator call (`403 forbidden`, section 1).
 - Nothing on the Sphere's port reaches its D1 except through the Sphere's checks: the Worker runs with no DevTools inspector (`wrangler dev` always opens one and has no flag to turn it off, which is why the API is used), and with wrangler's Local Explorer and local observability off (their endpoints under `/cdn-cgi/local/explorer` take no token and run any SQL against the D1).
-- It is ready when `GET http://127.0.0.1:<port>/v0.1/health` answers `200`. It stops on SIGINT or SIGTERM.
+- It is ready when `GET http://127.0.0.1:<port>/v0.1/health` answers `200`. It stops when its launcher PID receives SIGINT or SIGTERM; the Worker and its descendants stop too. Use this direct Node command in supervisors and the e2e harness: `pnpm run local` is an interactive convenience wrapper whose signal forwarding differs across platforms and pnpm versions, so signalling only pnpm's PID does not guarantee shutdown.
 - It writes only under `--persist-to`, wrangler's own scratch folder `server/.wrangler/` and the `node_modules/` folders under `server/` (the installed packages and their caches, like `node_modules/.cache/`), plus `$HOME` and `$TMPDIR`, which the harness points at folders of its own. Nothing else in the checkout: a local Miniflare folder such as `.mf/` belongs under `--persist-to`. It sends no telemetry (`WRANGLER_SEND_METRICS=false`).
 - Everything else is the same as a deployed Sphere: same endpoints, checks, token lifetimes and audit chain.

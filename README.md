@@ -37,10 +37,10 @@ Node 22.18 or later and pnpm:
 (cd spec && pnpm install --frozen-lockfile)
 cd server && pnpm install --frozen-lockfile
 SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
-  pnpm run local -- --port 8787 --persist-to /path/to/state
+  node scripts/local.mjs --port 8787 --persist-to /path/to/state
 ```
 
-`pnpm run local` applies the D1 migrations to a local database under `--persist-to`, then starts the Worker on `127.0.0.1:8787` through wrangler's programmatic API against local D1 (Miniflare), with the operator token as a Worker secret binding, never in a file or on a command line. It is ready when `GET http://127.0.0.1:8787/v0.1/health` answers `200`, and stops on Ctrl-C. Nothing is deployed and nothing is sent anywhere: no telemetry, no wrangler metrics. What it guarantees is [`spec/sphere-api.md`](spec/sphere-api.md), section 8; Obi's end-to-end test (obi-ai-bot/obi, `make e2e`) starts it this way.
+`node scripts/local.mjs` applies the D1 migrations to a local database under `--persist-to`, then starts the Worker on `127.0.0.1:8787` through wrangler's programmatic API against local D1 (Miniflare), with the operator token as a Worker secret binding, never in a file or on a command line. It is ready when `GET http://127.0.0.1:8787/v0.1/health` answers `200`, and stops with its descendants on SIGINT or SIGTERM to that Node PID. Launch Node directly in supervisors; pnpm wrappers do not reliably forward PID-only signals. Nothing is deployed and nothing is sent anywhere: no telemetry, no wrangler metrics. What it guarantees is [`spec/sphere-api.md`](spec/sphere-api.md), section 8; Obi's end-to-end test (obi-ai-bot/obi, `make e2e`) starts it this way.
 
 ## License
 

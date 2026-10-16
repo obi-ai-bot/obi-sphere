@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The Sphere's half of the end-to-end scenario (obi e2e/SCENARIO.md), against a real local Sphere
-// started exactly as the harness starts it (`pnpm run local -- --port <port> --persist-to <dir>`),
+// started exactly as the harness starts it (`node scripts/local.mjs --port <port> --persist-to <dir>`),
 // with a scripted client (e2e/client.mjs) in place of the two obids: it plays both owners and both
 // Obis' Sphere-side calls, with keys it generates in memory.
 //
@@ -118,7 +118,7 @@ function startSphere(port) {
   const log = createWriteStream(join(R.harness, "sphere.log"), { flags: "a" });
   // Exactly what SCENARIO.md step 1.1 gives the Sphere: nothing else from this environment.
   const env = { SPHERE_OPERATOR_TOKEN: ctx.operatorToken, HOME: R.home, TMPDIR: R.tmp, WRANGLER_SEND_METRICS: "false", PATH: process.env.PATH };
-  const child = spawn("pnpm", ["run", "local", "--", "--port", String(port), "--persist-to", R.state], { cwd: SERVER_DIR, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["scripts/local.mjs", "--port", String(port), "--persist-to", R.state], { cwd: SERVER_DIR, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
   child.stdout.pipe(log);
   child.stderr.pipe(log);
   child.exited = new Promise((res) => child.on("exit", (code, signal) => res({ code, signal })));
