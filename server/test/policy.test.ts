@@ -82,11 +82,23 @@ describe("policy at send", () => {
     expect(now.status).toBe(202);
   });
 
+  it("takes a question's repository from its about: one repository, or none", async () => {
+    const w = await team();
+    await w.putPolicy([{ id: "q", from_owner: "*", to_owner: "*", actions: ["question"], repos: ["obi-e2e/*"] }], 1);
+    expect((await w.join("ernesto", "obi-ernesto-q", ["question"])).status).toBe(201);
+    const token = await w.obiToken("obi-wellington");
+    const ask = async (about?: unknown[]) => (await w.send(await w.envelope("obi-wellington", "obi-ernesto-q", "question", { text: "Is it ready?", ...(about ? { about } : {}) }), token)).status;
+    const pr = { kind: "pr", repo: "obi-e2e/fixture-app", pr: 1 };
+    expect(await ask([pr, { kind: "issue", repo: "OBI-E2E/Fixture-App", issue: 2 }])).toBe(202);
+    expect(await ask([pr, { kind: "repo", repo: "other/app" }])).toBe(403);
+    expect(await ask()).toBe(403);
+  });
+
   it("refuses a request type the receiver's card doesn't accept (403 policy_denied)", async () => {
     const w = await team();
     await w.putPolicy([{ id: "all", from_owner: "*", to_owner: "*", actions: ["review_request", "question", "handoff"], repos: ["*"] }], 1);
     const token = await w.obiToken("obi-ernesto");
-    const r = await w.send(await w.envelope("obi-ernesto", "obi-wellington", "question", { goal: "Ask", question: "Which?" }), token);
+    const r = await w.send(await w.envelope("obi-ernesto", "obi-wellington", "question", { text: "Which?" }), token);
     expect(r.status).toBe(403);
     expect(r.body.error.code).toBe("policy_denied");
   });

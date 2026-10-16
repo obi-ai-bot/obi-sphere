@@ -10,7 +10,7 @@ import { cardParams, type AgentCard } from "../protocol/card.ts";
 import { entryHash } from "../protocol/chain.ts";
 import { uuid } from "../protocol/crypto.ts";
 import {
-  CLOCK_SKEW_SECONDS, checkEnvelopeShape, exchangeMessage, exchangeProblem, isRequestType, seconds, timestamp, verifyEnvelopeSignature,
+  CLOCK_SKEW_SECONDS, checkEnvelopeShape, exchangeMessage, exchangeProblem, isRequestType, requestRepo, seconds, timestamp, verifyEnvelopeSignature,
   type Envelope, type ExchangeMessage,
 } from "../protocol/envelope.ts";
 import { canonicalize } from "../protocol/json.ts";
@@ -106,8 +106,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     // 12. The policy for a request; the exchange rules for a reply.
     if (request_) {
       const from = rows<MemberRow>(4)[0]!;
-      const repo = typeof env_.body.repo === "string" ? env_.body.repo : undefined;
-      if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, repo)) throw apiError("policy_denied", "no policy rule allows this request");
+      if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, requestRepo(env_))) throw apiError("policy_denied", "no policy rule allows this request");
     } else {
       const req = rows<AuditRow>(5)[0];
       const problem = exchangeProblem(exchangeMessage(env_), req && rowMessage(req), rows<AuditRow>(6).map(rowMessage));

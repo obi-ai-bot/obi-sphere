@@ -39,7 +39,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `bad_reply` | 409 | A reply that breaks the exchange rules (protocol.md section 4; section 6.1, check 12). |
 | `conflict` | 409 | The resource exists already, a stale `expected_version` or `card_seq`, or a key id another member uses. |
 | `payload_too_large` | 413 | The body is over 131,072 bytes, or the message's canonical form over 65,536. |
-| `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Sphere (section 6.1, check 13); `Retry-After` says when to try again. Nothing was recorded. v0.1 doesn't fix the limits. |
+| `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Sphere (section 6.1, check 13); `Retry-After` says when to try again. Nothing was recorded. v0.1 doesn't fix the Sphere's limits; protocol.md section 11 ("Rate limits") recommends a receiver's. |
 | `internal` | 500 | The Sphere failed. Nothing was recorded. |
 
 ## 2. Endpoints
@@ -136,7 +136,7 @@ The policy is a fixed table of **allow** rules ([policy.schema.json](schemas/v0.
 - `from_owner` is `*` or the sending Obi's owner;
 - `to_owner` is `*` or the receiving Obi's owner;
 - `actions` contains the request's type;
-- `repos` contains `*`, or `<owner>/*` where `<owner>` is the owner part of the body's `repo`, or the body's `repo` itself; each comparison of a repository or its owner part ignores ASCII case. A request without a `repo` (a question can have none) matches only `*`.
+- `repos` contains `*`, or `<owner>/*` where `<owner>` is the owner part of the request's repository, or that repository itself; each comparison of a repository or its owner part ignores ASCII case. The request's repository is the body's `repo`, and for a question the one repository its `about` references name ([protocol.md](protocol.md) section 5.2). A request without one (a question about nothing, or about more than one repository) matches only `*`.
 
 Replies are not governed by rules: a reply is allowed when it continues an open exchange (section 6.1, check 12).
 
@@ -168,7 +168,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
 | 9 | `key_id` is the sender's current key (protocol.md section 10, "Which key is valid for a message"), and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
 | 10 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
 | 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). | as written |
-| 12 | A request is allowed by the policy (section 5). A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded: the reply is from the request's `to` and to its `from`; the exchange has no `decline` or `result` yet; an `accept` comes only when there is no `accept` yet; a `result`'s `for` is the request's type; a `result` for a `review_request` or `handoff` comes only after its `accept`. | `403 policy_denied`, `409 bad_reply` |
+| 12 | A request is allowed by the policy (section 5). A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded: the reply is from the request's `to` and to its `from`; the exchange has no `decline`, `result` or `answer` yet; an `accept` comes only when there is no `accept` yet; a `result`'s `for` is the request's type, and an `answer` replies to a `question`; a `result` comes only after its `accept`. | `403 policy_denied`, `409 bad_reply` |
 | 13 | Record it: in one transaction, append the audit entry (section 7) and queue a delivery for `to`. | `500 internal` (nothing recorded); `429 rate_limited` with `Retry-After` when the record could not be made because of concurrent writes to the same Sphere (nothing recorded) |
 
 Check 8 comes before the key and expiry checks so that a sender whose answer was lost can always learn that its message was recorded: retrying the same bytes answers `200` with the original `seq`, whatever happened since. Only the sender can learn it (check 6), and only for bytes the Sphere already checked when it recorded them.
@@ -239,7 +239,7 @@ Take the entries from seq 1 (fetch more pages until the last answer's `head.seq`
 4. Its envelope passes protocol.md section 10 checks 2 and 3, names the chain's Sphere, was created at most 300 seconds after `recorded_at`, and expires after `recorded_at`.
 5. Its `key_id` is a key of the envelope's `from`, valid at this seq (`valid_from_seq` ≤ seq, and seq ≤ `valid_until_seq` unless that is null), whose public key hashes to `key_id`; and the signature verifies with it.
 6. No earlier entry has the same envelope `id`.
-7. A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the earlier request its `in_reply_to` names and the earlier replies to it: it is from the request's `to` and to its `from`; no `decline` or `result` for that request comes before it; an `accept` has no earlier `accept`; a `result`'s `for` is the request's type; a `result` for a `review_request` or `handoff` has an earlier `accept`. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
+7. A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the earlier request its `in_reply_to` names and the earlier replies to it: it is from the request's `to` and to its `from`; no `decline`, `result` or `answer` for that request comes before it; an `accept` has no earlier `accept`; a `result`'s `for` is the request's type, and an `answer` replies to a `question`; a `result` has an earlier `accept`. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
 
 Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
 

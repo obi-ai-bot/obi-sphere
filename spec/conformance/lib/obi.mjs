@@ -18,9 +18,9 @@ export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const ZERO_HASH = "0".repeat(64);
 export const REQUEST_TYPES = ["review_request", "question", "handoff"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result"];
+export const TERMINAL_TYPES = ["decline", "result", "answer"];
 export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -199,8 +199,25 @@ export function semanticProblems(env) {
   if (REPLY_TYPES.includes(t) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
   const body = env.body;
   if (t === "result") problems.push(...resultProblems(body));
+  problems.push(...refProblems(body));
   for (const finding of body.findings ?? []) {
     if (finding.end_line !== undefined && finding.end_line < finding.line) problems.push(`finding ${finding.id}: end_line before line`);
+  }
+  return problems;
+}
+
+// The references in one list are distinct, repositories compared ignoring ASCII case
+// (spec/protocol.md section 5.9): `Acme/App` and `acme/app` name the same repository.
+const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+export function refProblems(body) {
+  const problems = [];
+  for (const list of ["about", "refs"]) {
+    const seen = new Set();
+    for (const ref of body[list] ?? []) {
+      const key = canonicalize({ ...ref, repo: asciiLower(ref.repo) });
+      if (seen.has(key)) problems.push(`${list}: the same reference twice`);
+      seen.add(key);
+    }
   }
   return problems;
 }
@@ -327,9 +344,11 @@ export function exchangeProblem(reply, request, earlier) {
   if (reply.type === "accept" && accepted) return "accepted twice";
   if (reply.type === "result") {
     if (reply.body.for !== request.type) return `a result for ${reply.body.for} answers a ${request.type}`;
-    // Only a question may be answered by a result without an accept.
-    if (request.type !== "question" && !accepted) return `a ${request.type} is answered by a result only after an accept`;
+    // A result (for a review_request or a handoff) comes only after the accept.
+    if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
+  if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
   return null;
 }
 

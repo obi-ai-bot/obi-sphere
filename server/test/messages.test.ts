@@ -185,13 +185,12 @@ describe("the exchange rules at send (409 bad_reply)", () => {
     expect(after.body.error.code).toBe("bad_reply");
   });
 
-  it("refuses a result before the accept, two accepts, a result for another kind, a reply to nothing", async () => {
+  it("refuses a result before the accept, two accepts, an answer to a review request, a reply to nothing", async () => {
     const { w, tokenA, request } = await opened();
     expect((await w.send(await w.reply(request, "result", RESULT), tokenA)).body.error.code).toBe("bad_reply");
     expect((await w.send(await w.reply(request, "accept", {}), tokenA)).status).toBe(202);
     expect((await w.send(await w.reply(request, "accept", {}), tokenA)).body.error.code).toBe("bad_reply");
-    const answer = { for: "question", outcome: "answered", answer: "Yes" };
-    expect((await w.send(await w.reply(request, "result", answer), tokenA)).body.error.code).toBe("bad_reply");
+    expect((await w.send(await w.reply(request, "answer", { by: "obi", text: "Yes" }), tokenA)).body.error.code).toBe("bad_reply");
     const orphan = await w.reply({ ...request, id: crypto.randomUUID() }, "accept", {});
     expect((await w.send(orphan, tokenA)).body.error.code).toBe("bad_reply");
     expect((await w.send(await w.reply(request, "decline", { reason: "busy" }), tokenA)).status).toBe(202);
@@ -204,16 +203,21 @@ describe("the exchange rules at send (409 bad_reply)", () => {
     expect((await w.send(own, tokenB)).body.error.code).toBe("bad_reply");
   });
 
-  it("lets a question be answered by a result without an accept", async () => {
+  it("lets a question be answered without an accept, by an answer only, and ends it there", async () => {
     const w = await team();
     await w.putPolicy([{ id: "q", from_owner: "*", to_owner: "*", actions: ["question"], repos: ["*"] }], 1);
     const tokenA = await w.obiToken("obi-wellington");
     // obi-ernesto takes questions only after a card update; join a new Obi that does.
     expect((await w.join("ernesto", "obi-ernesto-q", ["question"])).status).toBe(201);
-    const q = await w.envelope("obi-wellington", "obi-ernesto-q", "question", { goal: "Decide", question: "Which one?", choices: ["a", "b"] });
+    const q = await w.envelope("obi-wellington", "obi-ernesto-q", "question", { text: "Which one?", choices: ["a", "b"] });
     expect((await w.send(q, tokenA)).status).toBe(202);
     const tokenQ = await w.obiToken("obi-ernesto-q");
-    expect((await w.send(await w.reply(q, "result", { for: "question", outcome: "answered", answer: "a", choice: 0 }), tokenQ)).status).toBe(202);
+    // The earlier v0.1 answer, a result for a question, isn't a message any more.
+    expect((await w.send(await w.reply(q, "result", { for: "question", outcome: "answered", answer: "a" }), tokenQ)).body.error.code).toBe("invalid_envelope");
+    expect((await w.send(await w.reply(q, "status", { state: "waiting_on_owner" }), tokenQ)).status).toBe(202);
+    expect((await w.send(await w.reply(q, "answer", { by: "owner", text: "a", choice: 0 }), tokenQ)).status).toBe(202);
+    expect((await w.send(await w.reply(q, "answer", { by: "owner", text: "b", choice: 1 }), tokenQ)).body.error.code).toBe("bad_reply");
+    expect((await w.send(await w.reply(q, "status", { state: "working" }), tokenQ)).body.error.code).toBe("bad_reply");
   });
 });
 
