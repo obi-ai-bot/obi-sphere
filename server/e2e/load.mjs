@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Concurrent sends against a real local Sphere (`pnpm run local`), started as the scenario starts
+// Concurrent sends against a real local Sphere (`node scripts/local.mjs`), started as the scenario starts
 // it, with the scripted client: one Sphere, two Obis, then `--sends` valid review_requests from B
 // to A fired at once. It prints how the sends were answered and checks the chain afterwards.
 //
@@ -46,7 +46,7 @@ const freePort = () =>
 const port = await freePort();
 const operatorToken = randomBytes(32).toString("base64url");
 const log = createWriteStream(logPath, { flags: "a" });
-const child = spawn("pnpm", ["run", "local", "--", "--port", String(port), "--persist-to", join(run, "state")], {
+const child = spawn(process.execPath, ["scripts/local.mjs", "--port", String(port), "--persist-to", join(run, "state")], {
   cwd: SERVER_DIR,
   env: { SPHERE_OPERATOR_TOKEN: operatorToken, HOME: join(run, "home"), TMPDIR: join(run, "tmp"), WRANGLER_SEND_METRICS: "false", PATH: process.env.PATH },
   detached: true,

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// `pnpm run local -- --port <port> --persist-to <dir>`: a Sphere on this machine
+// `node scripts/local.mjs --port <port> --persist-to <dir>`: a Sphere on this machine
 // (spec/sphere-api.md section 8). It applies the D1 migrations to the local database under
 // --persist-to (`wrangler d1 migrations apply`), then starts the Worker on 127.0.0.1:<port> with the
 // same --persist-to through wrangler's own dev server (scripts/serve-local.mjs: its programmatic
@@ -39,7 +39,7 @@ const opt = (name, fallback) => {
   return v;
 };
 function usage(message) {
-  console.error(`local: ${message}\nusage: pnpm run local -- [--port <port>] [--persist-to <dir>]`);
+  console.error(`local: ${message}\nusage: node scripts/local.mjs [--port <port>] [--persist-to <dir>]`);
   process.exit(64);
 }
 for (let i = 0; i < args.length; i += 2) if (!["--port", "--persist-to"].includes(args[i])) usage(`unknown argument ${args[i]}`);

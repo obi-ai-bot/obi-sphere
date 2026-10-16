@@ -98,6 +98,10 @@ jobs:
         working-directory: server
         run: pnpm test
 
+      - name: Launcher PID-only shutdown
+        working-directory: server
+        run: pnpm run test:shutdown
+
       - name: The scripted client's own tests
         working-directory: server
         run: pnpm run test:client
