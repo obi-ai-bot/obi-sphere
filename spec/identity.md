@@ -138,7 +138,7 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 |---|---|
 | `admin` | Invite, write the policy, revoke members. Only for the Sphere's admin owner, only without an actor. |
 | `send:review_request`, `send:question`, `send:handoff` | Send requests of that type. |
-| `reply` | Send `status`, `accept`, `decline` and `result`. |
+| `reply` | Send `status`, `accept`, `decline`, `result` and `answer`. |
 | `receive` | Fetch and acknowledge its deliveries. |
 | `directory:read` | Read the members and the policy. |
 | `audit:read` | Read the audit chain. |

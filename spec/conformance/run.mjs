@@ -15,7 +15,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFixtures } from "./generate.mjs";
-import { ACTION_TYPES, SCHEMA_DIR, canonicalize, judge, schemas } from "./lib/obi.mjs";
+import { ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, judge, schemas } from "./lib/obi.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -215,15 +215,19 @@ function checkCoverage(cases) {
   const names = new Set(cases.map((c) => `${c.data.case}/${c.data.name}`));
   const need = [];
   for (const t of ACTION_TYPES) need.push(`envelope/valid-${t === "result" ? "result-review" : t}`);
-  need.push("envelope/valid-result-answer", "envelope/valid-result-handoff");
+  need.push("envelope/valid-result-handoff");
   for (const f of ["protocol", "id", "type", "from", "to", "sphere", "correlation_id", "created_at", "expires_at", "key_id", "body", "signature"]) need.push(`envelope/invalid-missing-envelope-${f.replaceAll("_", "-")}`);
   const { schemas: all } = schemas();
   for (const t of ACTION_TYPES.filter((t) => t !== "result")) for (const f of all[`actions/${t}`].required) need.push(`envelope/invalid-missing-${t.replaceAll("_", "-")}-${f.replaceAll("_", "-")}`);
-  for (const [i, key] of [[0, "result"], [1, "result-answer"], [2, "result-handoff"]]) for (const f of all["actions/result"].oneOf[i].required) need.push(`envelope/invalid-missing-${key}-${f.replaceAll("_", "-")}`);
-  for (const t of ["status", "accept", "decline", "result"]) need.push(`envelope/invalid-reply-without-in-reply-to-${t}`);
+  for (const [i, key] of [[0, "result"], [1, "result-handoff"]]) for (const f of all["actions/result"].oneOf[i].required) need.push(`envelope/invalid-missing-${key}-${f.replaceAll("_", "-")}`);
+  for (const t of REPLY_TYPES) need.push(`envelope/invalid-reply-without-in-reply-to-${t}`);
   for (const n of ["bad-signature-flipped-bit", "expired", "unknown-type-message", "extra-envelope-field", "smuggle-body-instructions", "smuggle-body-prompt", "smuggle-body-message", "oversize-goal", "oversize-envelope"]) need.push(`envelope/invalid-${n}`);
   for (const n of ["valid-chain", "valid-chain-status-before-accept", "invalid-chain-accepted-twice", "invalid-chain-tampered-entry", "invalid-chain-reordered", "invalid-chain-broken-link"]) need.push(`audit/${n}`);
   for (const n of ["invalid-chain-review-result-without-accept", "invalid-chain-handoff-result-without-accept", "valid-chain-handoff-accepted", "valid-chain-question-answered-directly", "valid-chain-question-accepted-then-answered", "invalid-chain-result-for-another-kind", "valid-chain-decline-after-accept", "invalid-chain-reply-after-result"]) need.push(`audit/${n}`);
+  // Questions and answers: words are data (an injection attempt in text is a valid question), fields
+  // and kinds outside the schema are not, and only an answer answers a question.
+  for (const n of ["valid-answer-by-obi", "valid-question-about-refs", "valid-question-injection-is-data", "invalid-smuggle-question-instructions", "invalid-smuggle-answer-action", "invalid-result-for-question", "invalid-ref-unknown-kind", "invalid-answer-by-owner-with-rule"]) need.push(`envelope/${n}`);
+  for (const n of ["valid-chain-question-asked-owner", "invalid-chain-answer-to-review-request", "invalid-chain-reply-after-answer", "invalid-chain-answered-twice"]) need.push(`audit/${n}`);
   for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send", "invalid-wrong-recipient", "invalid-wrong-recipient-reply"]) need.push(`envelope/${n}`);
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");
   let ok = 0;

@@ -11,8 +11,8 @@ export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const REQUEST_TYPES = ["review_request", "question", "handoff"] as const;
-export const REPLY_TYPES = ["status", "accept", "decline", "result"] as const;
-export const TERMINAL_TYPES = ["decline", "result"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"] as const;
+export const TERMINAL_TYPES = ["decline", "result", "answer"];
 export const SEVERITY_RANK: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 export type RequestType = (typeof REQUEST_TYPES)[number];
@@ -208,9 +208,23 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   if (reply.type === "accept" && accepted) return "accepted twice";
   if (reply.type === "result") {
     if (reply.result_for !== request.type) return `a result for ${reply.result_for} answers a ${request.type}`;
-    if (request.type !== "question" && !accepted) return `a ${request.type} is answered by a result only after an accept`;
+    if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
+  if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
   return null;
+}
+
+/**
+ * A request's repository, as policy matches it (sphere-api.md section 5): the body's `repo`, or for
+ * a question the one repository its `about` references name (protocol.md section 5.2). Undefined
+ * when it has none: a question about nothing, or about more than one repository.
+ */
+export function requestRepo(env: Envelope): string | undefined {
+  if (env.type !== "question") return typeof env.body.repo === "string" ? env.body.repo : undefined;
+  const repos = (Array.isArray(env.body.about) ? env.body.about : []).map((ref) => (ref as JsonObject).repo as string);
+  const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  return repos.length > 0 && repos.every((r) => lower(r) === lower(repos[0]!)) ? repos[0] : undefined;
 }
 
 export const exchangeMessage = (env: Envelope): ExchangeMessage => ({

@@ -5,6 +5,8 @@
 > **Changelog.** v0.1: replaces the first draft. Pins the envelope, signing (Ed25519 over RFC 8785 canonical JSON), the A2A agent-card profile, delegation (OAuth token exchange, RFC 8693), the receiving Obi's decision rule, the Sphere's HTTP binding and audit chain, JSON Schemas for all of it, and a conformance suite.
 >
 > v0.1, clarified (no message, schema or fixture changes): a send that loses to concurrent writes is `429 rate_limited`, nothing recorded (sphere-api.md 6.1, check 13). What the first Sphere server chose where the text was silent: an owner token on an endpoint that needs an Obi token is `403 forbidden` (sphere-api.md section 1; sending stays `401`), and so is an Obi token revoking a member (creating invitations and replacing the policy need `admin`, which an Obi's token never holds: `403 insufficient_scope`); a token request body over 131,072 bytes is `400 invalid_request` (identity.md 4.3); single-use `jti`s are kept per Sphere (identity.md 4.1); `pnpm run local` starts the Worker through wrangler's programmatic API with the operator token as a secret binding (sphere-api.md section 8).
+>
+> v0.1, amended on 2026-10-16 (messages, schemas and fixtures change; [obi-ai-bot/obi#494](https://github.com/obi-ai-bot/obi/issues/494)): Obis ask each other questions. `question` is now `{text, about?, choices?}`: `about` takes typed references to repositories, pull requests, issues and jobs (protocol.md 5.9), and `goal`, `question`, `repo` and `pr` are gone. A new reply, `answer` `{by, text, refs?, choice?, by_rule?}`, answers a question and ends its exchange; `result` no longer has `for: question`. So there are eight action types. The receiver answers a question by itself only from what a sharing rule of its owner allows, and otherwise asks its owner (protocol.md section 11, "Questions"), and it limits each sender ("Rate limits"). A question's repository for policy comes from its `about` (sphere-api.md section 5). A `question` or a `result` for a question made to the earlier text is no longer valid.
 
 This is how one Obi asks another Obi for something, and how the other Obi answers. It is written so that an agent that is not Obi can implement it.
 
@@ -22,12 +24,13 @@ This is how one Obi asks another Obi for something, and how the other Obi answer
 | Type | Starts or continues | What for |
 |---|---|---|
 | `review_request` | starts | Ask another Obi's owner to review a change at one commit, with typed acceptance conditions. |
-| `question` | starts | Ask something the other owner knows or decided. |
+| `question` | starts | Ask something the other owner knows, decided, or lets their Obi tell. |
 | `handoff` | starts | Hand work to another Obi, which runs it for its own owner. |
 | `status` | continues | Progress, without finishing. |
 | `accept` | continues | The receiver takes the request on (by its owner's answer, or a remembered decision). |
 | `decline` | ends | No, with a typed reason. |
-| `result` | ends | The review's verdict and findings, the answer, or the handoff's outcome. |
+| `result` | ends | The review's verdict and findings, or the handoff's outcome. |
+| `answer` | ends | The answer to a question: by the other Obi, from what its owner lets it tell, or by its owner in their own words. |
 
 ## The documents
 

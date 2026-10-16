@@ -18,9 +18,9 @@ export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const ZERO_HASH = "0".repeat(64);
 export const REQUEST_TYPES = ["review_request", "question", "handoff"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result"];
+export const TERMINAL_TYPES = ["decline", "result", "answer"];
 export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -327,9 +327,11 @@ export function exchangeProblem(reply, request, earlier) {
   if (reply.type === "accept" && accepted) return "accepted twice";
   if (reply.type === "result") {
     if (reply.body.for !== request.type) return `a result for ${reply.body.for} answers a ${request.type}`;
-    // Only a question may be answered by a result without an accept.
-    if (request.type !== "question" && !accepted) return `a ${request.type} is answered by a result only after an accept`;
+    // A result (for a review_request or a handoff) comes only after the accept.
+    if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
+  if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
   return null;
 }
 
