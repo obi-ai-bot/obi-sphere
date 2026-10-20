@@ -47,7 +47,7 @@ Then the admin's Oby invites each Obi (`POST /v0.1/spheres/deskree/invitations`,
 
 The address will be `deskree.obysphere.com`, once testing is done. Until then the Sphere stays on workers.dev. `obysphere.com` isn't in this Cloudflare account yet.
 
-1. Add the zone (`obysphere.com` or `deskree.com`) to the same Cloudflare account, and point its nameservers at Cloudflare. For `deskree.com`, only if Deskree's DNS may move. Otherwise use a zone that's already on Cloudflare.
+1. Add the `obysphere.com` zone to the same Cloudflare account, and point its nameservers at Cloudflare.
 2. Add the domain to `server/wrangler.jsonc`, then deploy:
 
    ```jsonc
