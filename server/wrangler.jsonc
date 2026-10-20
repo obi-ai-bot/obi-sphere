@@ -5,11 +5,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "obi-sphere",
+  // Deskree's Cloudflare account, which holds deskree.com (docs/deploy-cloudflare.md).
+  "account_id": "9784e77e77b9aaff2387596b31f85320",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   // No telemetry: no Workers logs or traces kept by Cloudflare, and wrangler sends no metrics.
   "observability": { "enabled": false },
   "send_metrics": false,
+  "routes": [{ "pattern": "obysphere.deskree.com", "custom_domain": true }],
   // SPHERE_OPERATOR_TOKEN (at least 32 characters) is a secret, never here: `wrangler secret put`
   // in production, a Worker secret set by scripts/serve-local.mjs locally. Without it every
   // operator call is 403.
@@ -18,7 +21,7 @@
       "binding": "DB",
       "database_name": "obi-sphere",
       // Deskree's D1 (docs/deploy-cloudflare.md).
-      "database_id": "b93094ac-9fe4-4dee-88fc-f67297899392",
+      "database_id": "ff9bde6f-e277-47c8-b6e6-309bf00f87c7",
       "migrations_dir": "migrations"
     }
   ]
