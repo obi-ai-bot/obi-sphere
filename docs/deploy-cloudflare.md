@@ -28,13 +28,7 @@ Deployed 2026-10-20. The Sphere server from [`server/`](../server/), unchanged, 
 
 ## The plan
 
-The Workers plan couldn't be read: the OAuth login has no billing scope, and the dashboard wasn't signed in. The smoke ran fine, but the Free plan won't carry a team:
-
-- **CPU.** Free gives 10 ms of CPU a request. The smoke's p99 was 9.3 ms, so a busy send can fail with error 1102.
-- **D1 reads.** A long poll (`wait=25`) checks the queue every 250 ms, about 100 D1 queries a poll. One Obi online all day makes about 3,500 polls. Since 1 September 2026, Free stops D1 at 5 million rows read a day, and a handful of Obis reach that.
-- **Requests.** Free allows 100,000 requests a day.
-
-Workers Paid ($5 a month) lifts all three. The owner checks it at dash.cloudflare.com, then Workers & Pages, then Plans.
+Workers Paid ($5 a month), confirmed by the owner on 2026-10-20. The Free plan wouldn't carry a team: its 10 ms of CPU a request is close to the smoke's p99 of 9.3 ms, and long polls (`wait=25`, a D1 query every 250 ms) would use up its 5 million D1 rows read a day with a handful of Obis online.
 
 ## Creating Deskree's Sphere
 
@@ -51,13 +45,13 @@ Then the admin's Oby invites each Obi (`POST /v0.1/spheres/deskree/invitations`,
 
 ## Adding a custom domain later
 
-The address is still the owner's decision: `deskree.obysphere.com` or `sphere.deskree.com`. Neither zone is in this Cloudflare account yet.
+The address will be `deskree.obysphere.com`, once testing is done. Until then the Sphere stays on workers.dev. `obysphere.com` isn't in this Cloudflare account yet.
 
 1. Add the zone (`obysphere.com` or `deskree.com`) to the same Cloudflare account, and point its nameservers at Cloudflare. For `deskree.com`, only if Deskree's DNS may move. Otherwise use a zone that's already on Cloudflare.
 2. Add the domain to `server/wrangler.jsonc`, then deploy:
 
    ```jsonc
-   "routes": [{ "pattern": "sphere.deskree.com", "custom_domain": true }]
+   "routes": [{ "pattern": "deskree.obysphere.com", "custom_domain": true }]
    ```
 
    Run `pnpm run deploy`. Cloudflare creates the DNS record and the certificate.
