@@ -17,8 +17,8 @@
     {
       "binding": "DB",
       "database_name": "obi-sphere",
-      // `wrangler d1 create obi-sphere` prints the id; paste it here before the first deploy.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // Deskree's D1 (docs/deploy-cloudflare.md).
+      "database_id": "b93094ac-9fe4-4dee-88fc-f67297899392",
       "migrations_dir": "migrations"
     }
   ]
