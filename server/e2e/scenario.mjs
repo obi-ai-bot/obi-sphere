@@ -7,6 +7,9 @@
 //   pnpm run scenario            (node e2e/scenario.mjs)
 //   OBI_SPHERE_E2E_KEEP=1        keep the run folder (logs, state) afterwards
 //   OBI_DIR=<obi checkout>       check e2e/fixtures/ against obi's (default: ../obi, when there)
+//   OBI_SPHERE_URL=<https://…>   run against a deployed Sphere instead of starting one; needs its
+//                                SPHERE_OPERATOR_TOKEN, makes a fresh Sphere `e2e-<hex>` there, and
+//                                skips the local-only checks (1.1b, 1.1c and step 8)
 //
 // It runs, with SCENARIO.md's fixed values and calls:
 //   step 1  Sphere up, team created, two Obis invited
@@ -34,7 +37,9 @@ const SERVER_DIR = resolve(here, "..");
 const CHECKOUT = resolve(SERVER_DIR, "..");
 
 // SCENARIO.md, "The fixed values".
-const SPHERE = { id: "e2e", name: "E2E sphere" };
+// A deployed Sphere keeps every Sphere it was given (v0.1 has no delete), so each remote run makes its own.
+const REMOTE = process.env.OBI_SPHERE_URL?.replace(/\/+$/, "");
+const SPHERE = { id: REMOTE ? `e2e-${randomBytes(4).toString("hex")}` : "e2e", name: "E2E sphere" };
 const A = { obi: "obi-wellington", owner: "wellington", name: "Wellington's Obi", accepts: ["review_request"] };
 const B = { obi: "obi-ernesto", owner: "ernesto", name: "Ernesto's Obi", accepts: ["review_request"] };
 const POLICY_RULES = [{ id: "team-reviews", from_owner: "*", to_owner: "*", actions: ["review_request"], repos: ["obi-e2e/fixture-app"] }];
@@ -186,13 +191,14 @@ const steps = [
     n: 1,
     title: "Sphere up, team created, two Obis invited",
     async run() {
-      ctx.port = await freePort();
-      ctx.operatorToken = randomBytes(32).toString("base64url");
-      ctx.base = `http://127.0.0.1:${ctx.port}`;
+      ctx.port = REMOTE ? null : await freePort();
+      ctx.operatorToken = REMOTE ? process.env.SPHERE_OPERATOR_TOKEN : randomBytes(32).toString("base64url");
+      assert(ctx.operatorToken, "OBI_SPHERE_URL needs SPHERE_OPERATOR_TOKEN");
+      ctx.base = REMOTE ?? `http://127.0.0.1:${ctx.port}`;
       ctx.client = new SphereClient(ctx.base, SPHERE.id);
       const c = ctx.client;
       // 1.1 Start it; within 60 seconds health answers.
-      sphereProcess = startSphere(ctx.port);
+      if (!REMOTE) sphereProcess = startSphere(ctx.port);
       const deadline = Date.now() + 60_000;
       let health;
       for (;;) {
@@ -200,7 +206,7 @@ const steps = [
           health = await c.call("GET", "/v0.1/health");
           if (health.status === 200) break;
         } catch {}
-        assert(sphereProcess.exitCode === null, `the Sphere exited early (see ${join(R.harness, "sphere.log")})`);
+        assert(REMOTE || sphereProcess.exitCode === null, `the Sphere exited early (see ${join(R.harness, "sphere.log")})`);
         assert(Date.now() < deadline, "GET /v0.1/health didn't answer 200 within 60 seconds");
         await sleep(250);
       }
@@ -222,8 +228,8 @@ const steps = [
       // 1.1c No DevTools inspector either (`wrangler dev` always opens one, no token, and a debugger
       // on it runs code in the Worker with the D1 binding): every port the Sphere's processes
       // listen on is on the loopback, and none answers as a DevTools endpoint.
-      const sockets = listeningSockets(sphereProcess.pid);
-      assert(sockets.some((x) => x.port === ctx.port), `the Sphere's own port ${ctx.port} isn't among its listening sockets: ${show(sockets)}`);
+      const sockets = REMOTE ? [] : listeningSockets(sphereProcess.pid);
+      assert(REMOTE || sockets.some((x) => x.port === ctx.port), `the Sphere's own port ${ctx.port} isn't among its listening sockets: ${show(sockets)}`);
       for (const { address, port } of sockets) {
         assert(address === "127.0.0.1" || address === "::1", `the Sphere listens on ${address}:${port}, not on the loopback`);
         for (const path of ["/json/version", "/json/list"]) {
@@ -238,7 +244,7 @@ const steps = [
         await c.call("POST", "/v0.1/spheres", { token: ctx.operatorToken, body: { sphere: SPHERE.id, name: SPHERE.name, admin: { owner: A.owner, owner_key: ctx.W.key.publicKey } } }),
         201, "POST /v0.1/spheres",
       );
-      assert(created.sphere === "e2e" && created.admin_owner === "wellington" && created.protocol === "obi/0.1", `the Sphere: ${show(created)}`);
+      assert(created.sphere === SPHERE.id && created.admin_owner === "wellington" && created.protocol === "obi/0.1", `the Sphere: ${show(created)}`);
       // 1.3 The admin token: exactly `admin directory:read audit:read`.
       const admin = await ctx.W.token(ADMIN_SCOPES);
       assert(admin.token_type === "Bearer" && admin.scope === ADMIN_SCOPES, `the admin token: ${show({ ...admin, access_token: "…" })}`);
@@ -310,7 +316,7 @@ const steps = [
       assert(env.type === "review_request" && env.from === B.obi && env.to === A.obi && env.id === ctx.X.id && env.correlation_id === ctx.X.id && env.key_id === ctx.B.key.keyId, `envelope: ${show(env)}`);
       assert(same(env.body, BRIEF), "the body isn't the brief");
       const members = expectStatus(await c.call("GET", c.spherePath("/members"), { token: await ctx.admin() }), 200, "GET /members").members;
-      const v = spec.verifyEnvelope(env, { now: new Date().toISOString(), sphere: "e2e", receiver: A.obi, keys: directoryKeys(members), seq: 1, seen_ids: [] });
+      const v = spec.verifyEnvelope(env, { now: new Date().toISOString(), sphere: SPHERE.id, receiver: A.obi, keys: directoryKeys(members), seq: 1, seen_ids: [] });
       assert(v.ok, `verifyEnvelope: ${v.code} ${v.message}`);
     },
   },
@@ -340,7 +346,7 @@ const steps = [
       const audit = expectStatus(await c.call("GET", c.spherePath("/audit?from_seq=1&limit=1000"), { token: await ctx.admin() }), 200, "GET /audit");
       const members = expectStatus(await c.call("GET", c.spherePath("/members"), { token: await ctx.admin() }), 200, "GET /members").members;
       // 7.2 The spec's verifier accepts the chain with every member's key history.
-      const v = spec.verifyChain({ sphere: "e2e", entries: audit.entries }, { keys: directoryKeys(members) });
+      const v = spec.verifyChain({ sphere: SPHERE.id, entries: audit.entries }, { keys: directoryKeys(members) });
       assert(v.ok, `verifyChain: ${v.code} ${v.message}`);
       // 7.3 Exactly the two exchanges, each envelope as its sender sent it.
       const sent = [...ctx.sentBy[ctx.X.id], ...ctx.sentBy[ctx.Y.id]];
@@ -389,7 +395,7 @@ async function exchange(request, acceptBody, resultBody, requestSeq) {
   const now = () => new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const [delivery] = await ctx.A.waitFor(1);
   assert(delivery.seq === requestSeq && same(delivery.envelope, request), `A's delivery: ${show({ seq: delivery.seq, id: delivery.envelope?.id })}`);
-  const vA = spec.verifyEnvelope(delivery.envelope, { now: now(), sphere: "e2e", receiver: A.obi, keys: ctx.keys, seq: delivery.seq, seen_ids: [] });
+  const vA = spec.verifyEnvelope(delivery.envelope, { now: now(), sphere: SPHERE.id, receiver: A.obi, keys: ctx.keys, seq: delivery.seq, seen_ids: [] });
   assert(vA.ok, `A's verifyEnvelope: ${vA.code} ${vA.message}`);
   assert(expectStatus(await ctx.A.ack([delivery.delivery_id]), 200, "A's ack").acked === 1, "A's ack counted");
   assert((await ctx.A.deliveries()).body.deliveries.length === 0, "A still has deliveries after its ack");
@@ -407,7 +413,7 @@ async function exchange(request, acceptBody, resultBody, requestSeq) {
   assert(got[0].seq === requestSeq + 1 && got[1].seq === requestSeq + 2, `seqs ${got.map((d) => d.seq)}`);
   assert(same(got[1].envelope.body, resultBody), "the result body isn't the expected one");
   for (const d of got) {
-    const v = spec.verifyEnvelope(d.envelope, { now: now(), sphere: "e2e", receiver: B.obi, keys: ctx.keys, seq: d.seq, seen_ids: [] });
+    const v = spec.verifyEnvelope(d.envelope, { now: now(), sphere: SPHERE.id, receiver: B.obi, keys: ctx.keys, seq: d.seq, seen_ids: [] });
     assert(v.ok, `B's verifyEnvelope (${d.envelope.type}): ${v.code} ${v.message}`);
     assert(d.relayed_at && typeof d.delivery_id === "string", `delivery: ${show(d)}`);
   }
@@ -419,7 +425,7 @@ async function exchange(request, acceptBody, resultBody, requestSeq) {
 
 async function main() {
   console.log("Obi Sphere: the scenario's Sphere-side steps, with a scripted client");
-  console.log(`  server   ${SERVER_DIR}`);
+  console.log(`  server   ${REMOTE ? `${REMOTE}, Sphere ${SPHERE.id} (step 8 is local-only)` : SERVER_DIR}`);
   console.log(`  run      ${RUN}`);
   console.log(`  fixtures ${FIXTURES.checkedAgainst ? `match obi's, in ${FIXTURES.checkedAgainst}` : "the copies in e2e/fixtures/, not checked: no obi checkout (set OBI_DIR)"}`);
   ctx.before = snapshot(CHECKOUT);
@@ -427,7 +433,7 @@ async function main() {
   ctx.tmpNames = topNames(tmpdir());
   let failed = 0;
   let blocked = null;
-  for (const step of steps) {
+  for (const step of REMOTE ? steps.filter((s) => s.n !== 8) : steps) {
     const label = `step ${step.n} (${step.title})`;
     if (blocked) {
       console.log(`  SKIP  ${label}: not run, step ${blocked} failed`);
