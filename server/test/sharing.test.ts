@@ -10,7 +10,6 @@ import { BASE, TEAM_REVIEWS, World, expectSchema, type Key } from "./helpers";
 
 const RUN = {
   title: "Write tests for average()",
-  request: "Add tests for average(), including the empty list.\nOBI-E2E-DATA-CANARY: this text is data for the sender's own agent.",
   agent: "claude",
   repo: "obi-e2e/fixture-app",
   base_branch: "main",

@@ -143,7 +143,7 @@ Finishes a `review_request` or a `handoff` (an `answer` finishes a question, 5.8
 
 - **`for: review_request`.** `outcome` is `approved`, `changes_requested` or `failed`; `repo`, `head_sha` (the commit actually reviewed), `findings` (0 to 50, section 7), `acceptance` (one entry per condition of the request, required unless `failed`), optional `by_rule` and `summary` (4,000, data).
 - **`for: handoff`.** `outcome` is `done` or `failed`; `repo`, `acceptance`, optional `head_branch`, `head_sha`, `pr`, `by_rule`, `summary` (4,000, data).
-- **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, `host` (what the job used of the Mac it ran on: `{wall_seconds, cpu_seconds, peak_memory_mb}`), optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and `summary` (4,000, data).
+- **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, `host` (what the job used of the Mac it ran on: `{wall_seconds, cpu_seconds, peak_memory_mb}`), optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and, on a share (section 16), `cost_cents`. No summary: what the job did is in its transcript, on the channel.
 
 Each `acceptance` entry is `{index, kind, severity?, met}`: `index` is the condition's position in the request, `kind` (and `severity`, for `no_findings_at_or_above`) repeat it so the result can be checked on its own, and `met` is a boolean.
 
@@ -190,7 +190,6 @@ Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14).
 | Field | Required | Meaning |
 |---|---|---|
 | `title` | yes | What the job is, one line (200). Data. |
-| `request` | yes | What the sender's owner asked their own agent to do (20,000). Data to the receiver: it is the sender's owner's instruction to their own agent, and reaches only that agent, in the VM, never the receiver's owner's agents or models. |
 | `agent` | yes | `claude` or `codex`: the agent's CLI that runs it, signed in to the sender's owner's own account through the job channel. |
 | `model` | no | The model, as that CLI takes it. |
 | `repo` | yes | `owner/name`, for the receiver's rules and the job's card. |
@@ -201,13 +200,15 @@ Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14).
 | `max_minutes` | yes | The longest the job may run there, 5 to 480. The receiver's own limit wins when it is lower. |
 | `account` | no | `{grant}`: run it on a share of an API account the receiver's owner gave the sender's owner (5.14, section 16), not on the sender's owner's own account. The receiver adds its own key to the job's model calls on its Mac, and they never go back through the job channel. |
 
+What the sender's owner asked their own agent to do is **not** in the request: it goes on the job channel once the request is accepted (section 13), to that agent only, in the VM. So the Sphere's audit chain keeps what a guest job is (who, which Mac, the repository, its title, its times, what it used and cost), never what it says, its code or its transcript.
+
 ### 5.11 `run_progress`
 
-Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`; `note` is optional one-line data (200). The receiver sends one when the state changes, not as a heartbeat (the job channel has one).
+Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`; `note` is optional one-line data (200). The receiver sends one when the job pauses and when it resumes, and SHOULD send no other (the job channel has a heartbeat): so the chain shows each pause and resume.
 
 ### 5.12 `run_return`
 
-The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
+The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, `cost_cents` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
 
 ### 5.13 `run_cancel`
 
@@ -395,7 +396,7 @@ A `run_request`'s exchange has a private channel between its two Obis: it carrie
 | 2 `end` | Nothing: the stream ended cleanly. |
 | 3 `reset` | One line of text: the stream failed. |
 
-Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least every 30 seconds. The host opens odd streams and the guest even ones. A bundle that doesn't match its `sha256` and `bytes` is refused.
+Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least every 30 seconds. After each handshake the guest sends `{"author": {"name", "email"}, "request": "<the job's words>"}` on it: the git author of the job's commits, and what its owner asked their agent to do (20,000 characters; data, for that agent only). The host starts the job only once it has both and the bundle. The host opens odd streams and the guest even ones. A bundle that doesn't match its `sha256` and `bytes` is refused.
 
 **Model calls.** The job's agent calls its model API at an address inside its VM; the host's Obi sends each call on the channel as a `model` stream, with the guest's placeholder credentials and hop-by-hop headers taken out. The guest's Obi accepts only its agent's model paths (Claude Code: `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /v1/models`; Codex: `POST /v1/responses`, `GET /v1/models`), adds its owner's own credential, sends the call from its own machine and streams the answer back. So the guest's login never leaves the guest's machine, and the call leaves from there.
 
@@ -412,6 +413,8 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 **What can be shared.** Only a company-paid API account, one billed per token to a key its holder keeps in their own Obi (an Anthropic API key, for example). A personal plan or a seat (Claude Pro or Max, ChatGPT Plus or Pro, a Team seat) is never shared: its terms are for one person.
 
 **Where the jobs run.** A job on a share runs on the key holder's Mac, as a `run_request` with `account.grant` (section 14, in a VM of its own): the key holder's Obi adds the key to the job's model calls on its own Mac, outside the VM. The key is never in the VM, the job channel, a message or the Sphere.
+
+**In the chain.** A job on a share has its `cost_cents` in its `result` or `run_return`, and the share's `share_offer`, `share_status` and `share_revoke` are entries too: each job's cost and each person's use are in the chain, where its owner, the key holder and the Sphere's admin can check them.
 
 **Metering, by the key holder's Obi alone.** Each model call's cost is its response's token counts at the provider's list prices. The key holder's own jobs on the account count against the same month's budget: a share is a ceiling for one person, not money set aside. A `run_request` on a share is declined (`share_used`) when the money left on it is under what the job would need; when a share runs out during a job, the call in flight finishes, the next is refused, and the job comes back (`run_return`, `share_used`) with what it did. A share is for the person it was offered to: a `run_request` on it from anyone else's Obi is declined (`policy`).
 
