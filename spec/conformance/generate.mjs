@@ -85,13 +85,13 @@ export function buildFixtures() {
       bundle: { sha256: "9".repeat(64), bytes: 48213 }, size: "small", max_minutes: 120,
     },
     run_progress: { state: "running" },
-    run_return: { reason: "host_unavailable", commits: { sha256: "a".repeat(64), bytes: 2210 }, head_sha: HEAD, host: { wall_seconds: 1080, cpu_seconds: 2400, peak_memory_mb: 3100 } },
+    run_return: { reason: "host_unavailable", commits: { sha256: "a".repeat(64), bytes: 2210 }, head_sha: HEAD },
     run_cancel: {},
     share_offer: { grant: "g-0123456789ab", agent: "claude", account: "Deskree API", share: 30, limit_cents: 12000, period: "month", resets: "2026-11-01T00:00:00Z" },
     share_status: { grant: "g-0123456789ab", used_cents: 2310, limit_cents: 12000, resets: "2026-11-01T00:00:00Z" },
     share_revoke: { grant: "g-0123456789ab" },
   };
-  const runResult = { for: "run_request", outcome: "done", repo: "obi-conf/fixture-app", commits: { sha256: "b".repeat(64), bytes: 3077 }, head_sha: HEAD, host: { wall_seconds: 840, cpu_seconds: 1900, peak_memory_mb: 2500 } };
+  const runResult = { for: "run_request", outcome: "done", repo: "obi-conf/fixture-app", commits: { sha256: "b".repeat(64), bytes: 3077 }, head_sha: HEAD };
   // What "@Wellington is #251 landing Thursday?" is about, and what the answer draws on.
   const issueRef = { kind: "issue", repo: "obi-conf/fixture-app", issue: 251 };
   const prRef = { kind: "pr", repo: "obi-conf/fixture-app", pr: 260 };
@@ -167,7 +167,8 @@ export function buildFixtures() {
   bad("run-request-unknown-agent", "A run_request for an agent the protocol doesn't name.", signed(unsigned("run_request", { ...clone(bodies.run_request), agent: "cursor" })), "invalid_envelope");
   bad("run-request-bad-bundle-hash", "A bundle named by something other than 64 lower-case hex characters.", signed(unsigned("run_request", { ...clone(bodies.run_request), bundle: { sha256: "G".repeat(64), bytes: 10 } })), "invalid_envelope");
   bad("run-return-unknown-reason", "A run_return that says the receiver's owner is away: it never says that.", signed(unsigned("run_return", { reason: "owner_away" })), "invalid_envelope");
-  bad("result-run-without-host", "A run_request's result must say what it used of the Mac.", signed(unsigned("result", (({ host, ...rest }) => rest)(clone(runResult)))), "invalid_envelope");
+  bad("result-run-with-host-use", "A run_request's result that says how long the job ran and how much CPU it took: with when it started, that says when the host's owner paused it.", signed(unsigned("result", { ...clone(runResult), host: { wall_seconds: 840, cpu_seconds: 1900, peak_memory_mb: 2500 } })), "invalid_envelope");
+  bad("run-return-with-host-use", "A run_return that says how long the job ran and how much CPU it took.", signed(unsigned("run_return", { reason: "host_unavailable", host: { wall_seconds: 1080, cpu_seconds: 2400, peak_memory_mb: 3100 } })), "invalid_envelope");
 
   // Sharing an API account (protocol.md sections 5.14 to 5.16 and 15).
   ok("share_offer", "A key holder's Obi gives the receiver's owner 30% of a company API account's month.", valid.share_offer);

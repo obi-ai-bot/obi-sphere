@@ -19,7 +19,7 @@ const RUN = {
   size: "small",
   max_minutes: 120,
 };
-const RUN_RESULT = { for: "run_request", outcome: "done", repo: "obi-e2e/fixture-app", host: { wall_seconds: 840, cpu_seconds: 1900, peak_memory_mb: 2500 } };
+const RUN_RESULT = { for: "run_request", outcome: "done", repo: "obi-e2e/fixture-app" };
 const TEAM_RUNS = { id: "team-runs", from_owner: "*", to_owner: "*", actions: ["run_request"], repos: ["*"] };
 
 /** Ernesto's Obi (the guest) and Wellington's (the host, whose Mac runs the job), with a policy that allows run_request. */
