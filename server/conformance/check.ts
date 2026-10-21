@@ -11,6 +11,15 @@ import { readFileSync } from "node:fs";
 import { verifyCard } from "../src/protocol/card.ts";
 import { verifyChain } from "../src/protocol/chain.ts";
 import { verifyEnvelope, type ReceiverContext, type Verdict } from "../src/protocol/envelope.ts";
+import * as validators from "../src/protocol/validators.generated.js";
+import { schemaErrors, type SchemaName } from "../src/protocol/schemas.ts";
+
+/** A wire case's schema (`wire/invitation-preview.request`) by the name the server compiles it under (`invitationPreviewRequest`). */
+const wireSchema = (schema: unknown): SchemaName | undefined => {
+  const m = typeof schema === "string" ? /^wire\/([a-z.-]+)$/.exec(schema) : null;
+  const name = m?.[1]!.replace(/[-.]([a-z])/g, (_, c: string) => c.toUpperCase());
+  return name && Object.hasOwn(validators, name) ? (name as SchemaName) : undefined;
+};
 
 let testCase: { case?: unknown; context?: unknown; input?: unknown };
 try {
@@ -31,6 +40,12 @@ switch (testCase.case) {
   case "audit":
     verdict = await verifyChain(testCase.input, (testCase.context ?? { keys: {} }) as { keys: Record<string, never> });
     break;
+  case "wire": {
+    const name = wireSchema((testCase.context as { schema?: unknown } | undefined)?.schema);
+    const errors = name ? schemaErrors(name, testCase.input) : ["the server compiles no such wire schema"];
+    verdict = errors.length ? { ok: false, code: "bad_request", message: errors.join("; ") } : { ok: true };
+    break;
+  }
   default:
     console.log(JSON.stringify({ verdict: "error", message: "not a conformance case" }));
     process.exit(2);

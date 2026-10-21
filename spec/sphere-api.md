@@ -9,7 +9,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 - **Base URL.** Whatever the Sphere is served at, like `https://sphere.example.com` or `http://127.0.0.1:8787` locally. Every path below starts with `/v0.1`.
 - **JSON.** Request and response bodies are JSON (protocol.md, "JSON rules"), `Content-Type: application/json`, keys in `snake_case`. A request body is at most 131,072 bytes (`413 payload_too_large`), except at the token endpoint, which takes a form and answers OAuth errors: a body over 131,072 bytes there is `400 invalid_request` (identity.md 4.3). Unknown members are refused (`400`), as everywhere in the protocol.
 - **Authentication.** One of:
-  - **none**: `GET /v0.1/health`, the token endpoint, and redeeming an invitation (its secret is the credential);
+  - **none**: `GET /v0.1/health`, the token endpoint, and previewing or redeeming an invitation (its secret is the credential);
   - **operator**: `Authorization: Bearer <operator token>`, only for creating Spheres. The operator token is the Worker secret `SPHERE_OPERATOR_TOKEN` (at least 32 characters). A Sphere server without one refuses every operator call (`403 forbidden`). It is compared in constant time and never logged;
   - **bearer**: `Authorization: Bearer <access token>` from the token endpoint (identity.md, "Delegation"). A token is for one Sphere; it carries a subject (the owner), maybe an actor (the Obi) and scopes. "Obi token" below means a token with an actor; "owner token" one without.
   - An **owner token on an endpoint that needs an Obi token** (section 2: changing a card, fetching and acknowledging deliveries) is `403 forbidden`. Sending is the one exception: section 6.1, check 1, answers it `401 unauthorized`, before the body is read.
@@ -32,7 +32,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner token where an Obi token is needed, an Obi token revoking a member, an Obi's token on another Obi's card, an owner key that differs from the bound one, no operator token configured). |
 | `policy_denied` | 403 | No policy rule allows this request, or the receiver's card doesn't accept its type. |
 | `recipient_revoked` | 403 | The receiver was revoked. |
-| `invitation_invalid` | 403 | Unknown, expired, used, or the wrong secret: always the same answer. |
+| `invitation_invalid` | 403 | Unknown, expired, used up, or the wrong secret: always the same answer. |
 | `not_found` | 404 | No such Sphere, member or invitation. |
 | `unknown_recipient` | 404 | `to` isn't a member. |
 | `duplicate` | 409 | A message with this `id` and a different signature was relayed before. |
@@ -51,6 +51,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `POST /v0.1/oauth/token` | none | | form (identity.md 4.3) | `200` [token.response](schemas/v0.1/wire/token.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}` | bearer | any | | `200` sphere |
 | `POST /v0.1/spheres/{sphere}/invitations` | owner token | `admin` | [invitation.request](schemas/v0.1/wire/invitation.request.schema.json) | `201` [invitation.response](schemas/v0.1/wire/invitation.response.schema.json) |
+| `POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/preview` | none (secret) | | [invitation-preview.request](schemas/v0.1/wire/invitation-preview.request.schema.json) | `200` [invitation-preview.response](schemas/v0.1/wire/invitation-preview.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/redeem` | none (secret) | | [redeem.request](schemas/v0.1/wire/redeem.request.schema.json) | `201` [member](schemas/v0.1/wire/member.schema.json) |
 | `GET /v0.1/spheres/{sphere}/members` | bearer | `directory:read` | | `200` [members.response](schemas/v0.1/wire/members.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}/members/{obi}` | bearer | `directory:read` | | `200` member |
@@ -83,7 +84,7 @@ It binds `owner_key` to the admin owner, sets the policy to version 0 with no ru
 
 ## 4. Invitations and pairing
 
-**Invite.** The admin asks for an invitation for one Obi of one owner (the owner may be new):
+**Invite.** The admin asks for an invitation. A **named** invitation is for one Obi of one owner (the owner may be new) and is used once:
 
 ```json
 POST /v0.1/spheres/e2e/invitations
@@ -91,11 +92,36 @@ POST /v0.1/spheres/e2e/invitations
 ```
 
 ```json
-201 {"invitation_id": "…", "sphere": "e2e", "owner": "ernesto", "obi": "obi-ernesto",
+201 {"invitation_id": "…", "sphere": "e2e", "owner": "ernesto", "obi": "obi-ernesto", "max_uses": 1,
      "secret": "<43 base64url characters>", "expires_at": "2026-10-14T13:00:00Z"}
 ```
 
-The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. An `obi` id that is or was a member is `409 conflict`: ids are never reused.
+An **open** invitation leaves `owner` and `obi` out: it is one link for a team, used by up to `max_uses` Obis (1 to 1,000; 1 when left out), each of whose cards names its own `obi_id` and `owner`:
+
+```json
+POST /v0.1/spheres/e2e/invitations
+{"expires_in": 604800, "max_uses": 50}
+```
+
+```json
+201 {"invitation_id": "…", "sphere": "e2e", "max_uses": 50,
+     "secret": "<43 base64url characters>", "expires_at": "2026-10-21T12:00:00Z"}
+```
+
+`owner` and `obi` come together or not at all, and a named invitation takes no `max_uses` (`400 bad_request`). The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. A named invitation's `obi` id that is or was a member is `409 conflict`: ids are never reused.
+
+**Preview.** Before joining, whoever holds the link can read what it leads to, so a Join screen can show it. The secret is the credential, sent in the body to keep it out of URLs and logs, as for redeeming; nothing is used up:
+
+```json
+POST /v0.1/spheres/e2e/invitations/{invitation_id}/preview
+{"secret": "…"}
+```
+
+```json
+200 {"sphere": "e2e", "name": "E2E sphere", "member_count": 2, "expires_at": "2026-10-21T12:00:00Z"}
+```
+
+`member_count` is the number of `active` members now. The invitation is checked as in redeem check 2, with the same `403 invitation_invalid` for every way it fails; a body that doesn't match the schema is `400 bad_request`.
 
 **Redeem (pair the Obi).** The Obi presents the secret, its owner's key and its owner-signed card:
 
@@ -107,19 +133,29 @@ POST /v0.1/spheres/e2e/invitations/{invitation_id}/redeem
 The Sphere checks, in order:
 
 1. The body matches the schema (`400 bad_request`).
-2. The invitation exists, is unused and unexpired, and the secret's SHA-256 matches, compared in constant time (`403 invitation_invalid` for every one of these).
+2. The invitation exists, is unexpired, has been used fewer than `max_uses` times, and the secret's SHA-256 matches, compared in constant time (`403 invitation_invalid` for every one of these).
 3. The card is valid (identity.md 2.2, checks 1 to 5 and 7) (`400 card_invalid`).
-4. The card's `sphere`, `obi_id` and `owner` are the invitation's, and its `owner_key` is the body's (`400 card_invalid`).
-5. If the owner already has a bound key, it is `owner_key` (`403 forbidden`); otherwise `owner_key` is bound to the owner now.
+4. The card's `sphere` is the Sphere's, its `owner_key` is the body's, and for a named invitation its `obi_id` and `owner` are the invitation's (`400 card_invalid`). For an open invitation, the card's `obi_id` and `owner` are the member's.
+5. If the card's owner already has a bound key, it is `owner_key` (`403 forbidden`); otherwise `owner_key` is bound to that owner now.
 6. No other member uses the card's `key_id` (`409 conflict`).
+7. The card's `obi_id` is not and never was a member (`409 conflict`): ids are never reused, and an Obi that gets this answer picks another id and redeems again.
 
-Then, in one transaction: the invitation is used up, the member is `active` with `joined_at` the Sphere's clock now, and its key's `valid_from_seq` is the chain's head seq + 1 and `valid_until_seq` null. Answers `201` with the member:
+A redeem that fails uses nothing. Then, in one transaction: the invitation is used once more (used up when it reaches `max_uses`), the member is `active` with `joined_at` the Sphere's clock now, and its key's `valid_from_seq` is the chain's head seq + 1 and `valid_until_seq` null. Answers `201` with the member:
 
 ```json
 {"obi": "obi-ernesto", "owner": "ernesto", "owner_key": "…", "owner_key_id": "ed25519:…", "status": "active",
  "joined_at": "2026-10-14T12:00:05Z", "card": { … },
  "keys": [{"key_id": "ed25519:…", "public_key": "…", "valid_from_seq": 1, "valid_until_seq": null}]}
 ```
+
+**What an open invitation's secret proves.** Only that the redeemer holds the link. The owner id an open redeem binds is the one its card names, so:
+
+- the first redeem that names an owner who has no bound key yet takes that owner id for good: a later owner with that id and another key is `403 forbidden`, and owner ids are never released, even when every Obi of that owner is revoked;
+- an owner who is already bound (the admin, or anyone who joined) can't be impersonated: a card naming them must carry, and be signed by, their bound key;
+- a policy rule that names an owner (section 5) gives its permissions to whoever binds that owner id first. An admin writes such rules for people who have joined, after checking their `owner_key_id` with them, or uses a named invitation;
+- the admin sees every member in the directory and revokes what it doesn't recognise (identity.md section 3). `expires_in` and `max_uses` bound what a leaked link can do; v0.1 has no call to withdraw an invitation before it expires.
+
+**Limiting an invitation to an email domain** (anyone at `@example.com`) is not in v0.1, and the Sphere can't enforce it without an identity provider: owner ids and card names are chosen by the redeemer, and nothing in a redeem proves an email address. To add it, a Sphere would trust an OpenID Connect issuer (configured by its operator), an invitation would carry the domain, and a redeem would carry an ID token from that issuer whose audience is the Sphere and whose `nonce` binds it to the invitation and the `owner_key`. The Sphere would check its signature against the issuer's keys, `iss`, `aud`, `exp` and `nonce`, require `email_verified` and the domain (for Google Workspace, the `hd` claim), and bind the owner id to that verified address, one owner id per address. An address an issuer relays or hides (Sign in with Apple's private relay) proves no domain. Until then, a client that shows such a limit must not say it is enforced.
 
 **Directory.** `GET /members` lists every member, active and revoked, ordered by `joined_at` then `obi`. A member has `revoked_at` (when it was revoked) exactly when its `status` is `revoked`, and no `revoked_at` while it is `active`. Receivers use it to find a sender's owner and keys, and check each card themselves (identity.md 2.2) before trusting it.
 

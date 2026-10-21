@@ -5,7 +5,7 @@
 //   node conformance/run.mjs --impl "<cmd>"     judge an implementation: each case's {case, context,
 //                                               input} on stdin (never its expected verdict),
 //                                               exit 0 = accept, anything else = reject
-//   options: --kinds envelope,card,audit   only these case kinds (impl mode)
+//   options: --kinds envelope,card,audit,wire   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
 //
 // Exit status 0 when every check passes, 1 otherwise.
@@ -232,6 +232,8 @@ function checkCoverage(cases) {
   for (const n of ["valid-chain-question-asked-owner", "invalid-chain-answer-to-review-request", "invalid-chain-reply-after-answer", "invalid-chain-answered-twice"]) need.push(`audit/${n}`);
   for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send", "invalid-wrong-recipient", "invalid-wrong-recipient-reply"]) need.push(`envelope/${n}`);
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");
+  // Invitations, named and open (sphere-api.md section 4).
+  for (const n of ["valid-invitation-named", "valid-invitation-open", "invalid-invitation-owner-without-obi", "invalid-invitation-named-max-uses", "invalid-invitation-email-domain", "valid-invitation-preview-response"]) need.push(`wire/${n}`);
   let ok = 0;
   for (const n of need) {
     if (names.has(n)) ok++;

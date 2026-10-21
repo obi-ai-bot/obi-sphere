@@ -393,6 +393,14 @@ export function verifyChain(chain, ctx) {
 // ---------------------------------------------------------------------------------------------
 // One conformance case, as the runner hands it to an implementation on stdin.
 
+/** A wire document (sphere-api.md) judged by the wire schema `context.schema` names, and nothing else. */
+export function verifyWire(input, context) {
+  const name = context?.schema;
+  if (typeof name !== "string" || !/^wire\/[a-z-]+(\.[a-z]+)?$/.test(name) || !schemas().validators[name]) return fail("bad_request", `no wire schema ${name}`);
+  const errors = schemaErrors(name, input);
+  return errors.length ? fail("bad_request", errors.join("; ")) : OK;
+}
+
 export function judge(testCase) {
   switch (testCase.case) {
     case "envelope":
@@ -401,6 +409,8 @@ export function judge(testCase) {
       return verifyCard(testCase.input, testCase.context);
     case "audit":
       return verifyChain(testCase.input, testCase.context);
+    case "wire":
+      return verifyWire(testCase.input, testCase.context);
     default:
       return fail("bad_request", `unknown case kind ${testCase.case}`);
   }

@@ -90,9 +90,9 @@ The conformance suite has card fixtures for each of these.
 
 ## 3. Joining, rotating and leaving
 
-**Binding the owner key.** A Sphere binds one owner key per owner, the first time it sees that owner: when the Sphere is created (its admin) or when the owner's first invitation is redeemed. The invitation's one-time secret is what authorizes the binding. From then on every card for that owner MUST be signed by the bound key.
+**Binding the owner key.** A Sphere binds one owner key per owner, the first time it sees that owner: when the Sphere is created (its admin) or when the first invitation for that owner is redeemed: a named invitation's owner, or the owner an open invitation's card names. The invitation's secret is what authorizes the binding. From then on every card for that owner MUST be signed by the bound key.
 
-**Joining.** An admin invites one Obi of one owner; the Obi redeems the invitation with its signed card ([sphere-api.md](sphere-api.md), "Invitations"). Its first key becomes valid from the next audit sequence number.
+**Joining.** An admin invites one Obi of one owner (a named invitation), or makes one link for up to `max_uses` Obis whose cards name their own `obi_id` and owner (an open invitation); the Obi redeems it with its signed card ([sphere-api.md](sphere-api.md), "Invitations"). Its first key becomes valid from the next audit sequence number.
 
 **Rotating an Obi key.** The Obi gets a new card from its owner: same `obi_id`, `sphere` and `owner_key`, a higher `card_seq`, the new `key_id` and `public_key`, signed by the owner key. It sends it with `PUT /v0.1/spheres/{sphere}/members/{obi}/card`, authenticated with a token whose actor proof was signed by its current key. The Sphere then:
 
