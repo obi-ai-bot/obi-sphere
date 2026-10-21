@@ -74,6 +74,7 @@ share_offer:              request ─► [share_status…] ─► share_revoke o
 6. A `decline` may come at any point before the end, before or after an `accept`.
 7. `run_progress`, `run_return` and `run_cancel` belong only to a `run_request`'s exchange. A `run_return` comes only after its `accept`; `run_progress` and `run_cancel` may come before it or after it.
 8. `share_status` and `share_revoke` belong only to a `share_offer`'s exchange, and a `share_offer`'s exchange takes nothing else but a `decline` (its receiver's owner doesn't want the share). There is no `accept`: a share holds from its offer until its `share_revoke` or `decline`, whatever its `expires_at` (which bounds only when the receiver may first act on the offer).
+9. In a `run_request`'s or a `share_offer`'s exchange, a `decline` has no `note`: what the chain keeps of guest jobs and shares is typed fields only, never words (section 14).
 
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
@@ -135,7 +136,7 @@ The receiver takes the request on. `by_rule` (optional) names the remembered dec
 
 ### 5.6 `decline`
 
-No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `share_used` (a `run_request` on a share whose money left this period is under what the job would need: section 16), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200).
+No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `share_used` (a `run_request` on a share whose money left this period is under what the job would need: section 16), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200), except in a `run_request`'s or a `share_offer`'s exchange, where a decline has none (section 4, rule 9): the reason says it.
 
 ### 5.7 `result`
 
@@ -189,7 +190,7 @@ Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14).
 
 | Field | Required | Meaning |
 |---|---|---|
-| `title` | yes | What the job is, one line (200). Data. |
+| `title` | yes | What the job is, one line (200). Data. It stays in the audit chain: the sender's Obi keeps it to the job's name, never its words. |
 | `agent` | yes | `claude` or `codex`: the agent's CLI that runs it, signed in to the sender's owner's own account through the job channel. |
 | `model` | no | The model, as that CLI takes it. |
 | `repo` | yes | `owner/name`, for the receiver's rules and the job's card. |
@@ -204,15 +205,15 @@ What the sender's owner asked their own agent to do is **not** in the request: i
 
 ### 5.11 `run_progress`
 
-Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`; `note` is optional one-line data (200). The receiver sends one when the job pauses and when it resumes, and SHOULD send no other (the job channel has a heartbeat): so the chain shows each pause and resume.
+Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`. The receiver sends one when the job pauses and when it resumes, and SHOULD send no other (the job channel has a heartbeat): so the chain shows each pause and resume.
 
 ### 5.12 `run_return`
 
-The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, `cost_cents` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
+The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `cost_cents` as in a result. No note: the reason says why. The sender can run it again, at home or on another Mac, from those commits.
 
 ### 5.13 `run_cancel`
 
-The request's own sender calls off its `run_request` (its owner cancelled the job). Ends the exchange. `note` is optional one-line data. The receiver stops the job at once and sends nothing more.
+The request's own sender calls off its `run_request` (its owner cancelled the job). Ends the exchange. The receiver stops the job at once and sends nothing more.
 
 ### 5.14 `share_offer`
 
@@ -232,11 +233,11 @@ The key itself never travels: not in this message, the job channel or anything e
 
 ### 5.15 `share_status`
 
-How much of a share its receiver's owner used this period, from the key holder's Obi, in the offer's exchange: `grant`, `used_cents`, `limit_cents` (it changes when the key holder changes the share), `resets`, and an optional one-line `note` (data, 200). Sent after each job on the share, when the share changes or its period resets, and at most once an hour otherwise.
+How much of a share its receiver's owner used this period, from the key holder's Obi, in the offer's exchange: `grant`, `used_cents`, `limit_cents` (it changes when the key holder changes the share), and `resets`. Sent after each job on the share, when the share changes or its period resets, and at most once an hour otherwise.
 
 ### 5.16 `share_revoke`
 
-The key holder takes a share back: `grant` and an optional one-line `note` (data, 200). Ends the offer's exchange. The receiver's Obi stops offering the share at once; the key holder's Obi declines every later `run_request` on it (`policy`).
+The key holder takes a share back: `grant`. Ends the offer's exchange. The receiver's Obi stops offering the share at once; the key holder's Obi declines every later `run_request` on it (`policy`).
 
 ## 6. Acceptance conditions
 

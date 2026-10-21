@@ -218,6 +218,8 @@ export interface ExchangeMessage {
   from: string;
   to: string;
   result_for?: string | undefined;
+  /** Whether the message's body has a `note` (a decline's words, rule 9). */
+  has_note?: boolean | undefined;
 }
 
 /**
@@ -246,6 +248,8 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
+  // No words in a guest job's or a share's exchange: a decline there has no note (rule 9).
+  if (reply.type === "decline" && (request.type === "run_request" || request.type === "share_offer") && reply.has_note) return `a decline of a ${request.type} has no note`;
   return null;
 }
 
@@ -266,4 +270,5 @@ export const exchangeMessage = (env: Envelope): ExchangeMessage => ({
   from: env.from,
   to: env.to,
   result_for: env.type === "result" ? (env.body.for as string) : undefined,
+  has_note: env.body.note !== undefined,
 });

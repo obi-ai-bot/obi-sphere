@@ -72,9 +72,19 @@ describe("run_request exchanges", () => {
     const byHost = await w.send(await w.reply(req, "run_cancel", {}), host);
     expect(byHost.status).toBe(409);
     expect(byHost.body.error.code).toBe("bad_reply");
-    const cancel = await w.envelope("obi-ernesto", "obi-wellington", "run_cancel", { note: "Not needed." }, { correlation_id: req.id, in_reply_to: req.id });
+    const cancel = await w.envelope("obi-ernesto", "obi-wellington", "run_cancel", {}, { correlation_id: req.id, in_reply_to: req.id });
     expect((await w.send(cancel, guest)).status).toBe(202);
     expect((await w.send(await w.reply(req, "accept", {}), host)).status).toBe(409);
+  });
+
+  it("keeps words out: a decline of a run_request has no note, and run replies have none", async () => {
+    const w = await sharing("e2e-no-words");
+    const { req, host } = await accepted(w);
+    const worded = await w.send(await w.reply(req, "decline", { reason: "not_free", note: "Wellington is at the Mac." }), host);
+    expect(worded.status).toBe(409);
+    const progress = await w.send(await w.reply(req, "run_progress", { state: "paused", note: "back soon" }), host);
+    expect(progress.status).toBe(400);
+    expect((await w.send(await w.reply(req, "decline", { reason: "not_free" }), host)).status).toBe(202);
   });
 
   it("refuses a run_return before the accept, and anything after it", async () => {

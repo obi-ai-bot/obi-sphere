@@ -261,7 +261,9 @@ Take the entries from seq 1 (fetch more pages until the last answer's `head.seq`
 6. No earlier entry has the same envelope `id`.
 7. A reply keeps every exchange rule of protocol.md section 4 against the earlier request its `in_reply_to` names and the earlier replies to it, as `exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs) implements them. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
 
-Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
+Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash.
+
+**No rollback, no fork.** Each Obi MUST keep the last head it verified (`seq` and `hash`) and the `seq` and `hash` the Sphere answered for each of its own sends, and reject a chain whose head is lower than the one it verified, whose entry at that `seq` has another hash, or that lacks one of its own sends at its `seq` with its `hash`. A Sphere that rolled its chain back, or shows two Obis two different chains, is caught by the first Obi that reads it again. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
 
 ## 8. Running a Sphere locally
 

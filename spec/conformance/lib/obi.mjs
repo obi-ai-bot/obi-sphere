@@ -420,6 +420,8 @@ export function exchangeProblem(reply, request, earlier) {
   if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
+  // No words in a guest job's or a share's exchange: a decline there has no note.
+  if (reply.type === "decline" && ["run_request", "share_offer"].includes(request.type) && reply.body?.note !== undefined) return `a decline of a ${request.type} has no note`;
   return null;
 }
 
