@@ -10,18 +10,29 @@ import { TERMINAL_TYPES, seconds } from "../protocol/envelope.ts";
 
 const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
 
-/** Why an exchange's channel may not be open now, or null when it may: it needs its accept, no end, and an unexpired request. */
+/** How long a channel outlives its job's limit: the job's wind-down, and its commits coming back. */
+export const CHANNEL_GRACE_SECONDS = 900;
+/** The most channels an Obi has open at once. */
+export const MAX_OPEN_CHANNELS = 8;
+
+/**
+ * Why an exchange's channel may not be open now, or null when it may: it needs its accept and no
+ * end, and lasts until the accept plus the request's max_minutes plus a grace, whatever the
+ * request's expires_at (up to 30 days) says.
+ */
 export async function channelProblem(db: D1Database, sphere: string, correlationId: string, now: number): Promise<string | null> {
   const [requests, replies] = await db.batch([
     db.prepare("SELECT envelope FROM audit WHERE sphere = ?1 AND msg_id = ?2 AND type = 'run_request'").bind(sphere, correlationId),
-    db.prepare("SELECT type FROM audit WHERE sphere = ?1 AND in_reply_to = ?2").bind(sphere, correlationId),
+    db.prepare("SELECT type, recorded_at FROM audit WHERE sphere = ?1 AND in_reply_to = ?2").bind(sphere, correlationId),
   ]);
   const request = (requests!.results as { envelope: string }[])[0];
   if (!request) return "no such run_request";
-  const types = (replies!.results as { type: string }[]).map((r) => r.type);
-  if (types.some((t) => TERMINAL_TYPES.includes(t))) return "the exchange has ended";
-  if (!types.includes("accept")) return "the run_request hasn't been accepted";
-  if (!(seconds((JSON.parse(request.envelope) as { expires_at: string }).expires_at) > now)) return "the run_request has expired";
+  const rows = replies!.results as { type: string; recorded_at: string }[];
+  if (rows.some((r) => TERMINAL_TYPES.includes(r.type))) return "the exchange has ended";
+  const accept = rows.find((r) => r.type === "accept");
+  if (!accept) return "the run_request hasn't been accepted";
+  const minutes = (JSON.parse(request.envelope) as { body: { max_minutes?: number } }).body.max_minutes ?? 480;
+  if (!(seconds(accept.recorded_at) + minutes * 60 + CHANNEL_GRACE_SECONDS > now)) return "the job's time is up";
   return null;
 }
 
@@ -39,9 +50,18 @@ export async function openChannel(request: Request, env: Env, deps: Deps, sphere
   if (!role) throw apiError("forbidden", "only the exchange's two Obis open its channel");
   const problem = await channelProblem(env.DB, sphere.id, correlationId, nowS(deps));
   if (problem) throw apiError("conflict", problem);
+  // At most this many channels open at once for one Obi: its live exchanges other than this one.
+  const live = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM audit r JOIN audit a ON a.sphere = r.sphere AND a.in_reply_to = r.msg_id AND a.type = 'accept'
+      WHERE r.sphere = ?1 AND r.type = 'run_request' AND (r.from_obi = ?2 OR r.to_obi = ?2) AND r.msg_id != ?3
+        AND NOT EXISTS (SELECT 1 FROM audit t WHERE t.sphere = r.sphere AND t.in_reply_to = r.msg_id AND t.type IN (${TERMINAL_TYPES.map((t) => `'${t}'`).join(", ")}))
+        AND CAST(strftime('%s', a.recorded_at) AS INTEGER) + COALESCE(json_extract(r.envelope, '$.body.max_minutes'), 480) * 60 + ?4 > ?5`,
+  ).bind(sphere.id, obi, correlationId, CHANNEL_GRACE_SECONDS, nowS(deps)).first<{ n: number }>();
+  if ((live?.n ?? 0) >= MAX_OPEN_CHANNELS) throw apiError("rate_limited", `an Obi has at most ${MAX_OPEN_CHANNELS} job channels open at once`);
   const relay = env.CHANNELS.get(env.CHANNELS.idFromName(`${sphere.id}/${correlationId}`));
   // The relay checks this token stays unrevoked (a card rotation or a revocation revokes it).
   const token = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")![1]!;
-  const headers = new Headers({ Upgrade: "websocket", "X-Obi-Token": await tokenHash(token), "X-Obi-Role": role, "X-Obi-Sphere": sphere.id, "X-Obi-Exchange": correlationId, "X-Obi-Guest": row.from_obi, "X-Obi-Host": row.to_obi });
+  // The Worker's clock, as the relay's alarms read it (zero apart in production; a test's own clock otherwise).
+  const headers = new Headers({ Upgrade: "websocket", "X-Obi-Clock-Offset": String(deps.now() - Date.now()), "X-Obi-Token": await tokenHash(token), "X-Obi-Role": role, "X-Obi-Sphere": sphere.id, "X-Obi-Exchange": correlationId, "X-Obi-Guest": row.from_obi, "X-Obi-Host": row.to_obi });
   return relay.fetch("https://channel.internal/", { headers });
 }
