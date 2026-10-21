@@ -174,6 +174,20 @@ describe("runner status", () => {
     expect(seen.body.members.find((m: { obi: string }) => m.obi === "obi-wellington")?.runner).toBeUndefined();
   });
 
+  it("never takes an older status in place of a newer one, and isn't served once its key is rotated away", async () => {
+    const w = await sharing("e2e-runner-old");
+    const host = await w.obiToken("obi-wellington");
+    const path = `/v0.1/spheres/${w.sphere}/members/obi-wellington/runner`;
+    const older = await runnerStatus(w, "obi-wellington", { sphere: w.sphere, for: "*" });
+    w.clock.advance(60);
+    expect((await w.call("PUT", path, { token: host, body: await runnerStatus(w, "obi-wellington", { sphere: w.sphere, for: "*" }) })).status).toBe(200);
+    expect((await w.call("PUT", path, { token: host, body: older })).status).toBe(400);
+    // Its key rotated away: the status signed with it isn't shown.
+    await env.DB.prepare("UPDATE member_keys SET valid_until_seq = 1 WHERE sphere = ?1 AND obi = 'obi-wellington'").bind(w.sphere).run();
+    const seen = await w.call("GET", `/v0.1/spheres/${w.sphere}/members`, { token: await w.obiToken("obi-ernesto") });
+    expect(seen.body.members.find((m: { obi: string }) => m.obi === "obi-wellington")?.runner).toBeUndefined();
+  });
+
   it("goes with DELETE, and with the member's revocation", async () => {
     const w = await sharing();
     const host = await w.obiToken("obi-wellington");
@@ -364,7 +378,7 @@ describe("job channel limits", () => {
     return { w, req, guest, host, relay };
   }
 
-  it("closes both sides once either side's token is revoked (a card rotation does it)", async () => {
+  it("closes a side once its token is revoked (a card rotation does it), and one whose token expired", async () => {
     const { w, req, guest, host, relay } = await pair("e2e-ch-token");
     const g = side(await connect(w, req.id as string, guest));
     const h = side(await connect(w, req.id as string, host));
@@ -372,8 +386,43 @@ describe("job channel limits", () => {
     expect(g.closed).toBeNull();
     await env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sphere = ?1 AND actor = 'obi-ernesto'").bind(w.sphere).run();
     await runDurableObjectAlarm(relay);
-    await until(() => g.closed !== null && h.closed !== null);
-    expect([g.closed!.code, h.closed!.code]).toEqual([4001, 4001]);
+    await until(() => g.closed !== null);
+    expect(g.closed!.code).toBe(4001);
+    expect(h.closed).toBeNull();
+    await env.DB.prepare("UPDATE tokens SET expires_at_s = 0 WHERE sphere = ?1 AND actor = 'obi-wellington'").bind(w.sphere).run();
+    await runDurableObjectAlarm(relay);
+    await until(() => h.closed !== null);
+    expect(h.closed!.code).toBe(4007);
+  });
+
+  it("lasts until the accept plus the job's minutes plus 15, whatever the request's expires_at", async () => {
+    const { w, req, guest, relay } = await pair("e2e-ch-life");
+    const g = side(await connect(w, req.id as string, guest));
+    await runDurableObjectAlarm(relay);
+    expect(g.closed).toBeNull();
+    w.clock.advance(120 * 60 + 901);
+    const late = await connect(w, req.id as string, await w.obiToken("obi-ernesto"));
+    expect(late.status).toBe(409);
+    // The relay's clock moves with the Worker's, as it does in production.
+    await runInDurableObject(relay, async (_i, state) => state.storage.put("offset", w.clock.now() - Date.now()));
+    await runDurableObjectAlarm(relay);
+    await until(() => g.closed !== null);
+    expect(g.closed!.code).toBe(4001);
+  });
+
+  it("lets an Obi have at most 8 channels open at once", async () => {
+    const w = await sharing("e2e-ch-eight");
+    const guest = await w.obiToken("obi-ernesto");
+    const host = await w.obiToken("obi-wellington");
+    const ids: string[] = [];
+    for (let i = 0; i < 9; i++) {
+      const req = await runRequest(w);
+      await w.send(req, guest);
+      await w.send(await w.reply(req, "accept", {}), host);
+      ids.push(req.id as string);
+    }
+    // Eight others live: the ninth is one too many.
+    expect((await connect(w, ids[8]!, guest)).status).toBe(429);
   });
 
   it("closes a side whose other side doesn't join within 10 minutes", async () => {
@@ -381,7 +430,7 @@ describe("job channel limits", () => {
     const g = side(await connect(w, req.id as string, guest));
     await runDurableObjectAlarm(relay);
     expect(g.closed).toBeNull();
-    await runInDurableObject(relay, async (_i, state) => state.storage.put("alone", Date.now() - 11 * 60_000));
+    await runInDurableObject(relay, async (_i, state) => state.storage.put("alone", Date.now() + ((await state.storage.get<number>("offset")) ?? 0) - 11 * 60_000));
     await runDurableObjectAlarm(relay);
     await until(() => g.closed !== null);
     expect(g.closed!.code).toBe(4005);
@@ -392,7 +441,7 @@ describe("job channel limits", () => {
     const g = side(await connect(w, req.id as string, guest));
     const h = side(await connect(w, req.id as string, host));
     await until(() => g.texts.includes('{"peer":"joined"}'));
-    await runInDurableObject(relay, async (_i, state) => state.storage.put("last", Date.now() - 6 * 60_000));
+    await runInDurableObject(relay, async (_i, state) => state.storage.put("last", Date.now() + ((await state.storage.get<number>("offset")) ?? 0) - 6 * 60_000));
     await runDurableObjectAlarm(relay);
     await until(() => g.closed !== null && h.closed !== null);
     expect([g.closed!.code, h.closed!.code]).toEqual([4006, 4006]);
