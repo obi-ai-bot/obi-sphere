@@ -177,7 +177,7 @@ function checkChannel() {
   const shared = x25519Shared(sides.guest.privateKey, sides.host.publicRaw);
   ok += eq("the shared secret", shared, v.shared);
   const k = channelKeys(shared, fromB64url(v.guest.hello_bytes), fromB64url(v.host.hello_bytes));
-  ok += eq("the salt", k.salt, v.salt) + eq("guest>host key", k.guestToHost, v.guest_to_host_key) + eq("host>guest key", k.hostToGuest, v.host_to_guest_key);
+  ok += eq("the salt", k.salt, v.salt) + eq("guest>host key", k.guestToHost, v.guest_to_host) + eq("host>guest key", k.hostToGuest, v.host_to_guest);
   for (const f of v.frames) {
     const key = f.direction === "guest>host" ? k.guestToHost : k.hostToGuest;
     ok += eq(`the ${f.direction} frame`, sealFrame(key, f.counter, f.stream, f.kind, fromB64url(f.payload)), f.wire);

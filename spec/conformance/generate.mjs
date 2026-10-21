@@ -532,8 +532,8 @@ export function buildFixtures() {
     host: { obi: "obi-a", key_id: A.keyId, public_key: A.publicKey, x25519_private: b64url(sha256(Buffer.from("obi-conformance-channel-host-x25519", "utf8"))), hello: hh, hello_bytes: b64url(hhBytes) },
     shared: b64url(shared),
     salt: b64url(k.salt),
-    guest_to_host_key: b64url(k.guestToHost),
-    host_to_guest_key: b64url(k.hostToGuest),
+    guest_to_host: b64url(k.guestToHost),
+    host_to_guest: b64url(k.hostToGuest),
     nonce_0: b64url(Buffer.alloc(12)),
     nonce_258: "AAAAAAAAAAAAAAEC",
     frames: [

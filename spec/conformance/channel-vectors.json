@@ -36,8 +36,8 @@
   },
   "shared": "6LUaH-Yq6GU9D4caCDxgP94FaD5Y8AbFMQ1pa3pOg2Q",
   "salt": "O2g5Q-W5RDj8k3oY3R43A3RkKgm9sug6nGXW6gJVdj8",
-  "guest_to_host_key": "18lEK8uvo9KZ1Yh6bTYUF84EI0gNmZ2SMrc8Mgt0qr0",
-  "host_to_guest_key": "stJJdufM2GLtmRXQHYLEDNgbu97ZXUpvGPoIoHGQUfs",
+  "guest_to_host": "18lEK8uvo9KZ1Yh6bTYUF84EI0gNmZ2SMrc8Mgt0qr0",
+  "host_to_guest": "stJJdufM2GLtmRXQHYLEDNgbu97ZXUpvGPoIoHGQUfs",
   "nonce_0": "AAAAAAAAAAAAAAAA",
   "nonce_258": "AAAAAAAAAAAAAAEC",
   "frames": [
