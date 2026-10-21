@@ -205,7 +205,7 @@ What the sender's owner asked their own agent to do is **not** in the request: i
 
 ### 5.11 `run_progress`
 
-Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`. The receiver sends one when the job pauses and when it resumes, and SHOULD send no other (the job channel has a heartbeat): so the chain shows each pause and resume.
+Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` or `resumed`. The receiver sends one as the job starts and as it runs, and SHOULD send no other (the job channel has a heartbeat). It SHOULD NOT send `paused` or `resumed`: in the chain, they would tell the sender, to the second, when the receiver's owner came back to their Mac (a `run_return` with `owner_back` says only that they came back and stayed).
 
 ### 5.12 `run_return`
 

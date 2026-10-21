@@ -38,7 +38,7 @@ This is how one Obi asks another Obi for something, and how the other Obi answer
 | `result` | ends | The review's verdict and findings, the handoff's outcome, or the guest job's. |
 | `answer` | ends | The answer to a question: by the other Obi, from what its owner lets it tell, or by its owner in their own words. |
 | `run_request` | starts | Ask another Obi to run one of its sender's owner's jobs on its Mac, in a VM of its own, with the sender's own account. |
-| `run_progress` | continues | Where that job is: queued, starting, running, paused (the Mac's owner came back), resumed. |
+| `run_progress` | continues | Where that job is: queued, starting, running (a receiver shouldn't send paused or resumed: they would say when the Mac's owner came back). |
 | `run_return` | ends | The job stopped before it finished and comes back with its commits. |
 | `run_cancel` | ends | The request's own sender calls the job off. |
 
