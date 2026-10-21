@@ -518,7 +518,8 @@ export function buildFixtures() {
   const xg = x25519FromPrivate(sha256(Buffer.from("obi-conformance-channel-guest-x25519", "utf8")));
   const xh = x25519FromPrivate(sha256(Buffer.from("obi-conformance-channel-host-x25519", "utf8")));
   const cid = uuidFor("channel-vectors");
-  const hello = (obi, role, x, key) => signHello({ protocol: "obi/0.1 channel", sphere: SPHERE, correlation_id: cid, obi, role, x25519: b64url(x.publicRaw), key_id: key.keyId }, key.privateKey);
+  const hello = (obi, role, x, key) => signHello({ protocol: "obi/0.1 channel", sphere: SPHERE, correlation_id: cid, obi, role, x25519: b64url(x.publicRaw),
+    nonce: b64url(sha256(Buffer.from(`obi-conformance-channel-${role}-nonce`, "utf8"))), key_id: key.keyId }, key.privateKey);
   const gh = hello("obi-b", "guest", xg, B), hh = hello("obi-a", "host", xh, A);
   const ghBytes = Buffer.from(canonicalize(gh), "utf8"), hhBytes = Buffer.from(canonicalize(hh), "utf8");
   const shared = x25519Shared(xg.privateKey, xh.publicRaw);
