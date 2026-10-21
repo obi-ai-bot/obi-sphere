@@ -43,7 +43,7 @@ describe("run_request exchanges", () => {
     const host = await w.obiToken("obi-wellington");
     const req = await runRequest(w);
     expect((await w.send(req, guest)).status).toBe(202);
-    for (const [type, body] of [["run_progress", { state: "queued" }], ["accept", {}], ["run_progress", { state: "running" }], ["run_progress", { state: "paused" }], ["result", RUN_RESULT]] as const) {
+    for (const [type, body] of [["run_progress", { state: "queued" }], ["accept", {}], ["run_progress", { state: "running" }], ["result", RUN_RESULT]] as const) {
       expect((await w.send(await w.reply(req, type, body), host)).status).toBe(202);
     }
   });
@@ -82,8 +82,16 @@ describe("run_request exchanges", () => {
     const { req, host } = await accepted(w);
     const worded = await w.send(await w.reply(req, "decline", { reason: "not_free", note: "Wellington is at the Mac." }), host);
     expect(worded.status).toBe(409);
-    const progress = await w.send(await w.reply(req, "run_progress", { state: "paused", note: "back soon" }), host);
+    const progress = await w.send(await w.reply(req, "run_progress", { state: "running", note: "back soon" }), host);
     expect(progress.status).toBe(400);
+    // No pause in the chain, nor a status: either would say when Wellington is at his Mac.
+    expect((await w.send(await w.reply(req, "run_progress", { state: "paused" }), host)).status).toBe(400);
+    const status = await w.send(await w.reply(req, "status", { state: "waiting_on_owner" }), host);
+    expect(status.status).toBe(409);
+    expect(status.body.error.code).toBe("bad_reply");
+    // A job sent back says only that the host was unavailable: no reason of its owner's, no minutes.
+    expect((await w.send(await w.reply(req, "run_return", { reason: "owner_back" }), host)).status).toBe(400);
+    expect((await w.send(await w.reply(req, "run_return", { reason: "host_unavailable", minutes: 18 }), host)).status).toBe(400);
     expect((await w.send(await w.reply(req, "decline", { reason: "not_free" }), host)).status).toBe(202);
   });
 
@@ -93,10 +101,10 @@ describe("run_request exchanges", () => {
     const host = await w.obiToken("obi-wellington");
     const req = await runRequest(w);
     await w.send(req, guest);
-    const early = await w.send(await w.reply(req, "run_return", { reason: "owner_back", minutes: 3 }), host);
+    const early = await w.send(await w.reply(req, "run_return", { reason: "host_unavailable" }), host);
     expect(early.status).toBe(409);
     await w.send(await w.reply(req, "accept", {}), host);
-    expect((await w.send(await w.reply(req, "run_return", { reason: "owner_back", minutes: 18 }), host)).status).toBe(202);
+    expect((await w.send(await w.reply(req, "run_return", { reason: "host_unavailable" }), host)).status).toBe(202);
     expect((await w.send(await w.reply(req, "run_progress", { state: "running" }), host)).status).toBe(409);
   });
 
@@ -329,7 +337,7 @@ describe("job channels", () => {
   });
 });
 
-// Sharing a company API account (spec/protocol.md sections 5.14 to 5.16 and 16): share_offer
+// Sharing a company API account (spec/protocol.md sections 5.14 to 5.16 and 15): share_offer
 // exchanges. Wellington holds the key and gives Ernesto a share.
 const OFFER = { grant: "g-0123456789ab", agent: "claude", account: "Deskree API", share: 30, limit_cents: 12000, period: "month", resets: "2026-11-01T00:00:00Z" };
 const TEAM_SHARES = { id: "team-shares", from_owner: "*", to_owner: "*", actions: ["share_offer"], repos: ["*"] };

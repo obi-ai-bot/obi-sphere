@@ -1,7 +1,7 @@
 // One job channel's relay (spec/sphere-api.md section 6.3): a Durable Object per run_request
 // exchange. It pairs the guest's and the host's WebSocket and forwards each binary frame to the
 // other side, unchanged and unread: the frames are encrypted end to end (protocol.md section 13).
-// Its own text frames say when the other side joins or leaves. Every 5 seconds while a side is
+// Its own text frames say when the other side joins or leaves.
 // Every 30 seconds while a side is connected it looks again at the exchange, the two members and
 // the tokens each side opened with, and closes both sides once the exchange has ended, its job's
 // time is up, or either Obi was revoked; a side whose token was revoked, or has expired, is closed

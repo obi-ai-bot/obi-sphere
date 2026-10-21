@@ -15,7 +15,7 @@ function __ucs2length(str) { let n = 0; for (const _ of str) n++; return n; }
 export const envelope = validate21;
 const schema32 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/envelope.schema.json","title":"Obi-to-Obi envelope v0.1","description":"Every message between Obis is one envelope carrying one typed action in `body`. The signature covers every other field (spec/protocol.md, \"Signing\"). There is no free-text message type, and no field outside this schema is allowed.","type":"object","additionalProperties":false,"required":["protocol","id","type","from","to","sphere","correlation_id","created_at","expires_at","key_id","body","signature"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"id":{"$ref":"common.schema.json#/$defs/uuid","description":"Unique id of this message."},"type":{"$ref":"common.schema.json#/$defs/action_type"},"from":{"$ref":"common.schema.json#/$defs/obi_id","description":"The sending Obi."},"to":{"$ref":"common.schema.json#/$defs/obi_id","description":"The receiving Obi."},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id","description":"The Sphere this message travels in."},"correlation_id":{"$ref":"common.schema.json#/$defs/uuid","description":"The exchange this message belongs to: on a request, its own id; on a reply, the request's id."},"in_reply_to":{"$ref":"common.schema.json#/$defs/uuid","description":"On a reply only: the id of the request it answers."},"created_at":{"$ref":"common.schema.json#/$defs/timestamp"},"expires_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"After this time the receiver must not act on the message."},"key_id":{"$ref":"common.schema.json#/$defs/key_id","description":"The sender's signing key, as its agent card publishes it."},"body":{"type":"object","description":"The action's fields: the schema in actions/<type>.schema.json."},"signature":{"$ref":"common.schema.json#/$defs/signature","description":"Ed25519 over the signing input of every other field."}},"allOf":[{"if":{"required":["type"],"properties":{"type":{"$ref":"common.schema.json#/$defs/request_type"}}},"then":{"not":{"required":["in_reply_to"]}}},{"if":{"required":["type"],"properties":{"type":{"enum":["status","accept","decline","result","answer","run_progress","run_return","run_cancel","share_status","share_revoke"]}}},"then":{"required":["in_reply_to"]}},{"if":{"required":["type"],"properties":{"type":{"const":"review_request"}}},"then":{"properties":{"body":{"$ref":"actions/review_request.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"question"}}},"then":{"properties":{"body":{"$ref":"actions/question.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"handoff"}}},"then":{"properties":{"body":{"$ref":"actions/handoff.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"status"}}},"then":{"properties":{"body":{"$ref":"actions/status.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"accept"}}},"then":{"properties":{"body":{"$ref":"actions/accept.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"decline"}}},"then":{"properties":{"body":{"$ref":"actions/decline.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"result"}}},"then":{"properties":{"body":{"$ref":"actions/result.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"answer"}}},"then":{"properties":{"body":{"$ref":"actions/answer.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"run_request"}}},"then":{"properties":{"body":{"$ref":"actions/run_request.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"run_progress"}}},"then":{"properties":{"body":{"$ref":"actions/run_progress.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"run_return"}}},"then":{"properties":{"body":{"$ref":"actions/run_return.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"run_cancel"}}},"then":{"properties":{"body":{"$ref":"actions/run_cancel.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"share_offer"}}},"then":{"properties":{"body":{"$ref":"actions/share_offer.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"share_status"}}},"then":{"properties":{"body":{"$ref":"actions/share_status.schema.json"}}}},{"if":{"required":["type"],"properties":{"type":{"const":"share_revoke"}}},"then":{"properties":{"body":{"$ref":"actions/share_revoke.schema.json"}}}}]};
 const schema34 = {"description":"The action types that start an exchange.","enum":["review_request","question","handoff","run_request","share_offer"]};
-const schema120 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_progress.schema.json","title":"run_progress body","description":"Where a run_request's job is on the receiver's Mac, without finishing it. Only in a run_request's exchange.","type":"object","additionalProperties":false,"required":["state"],"properties":{"state":{"enum":["queued","starting","running","paused","resumed"]}}};
+const schema120 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_progress.schema.json","title":"run_progress body","description":"Where a run_request's job is on the receiver's Mac, without finishing it. Only in a run_request's exchange.","type":"object","additionalProperties":false,"required":["state"],"properties":{"state":{"enum":["queued","starting","running"]}}};
 const schema126 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_cancel.schema.json","title":"run_cancel body","description":"The request's own sender calls off its run_request. The one reply a request's sender sends. Ends the exchange.","type":"object","additionalProperties":false,"required":[],"properties":{}};
 const schema140 = {"description":"The protocol version this document is written against.","const":"obi/0.1"};
 const schema141 = {"description":"A UUID in lower-case canonical form.","type":"string","minLength":36,"maxLength":36,"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"};
@@ -2803,7 +2803,7 @@ return errors === 0;
 }
 validate44.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema77 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/result.schema.json","title":"result body","description":"Finishes a review_request, a handoff or a run_request: a review's verdict and findings, a handoff's outcome, or a guest job's. `for` says which. A question is answered by `answer`, never by a result.","oneOf":[{"title":"result of a review_request","type":"object","additionalProperties":false,"required":["for","outcome","repo","head_sha","findings"],"properties":{"for":{"const":"review_request"},"outcome":{"enum":["approved","changes_requested","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"findings":{"$ref":"../common.schema.json#/$defs/findings"},"acceptance":{"$ref":"../common.schema.json#/$defs/acceptance_results"},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id"},"summary":{"$ref":"../common.schema.json#/$defs/block_text","x-obi-text":"data","minLength":1,"maxLength":4000}},"if":{"required":["outcome"],"properties":{"outcome":{"enum":["approved","changes_requested"]}}},"then":{"required":["acceptance"]}},{"title":"result of a handoff","type":"object","additionalProperties":false,"required":["for","outcome","repo","acceptance"],"properties":{"for":{"const":"handoff"},"outcome":{"enum":["done","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"head_branch":{"$ref":"../common.schema.json#/$defs/branch"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"pr":{"$ref":"../common.schema.json#/$defs/pr_number"},"acceptance":{"$ref":"../common.schema.json#/$defs/acceptance_results"},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id"},"summary":{"$ref":"../common.schema.json#/$defs/block_text","x-obi-text":"data","minLength":1,"maxLength":4000}}},{"title":"result of a run_request","type":"object","additionalProperties":false,"required":["for","outcome","repo","host"],"properties":{"for":{"const":"run_request"},"outcome":{"enum":["done","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"commits":{"$ref":"../common.schema.json#/$defs/bundle","description":"The job's commits, a git bundle on the job channel. Absent when it made none."},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"host":{"$ref":"../common.schema.json#/$defs/host_use"},"cost_cents":{"$ref":"../common.schema.json#/$defs/cents","description":"On a share of the receiver's owner's API account (protocol.md section 16): what the job's model calls cost at list price."}}}]};
+const schema77 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/result.schema.json","title":"result body","description":"Finishes a review_request, a handoff or a run_request: a review's verdict and findings, a handoff's outcome, or a guest job's. `for` says which. A question is answered by `answer`, never by a result.","oneOf":[{"title":"result of a review_request","type":"object","additionalProperties":false,"required":["for","outcome","repo","head_sha","findings"],"properties":{"for":{"const":"review_request"},"outcome":{"enum":["approved","changes_requested","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"findings":{"$ref":"../common.schema.json#/$defs/findings"},"acceptance":{"$ref":"../common.schema.json#/$defs/acceptance_results"},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id"},"summary":{"$ref":"../common.schema.json#/$defs/block_text","x-obi-text":"data","minLength":1,"maxLength":4000}},"if":{"required":["outcome"],"properties":{"outcome":{"enum":["approved","changes_requested"]}}},"then":{"required":["acceptance"]}},{"title":"result of a handoff","type":"object","additionalProperties":false,"required":["for","outcome","repo","acceptance"],"properties":{"for":{"const":"handoff"},"outcome":{"enum":["done","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"head_branch":{"$ref":"../common.schema.json#/$defs/branch"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"pr":{"$ref":"../common.schema.json#/$defs/pr_number"},"acceptance":{"$ref":"../common.schema.json#/$defs/acceptance_results"},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id"},"summary":{"$ref":"../common.schema.json#/$defs/block_text","x-obi-text":"data","minLength":1,"maxLength":4000}}},{"title":"result of a run_request","type":"object","additionalProperties":false,"required":["for","outcome","repo","host"],"properties":{"for":{"const":"run_request"},"outcome":{"enum":["done","failed"]},"repo":{"$ref":"../common.schema.json#/$defs/repo"},"commits":{"$ref":"../common.schema.json#/$defs/bundle","description":"The job's commits, a git bundle on the job channel. Absent when it made none."},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"host":{"$ref":"../common.schema.json#/$defs/host_use"},"cost_cents":{"$ref":"../common.schema.json#/$defs/cents","description":"On a share of the receiver's owner's API account (protocol.md section 15): what the job's model calls cost at list price."}}}]};
 const schema101 = {"description":"A git bundle that travels on the exchange's job channel (protocol.md section 13), named by its SHA-256 and size.","type":"object","additionalProperties":false,"required":["sha256","bytes"],"properties":{"sha256":{"type":"string","minLength":64,"maxLength":64,"pattern":"^[0-9a-f]{64}$"},"bytes":{"type":"integer","minimum":1,"maximum":2147483648}}};
 const schema103 = {"description":"What a guest job used of the Mac it ran on.","type":"object","additionalProperties":false,"required":["wall_seconds","cpu_seconds","peak_memory_mb"],"properties":{"wall_seconds":{"type":"integer","minimum":0,"maximum":2592000},"cpu_seconds":{"type":"integer","minimum":0,"maximum":2592000000},"peak_memory_mb":{"type":"integer","minimum":0,"maximum":1048576}}};
 const schema104 = {"description":"An amount of US dollars in whole cents.","type":"integer","minimum":0,"maximum":100000000};
@@ -6049,7 +6049,7 @@ return errors === 0;
 }
 validate62.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema121 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_return.schema.json","title":"run_return body","description":"A run_request's job stopped before it finished and comes back to its owner with what it did (its commits travel on the job channel). Ends the exchange.","type":"object","additionalProperties":false,"required":["reason","minutes"],"properties":{"reason":{"enum":["owner_back","time_limit","stopped","sharing_off","shutdown","share_used"]},"minutes":{"type":"integer","minimum":0,"maximum":43200},"commits":{"$ref":"../common.schema.json#/$defs/bundle"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"host":{"$ref":"../common.schema.json#/$defs/host_use"},"cost_cents":{"$ref":"../common.schema.json#/$defs/cents","description":"On a share of the receiver's owner's API account (protocol.md section 16): what the job's model calls cost at list price."}}};
+const schema121 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_return.schema.json","title":"run_return body","description":"A run_request's job stopped before it finished and comes back to its owner with what it did (its commits travel on the job channel). Ends the exchange. It says nothing of how long it ran, nor what the receiver's owner did.","type":"object","additionalProperties":false,"required":["reason"],"properties":{"reason":{"enum":["host_unavailable","time_limit","share_used"],"description":"host_unavailable whatever made the receiver's Mac stop it (its owner back, stopped, sharing off, a shutdown, a share taken back): never which, nor when (protocol.md section 5.12)."},"commits":{"$ref":"../common.schema.json#/$defs/bundle"},"head_sha":{"$ref":"../common.schema.json#/$defs/sha"},"host":{"$ref":"../common.schema.json#/$defs/host_use"},"cost_cents":{"$ref":"../common.schema.json#/$defs/cents","description":"On a share of the receiver's owner's API account (protocol.md section 15): what the job's model calls cost at list price."}}};
 
 function validate64(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/run_return.schema.json" */;
@@ -6073,8 +6073,9 @@ vErrors.push(err0);
 }
 errors++;
 }
-if(data.minutes === undefined){
-const err1 = {instancePath,schemaPath:"#/required",keyword:"required",params:{missingProperty: "minutes"},message:"must have required property '"+"minutes"+"'"};
+for(const key0 in data){
+if(!(((((key0 === "reason") || (key0 === "commits")) || (key0 === "head_sha")) || (key0 === "host")) || (key0 === "cost_cents"))){
+const err1 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err1];
 }
@@ -6083,9 +6084,11 @@ vErrors.push(err1);
 }
 errors++;
 }
-for(const key0 in data){
-if(!((((((key0 === "reason") || (key0 === "minutes")) || (key0 === "commits")) || (key0 === "head_sha")) || (key0 === "host")) || (key0 === "cost_cents"))){
-const err2 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
+}
+if(data.reason !== undefined){
+let data0 = data.reason;
+if(!(((data0 === "host_unavailable") || (data0 === "time_limit")) || (data0 === "share_used"))){
+const err2 = {instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/enum",keyword:"enum",params:{allowedValues: schema121.properties.reason.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err2];
 }
@@ -6095,10 +6098,11 @@ vErrors.push(err2);
 errors++;
 }
 }
-if(data.reason !== undefined){
-let data0 = data.reason;
-if(!((((((data0 === "owner_back") || (data0 === "time_limit")) || (data0 === "stopped")) || (data0 === "sharing_off")) || (data0 === "shutdown")) || (data0 === "share_used"))){
-const err3 = {instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/enum",keyword:"enum",params:{allowedValues: schema121.properties.reason.enum},message:"must be equal to one of the allowed values"};
+if(data.commits !== undefined){
+let data1 = data.commits;
+if(data1 && typeof data1 == "object" && !Array.isArray(data1)){
+if(data1.sha256 === undefined){
+const err3 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/required",keyword:"required",params:{missingProperty: "sha256"},message:"must have required property '"+"sha256"+"'"};
 if(vErrors === null){
 vErrors = [err3];
 }
@@ -6107,11 +6111,8 @@ vErrors.push(err3);
 }
 errors++;
 }
-}
-if(data.minutes !== undefined){
-let data1 = data.minutes;
-if(!(((typeof data1 == "number") && (!(data1 % 1) && !isNaN(data1))) && (isFinite(data1)))){
-const err4 = {instancePath:instancePath+"/minutes",schemaPath:"#/properties/minutes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data1.bytes === undefined){
+const err4 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/required",keyword:"required",params:{missingProperty: "bytes"},message:"must have required property '"+"bytes"+"'"};
 if(vErrors === null){
 vErrors = [err4];
 }
@@ -6120,9 +6121,9 @@ vErrors.push(err4);
 }
 errors++;
 }
-if((typeof data1 == "number") && (isFinite(data1))){
-if(data1 > 43200 || isNaN(data1)){
-const err5 = {instancePath:instancePath+"/minutes",schemaPath:"#/properties/minutes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 43200},message:"must be <= 43200"};
+for(const key1 in data1){
+if(!((key1 === "sha256") || (key1 === "bytes"))){
+const err5 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err5];
 }
@@ -6131,8 +6132,12 @@ vErrors.push(err5);
 }
 errors++;
 }
-if(data1 < 0 || isNaN(data1)){
-const err6 = {instancePath:instancePath+"/minutes",schemaPath:"#/properties/minutes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+if(data1.sha256 !== undefined){
+let data2 = data1.sha256;
+if(typeof data2 === "string"){
+if(func1(data2) > 64){
+const err6 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"};
 if(vErrors === null){
 vErrors = [err6];
 }
@@ -6141,13 +6146,8 @@ vErrors.push(err6);
 }
 errors++;
 }
-}
-}
-if(data.commits !== undefined){
-let data2 = data.commits;
-if(data2 && typeof data2 == "object" && !Array.isArray(data2)){
-if(data2.sha256 === undefined){
-const err7 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/required",keyword:"required",params:{missingProperty: "sha256"},message:"must have required property '"+"sha256"+"'"};
+if(func1(data2) < 64){
+const err7 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/minLength",keyword:"minLength",params:{limit: 64},message:"must NOT have fewer than 64 characters"};
 if(vErrors === null){
 vErrors = [err7];
 }
@@ -6156,8 +6156,8 @@ vErrors.push(err7);
 }
 errors++;
 }
-if(data2.bytes === undefined){
-const err8 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/required",keyword:"required",params:{missingProperty: "bytes"},message:"must have required property '"+"bytes"+"'"};
+if(!pattern48.test(data2)){
+const err8 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{64}$"},message:"must match pattern \""+"^[0-9a-f]{64}$"+"\""};
 if(vErrors === null){
 vErrors = [err8];
 }
@@ -6166,9 +6166,9 @@ vErrors.push(err8);
 }
 errors++;
 }
-for(const key1 in data2){
-if(!((key1 === "sha256") || (key1 === "bytes"))){
-const err9 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
+}
+else {
+const err9 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -6178,11 +6178,10 @@ vErrors.push(err9);
 errors++;
 }
 }
-if(data2.sha256 !== undefined){
-let data3 = data2.sha256;
-if(typeof data3 === "string"){
-if(func1(data3) > 64){
-const err10 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"};
+if(data1.bytes !== undefined){
+let data3 = data1.bytes;
+if(!(((typeof data3 == "number") && (!(data3 % 1) && !isNaN(data3))) && (isFinite(data3)))){
+const err10 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err10];
 }
@@ -6191,8 +6190,9 @@ vErrors.push(err10);
 }
 errors++;
 }
-if(func1(data3) < 64){
-const err11 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/minLength",keyword:"minLength",params:{limit: 64},message:"must NOT have fewer than 64 characters"};
+if((typeof data3 == "number") && (isFinite(data3))){
+if(data3 > 2147483648 || isNaN(data3)){
+const err11 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2147483648},message:"must be <= 2147483648"};
 if(vErrors === null){
 vErrors = [err11];
 }
@@ -6201,8 +6201,8 @@ vErrors.push(err11);
 }
 errors++;
 }
-if(!pattern48.test(data3)){
-const err12 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/pattern",keyword:"pattern",params:{pattern: "^[0-9a-f]{64}$"},message:"must match pattern \""+"^[0-9a-f]{64}$"+"\""};
+if(data3 < 1 || isNaN(data3)){
+const err12 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
 if(vErrors === null){
 vErrors = [err12];
 }
@@ -6212,8 +6212,10 @@ vErrors.push(err12);
 errors++;
 }
 }
+}
+}
 else {
-const err13 = {instancePath:instancePath+"/commits/sha256",schemaPath:"../common.schema.json#/$defs/bundle/properties/sha256/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err13 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err13];
 }
@@ -6223,10 +6225,11 @@ vErrors.push(err13);
 errors++;
 }
 }
-if(data2.bytes !== undefined){
-let data4 = data2.bytes;
-if(!(((typeof data4 == "number") && (!(data4 % 1) && !isNaN(data4))) && (isFinite(data4)))){
-const err14 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if(data.head_sha !== undefined){
+let data4 = data.head_sha;
+if(typeof data4 === "string"){
+if(func1(data4) > 64){
+const err14 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"};
 if(vErrors === null){
 vErrors = [err14];
 }
@@ -6235,9 +6238,8 @@ vErrors.push(err14);
 }
 errors++;
 }
-if((typeof data4 == "number") && (isFinite(data4))){
-if(data4 > 2147483648 || isNaN(data4)){
-const err15 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2147483648},message:"must be <= 2147483648"};
+if(func1(data4) < 40){
+const err15 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/minLength",keyword:"minLength",params:{limit: 40},message:"must NOT have fewer than 40 characters"};
 if(vErrors === null){
 vErrors = [err15];
 }
@@ -6246,8 +6248,8 @@ vErrors.push(err15);
 }
 errors++;
 }
-if(data4 < 1 || isNaN(data4)){
-const err16 = {instancePath:instancePath+"/commits/bytes",schemaPath:"../common.schema.json#/$defs/bundle/properties/bytes/minimum",keyword:"minimum",params:{comparison: ">=", limit: 1},message:"must be >= 1"};
+if(!pattern10.test(data4)){
+const err16 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/pattern",keyword:"pattern",params:{pattern: "^([0-9a-f]{40}|[0-9a-f]{64})$"},message:"must match pattern \""+"^([0-9a-f]{40}|[0-9a-f]{64})$"+"\""};
 if(vErrors === null){
 vErrors = [err16];
 }
@@ -6257,10 +6259,8 @@ vErrors.push(err16);
 errors++;
 }
 }
-}
-}
 else {
-const err17 = {instancePath:instancePath+"/commits",schemaPath:"../common.schema.json#/$defs/bundle/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err17 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err17];
 }
@@ -6270,11 +6270,11 @@ vErrors.push(err17);
 errors++;
 }
 }
-if(data.head_sha !== undefined){
-let data5 = data.head_sha;
-if(typeof data5 === "string"){
-if(func1(data5) > 64){
-const err18 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/maxLength",keyword:"maxLength",params:{limit: 64},message:"must NOT have more than 64 characters"};
+if(data.host !== undefined){
+let data5 = data.host;
+if(data5 && typeof data5 == "object" && !Array.isArray(data5)){
+if(data5.wall_seconds === undefined){
+const err18 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "wall_seconds"},message:"must have required property '"+"wall_seconds"+"'"};
 if(vErrors === null){
 vErrors = [err18];
 }
@@ -6283,8 +6283,8 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(func1(data5) < 40){
-const err19 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/minLength",keyword:"minLength",params:{limit: 40},message:"must NOT have fewer than 40 characters"};
+if(data5.cpu_seconds === undefined){
+const err19 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "cpu_seconds"},message:"must have required property '"+"cpu_seconds"+"'"};
 if(vErrors === null){
 vErrors = [err19];
 }
@@ -6293,8 +6293,8 @@ vErrors.push(err19);
 }
 errors++;
 }
-if(!pattern10.test(data5)){
-const err20 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/pattern",keyword:"pattern",params:{pattern: "^([0-9a-f]{40}|[0-9a-f]{64})$"},message:"must match pattern \""+"^([0-9a-f]{40}|[0-9a-f]{64})$"+"\""};
+if(data5.peak_memory_mb === undefined){
+const err20 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "peak_memory_mb"},message:"must have required property '"+"peak_memory_mb"+"'"};
 if(vErrors === null){
 vErrors = [err20];
 }
@@ -6303,9 +6303,9 @@ vErrors.push(err20);
 }
 errors++;
 }
-}
-else {
-const err21 = {instancePath:instancePath+"/head_sha",schemaPath:"../common.schema.json#/$defs/sha/type",keyword:"type",params:{type: "string"},message:"must be string"};
+for(const key2 in data5){
+if(!(((key2 === "wall_seconds") || (key2 === "cpu_seconds")) || (key2 === "peak_memory_mb"))){
+const err21 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err21];
 }
@@ -6315,11 +6315,10 @@ vErrors.push(err21);
 errors++;
 }
 }
-if(data.host !== undefined){
-let data6 = data.host;
-if(data6 && typeof data6 == "object" && !Array.isArray(data6)){
-if(data6.wall_seconds === undefined){
-const err22 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "wall_seconds"},message:"must have required property '"+"wall_seconds"+"'"};
+if(data5.wall_seconds !== undefined){
+let data6 = data5.wall_seconds;
+if(!(((typeof data6 == "number") && (!(data6 % 1) && !isNaN(data6))) && (isFinite(data6)))){
+const err22 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err22];
 }
@@ -6328,8 +6327,9 @@ vErrors.push(err22);
 }
 errors++;
 }
-if(data6.cpu_seconds === undefined){
-const err23 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "cpu_seconds"},message:"must have required property '"+"cpu_seconds"+"'"};
+if((typeof data6 == "number") && (isFinite(data6))){
+if(data6 > 2592000 || isNaN(data6)){
+const err23 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2592000},message:"must be <= 2592000"};
 if(vErrors === null){
 vErrors = [err23];
 }
@@ -6338,8 +6338,8 @@ vErrors.push(err23);
 }
 errors++;
 }
-if(data6.peak_memory_mb === undefined){
-const err24 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/required",keyword:"required",params:{missingProperty: "peak_memory_mb"},message:"must have required property '"+"peak_memory_mb"+"'"};
+if(data6 < 0 || isNaN(data6)){
+const err24 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err24];
 }
@@ -6348,9 +6348,12 @@ vErrors.push(err24);
 }
 errors++;
 }
-for(const key2 in data6){
-if(!(((key2 === "wall_seconds") || (key2 === "cpu_seconds")) || (key2 === "peak_memory_mb"))){
-const err25 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key2},message:"must NOT have additional properties"};
+}
+}
+if(data5.cpu_seconds !== undefined){
+let data7 = data5.cpu_seconds;
+if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
+const err25 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -6359,11 +6362,9 @@ vErrors.push(err25);
 }
 errors++;
 }
-}
-if(data6.wall_seconds !== undefined){
-let data7 = data6.wall_seconds;
-if(!(((typeof data7 == "number") && (!(data7 % 1) && !isNaN(data7))) && (isFinite(data7)))){
-const err26 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if((typeof data7 == "number") && (isFinite(data7))){
+if(data7 > 2592000000 || isNaN(data7)){
+const err26 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2592000000},message:"must be <= 2592000000"};
 if(vErrors === null){
 vErrors = [err26];
 }
@@ -6372,9 +6373,8 @@ vErrors.push(err26);
 }
 errors++;
 }
-if((typeof data7 == "number") && (isFinite(data7))){
-if(data7 > 2592000 || isNaN(data7)){
-const err27 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2592000},message:"must be <= 2592000"};
+if(data7 < 0 || isNaN(data7)){
+const err27 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err27];
 }
@@ -6383,8 +6383,12 @@ vErrors.push(err27);
 }
 errors++;
 }
-if(data7 < 0 || isNaN(data7)){
-const err28 = {instancePath:instancePath+"/host/wall_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/wall_seconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+if(data5.peak_memory_mb !== undefined){
+let data8 = data5.peak_memory_mb;
+if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
+const err28 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err28];
 }
@@ -6393,12 +6397,9 @@ vErrors.push(err28);
 }
 errors++;
 }
-}
-}
-if(data6.cpu_seconds !== undefined){
-let data8 = data6.cpu_seconds;
-if(!(((typeof data8 == "number") && (!(data8 % 1) && !isNaN(data8))) && (isFinite(data8)))){
-const err29 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+if((typeof data8 == "number") && (isFinite(data8))){
+if(data8 > 1048576 || isNaN(data8)){
+const err29 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/maximum",keyword:"maximum",params:{comparison: "<=", limit: 1048576},message:"must be <= 1048576"};
 if(vErrors === null){
 vErrors = [err29];
 }
@@ -6407,9 +6408,8 @@ vErrors.push(err29);
 }
 errors++;
 }
-if((typeof data8 == "number") && (isFinite(data8))){
-if(data8 > 2592000000 || isNaN(data8)){
-const err30 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/maximum",keyword:"maximum",params:{comparison: "<=", limit: 2592000000},message:"must be <= 2592000000"};
+if(data8 < 0 || isNaN(data8)){
+const err30 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err30];
 }
@@ -6418,8 +6418,11 @@ vErrors.push(err30);
 }
 errors++;
 }
-if(data8 < 0 || isNaN(data8)){
-const err31 = {instancePath:instancePath+"/host/cpu_seconds",schemaPath:"../common.schema.json#/$defs/host_use/properties/cpu_seconds/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+}
+}
+}
+else {
+const err31 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err31];
 }
@@ -6429,11 +6432,10 @@ vErrors.push(err31);
 errors++;
 }
 }
-}
-if(data6.peak_memory_mb !== undefined){
-let data9 = data6.peak_memory_mb;
+if(data.cost_cents !== undefined){
+let data9 = data.cost_cents;
 if(!(((typeof data9 == "number") && (!(data9 % 1) && !isNaN(data9))) && (isFinite(data9)))){
-const err32 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
+const err32 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
 if(vErrors === null){
 vErrors = [err32];
 }
@@ -6443,8 +6445,8 @@ vErrors.push(err32);
 errors++;
 }
 if((typeof data9 == "number") && (isFinite(data9))){
-if(data9 > 1048576 || isNaN(data9)){
-const err33 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/maximum",keyword:"maximum",params:{comparison: "<=", limit: 1048576},message:"must be <= 1048576"};
+if(data9 > 100000000 || isNaN(data9)){
+const err33 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100000000},message:"must be <= 100000000"};
 if(vErrors === null){
 vErrors = [err33];
 }
@@ -6454,7 +6456,7 @@ vErrors.push(err33);
 errors++;
 }
 if(data9 < 0 || isNaN(data9)){
-const err34 = {instancePath:instancePath+"/host/peak_memory_mb",schemaPath:"../common.schema.json#/$defs/host_use/properties/peak_memory_mb/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
+const err34 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
 if(vErrors === null){
 vErrors = [err34];
 }
@@ -6467,59 +6469,12 @@ errors++;
 }
 }
 else {
-const err35 = {instancePath:instancePath+"/host",schemaPath:"../common.schema.json#/$defs/host_use/type",keyword:"type",params:{type: "object"},message:"must be object"};
+const err35 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err35];
 }
 else {
 vErrors.push(err35);
-}
-errors++;
-}
-}
-if(data.cost_cents !== undefined){
-let data10 = data.cost_cents;
-if(!(((typeof data10 == "number") && (!(data10 % 1) && !isNaN(data10))) && (isFinite(data10)))){
-const err36 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/type",keyword:"type",params:{type: "integer"},message:"must be integer"};
-if(vErrors === null){
-vErrors = [err36];
-}
-else {
-vErrors.push(err36);
-}
-errors++;
-}
-if((typeof data10 == "number") && (isFinite(data10))){
-if(data10 > 100000000 || isNaN(data10)){
-const err37 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/maximum",keyword:"maximum",params:{comparison: "<=", limit: 100000000},message:"must be <= 100000000"};
-if(vErrors === null){
-vErrors = [err37];
-}
-else {
-vErrors.push(err37);
-}
-errors++;
-}
-if(data10 < 0 || isNaN(data10)){
-const err38 = {instancePath:instancePath+"/cost_cents",schemaPath:"../common.schema.json#/$defs/cents/minimum",keyword:"minimum",params:{comparison: ">=", limit: 0},message:"must be >= 0"};
-if(vErrors === null){
-vErrors = [err38];
-}
-else {
-vErrors.push(err38);
-}
-errors++;
-}
-}
-}
-}
-else {
-const err39 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err39];
-}
-else {
-vErrors.push(err39);
 }
 errors++;
 }
@@ -8147,7 +8102,7 @@ errors++;
 }
 if(data21.state !== undefined){
 let data22 = data21.state;
-if(!(((((data22 === "queued") || (data22 === "starting")) || (data22 === "running")) || (data22 === "paused")) || (data22 === "resumed"))){
+if(!(((data22 === "queued") || (data22 === "starting")) || (data22 === "running"))){
 const err40 = {instancePath:instancePath+"/body/state",schemaPath:"actions/run_progress.schema.json/properties/state/enum",keyword:"enum",params:{allowedValues: schema120.properties.state.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err40];
@@ -9240,7 +9195,7 @@ return errors === 0;
 validate21.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const runnerStatus = validate72;
-const schema152 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json","title":"Runner status","description":"What an Obi's Mac offers other members now (protocol.md section 14): signed by the Obi, published in the directory, shown only to the owners `for` names. It never says whether its owner is at the Mac.","type":"object","additionalProperties":false,"required":["protocol","sphere","obi","free","slots","size","agents","kinds","for","created_at","expires_at","key_id","signature"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi":{"$ref":"common.schema.json#/$defs/obi_id"},"free":{"type":"boolean","description":"Whether a job sent now would be accepted."},"slots":{"type":"integer","minimum":0,"maximum":3,"description":"Jobs it runs at once."},"size":{"$ref":"common.schema.json#/$defs/box_size"},"agents":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/agent"}},"kinds":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":["job","review","check"]}},"for":{"oneOf":[{"const":"*"},{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/owner_id"}}],"description":"The owners it is offered to, or every member (`*`)."},"free_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"When it expects to be free, when it isn't."},"created_at":{"$ref":"common.schema.json#/$defs/timestamp"},"expires_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"At most 900 seconds after created_at."},"key_id":{"$ref":"common.schema.json#/$defs/key_id"},"signature":{"$ref":"common.schema.json#/$defs/signature","description":"Ed25519 over \"obi/0.1 runner_status\\n\" and the canonical JSON of every other field."}}};
+const schema152 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json","title":"Runner status","description":"What an Obi's Mac offers other members now (protocol.md section 14): signed by the Obi, published in the directory, shown only to the owners `for` names. It never says whether its owner is at the Mac.","type":"object","additionalProperties":false,"required":["protocol","sphere","obi","free","slots","size","agents","kinds","for","created_at","expires_at","key_id","signature"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi":{"$ref":"common.schema.json#/$defs/obi_id"},"free":{"type":"boolean","description":"Whether a job sent now would likely be accepted. It changes at most once every 15 minutes, with jitter, so it never says when the owner is at the Mac (protocol.md section 14)."},"slots":{"type":"integer","minimum":0,"maximum":3,"description":"Jobs it runs at once."},"size":{"$ref":"common.schema.json#/$defs/box_size"},"agents":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/agent"}},"kinds":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":["job","review","check"]}},"for":{"oneOf":[{"const":"*"},{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/owner_id"}}],"description":"The owners it is offered to, or every member (`*`)."},"free_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"When it expects to be free, when it isn't."},"created_at":{"$ref":"common.schema.json#/$defs/timestamp"},"expires_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"At most 900 seconds after created_at."},"key_id":{"$ref":"common.schema.json#/$defs/key_id"},"signature":{"$ref":"common.schema.json#/$defs/signature","description":"Ed25519 over \"obi/0.1 runner_status\\n\" and the canonical JSON of every other field."}}};
 
 function validate72(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json" */;

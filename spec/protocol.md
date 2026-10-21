@@ -68,17 +68,17 @@ share_offer:              request ─► [share_status…] ─► share_revoke o
 
 1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The exceptions are `run_cancel`, `share_status` and `share_revoke`, which only the request's sender sends, to its receiver.
 2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return`, `run_cancel` or `share_revoke` for that request came before it. Each of those ends the exchange; nothing may follow it.
-3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times.
-4. A `result`'s `for` is the request's type, so a `result` finishes only a `review_request` or a `handoff`. An `answer` answers only a `question`.
+3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times (but never in a `run_request`'s exchange: rule 9).
+4. A `result`'s `for` is the request's type, so a `result` finishes only a `review_request`, a `handoff` or a `run_request`. An `answer` answers only a `question`.
 5. A `result` comes only after that exchange's `accept`. An `answer` needs no `accept` (an `accept` before it is allowed too).
 6. A `decline` may come at any point before the end, before or after an `accept`.
 7. `run_progress`, `run_return` and `run_cancel` belong only to a `run_request`'s exchange. A `run_return` comes only after its `accept`; `run_progress` and `run_cancel` may come before it or after it.
 8. `share_status` and `share_revoke` belong only to a `share_offer`'s exchange, and a `share_offer`'s exchange takes nothing else but a `decline` (its receiver's owner doesn't want the share). There is no `accept`: a share holds from its offer until its `share_revoke` or `decline`, whatever its `expires_at` (which bounds only when the receiver may first act on the offer).
-9. In a `run_request`'s or a `share_offer`'s exchange, a `decline` has no `note`: what the chain keeps of guest jobs and shares is typed fields only, never words (section 14).
+9. In a `run_request`'s or a `share_offer`'s exchange, a `decline` has no `note`, and a `run_request`'s exchange takes no `status` (its `note` is words, and `waiting_on_owner` would say when the host's owner is at their Mac): what the chain keeps of guest jobs and shares is typed fields only, never words, and never when an owner is at their Mac (sections 14 and 15).
 
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
-The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`).
+The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`, `invalid-chain-status-in-run`).
 
 ## 5. Actions
 
@@ -136,7 +136,7 @@ The receiver takes the request on. `by_rule` (optional) names the remembered dec
 
 ### 5.6 `decline`
 
-No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `share_used` (a `run_request` on a share whose money left this period is under what the job would need: section 16), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200), except in a `run_request`'s or a `share_offer`'s exchange, where a decline has none (section 4, rule 9): the reason says it.
+No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `share_used` (a `run_request` on a share whose money left this period is under what the job would need: section 15), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200), except in a `run_request`'s or a `share_offer`'s exchange, where a decline has none (section 4, rule 9): the reason says it.
 
 ### 5.7 `result`
 
@@ -144,7 +144,7 @@ Finishes a `review_request` or a `handoff` (an `answer` finishes a question, 5.8
 
 - **`for: review_request`.** `outcome` is `approved`, `changes_requested` or `failed`; `repo`, `head_sha` (the commit actually reviewed), `findings` (0 to 50, section 7), `acceptance` (one entry per condition of the request, required unless `failed`), optional `by_rule` and `summary` (4,000, data).
 - **`for: handoff`.** `outcome` is `done` or `failed`; `repo`, `acceptance`, optional `head_branch`, `head_sha`, `pr`, `by_rule`, `summary` (4,000, data).
-- **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, `host` (what the job used of the Mac it ran on: `{wall_seconds, cpu_seconds, peak_memory_mb}`), optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and, on a share (section 16), `cost_cents`. No summary: what the job did is in its transcript, on the channel.
+- **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, `host` (what the job used of the Mac it ran on: `{wall_seconds, cpu_seconds, peak_memory_mb}`), optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and, on a share (section 15), `cost_cents`. No summary: what the job did is in its transcript, on the channel.
 
 Each `acceptance` entry is `{index, kind, severity?, met}`: `index` is the condition's position in the request, `kind` (and `severity`, for `no_findings_at_or_above`) repeat it so the result can be checked on its own, and `met` is a boolean.
 
@@ -199,17 +199,17 @@ Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14).
 | `bundle` | yes | The code, a git bundle the sender sends on the job channel once the receiver accepts: `{sha256, bytes}`. The receiver checks both before it runs anything. |
 | `size` | yes | `small` (4 cores, 8 GB, 30 GB of disk) or `large` (6, 12, 60). The receiver never gives more than its owner set. |
 | `max_minutes` | yes | The longest the job may run there, 5 to 480. The receiver's own limit wins when it is lower. |
-| `account` | no | `{grant}`: run it on a share of an API account the receiver's owner gave the sender's owner (5.14, section 16), not on the sender's owner's own account. The receiver adds its own key to the job's model calls on its Mac, and they never go back through the job channel. |
+| `account` | no | `{grant}`: run it on a share of an API account the receiver's owner gave the sender's owner (5.14, section 15), not on the sender's owner's own account. The receiver adds its own key to the job's model calls on its Mac, and they never go back through the job channel. |
 
 What the sender's owner asked their own agent to do is **not** in the request: it goes on the job channel once the request is accepted (section 13), to that agent only, in the VM. So the Sphere's audit chain keeps what a guest job is (who, which Mac, the repository, its title, its times, what it used and cost), never what it says, its code or its transcript.
 
 ### 5.11 `run_progress`
 
-Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` or `resumed`. The receiver sends one as the job starts and as it runs, and SHOULD send no other (the job channel has a heartbeat). It SHOULD NOT send `paused` or `resumed`: in the chain, they would tell the sender, to the second, when the receiver's owner came back to their Mac (a `run_return` with `owner_back` says only that they came back and stayed).
+Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting` or `running`. The receiver SHOULD NOT send one: the job channel says where the job is (it has a heartbeat), and the chain keeps only that the run happened (#810). There is no `paused` or `resumed`: in the chain it would tell the sender, to the second, when the receiver's owner came back to their Mac.
 
 ### 5.12 `run_return`
 
-The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `cost_cents` as in a result. No note: the reason says why. The sender can run it again, at home or on another Mac, from those commits.
+The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `host_unavailable` (the receiver's Mac stopped it: its owner came back and stayed, stopped it, turned sharing off, or the Mac shut down; a share it ran on was taken back), `time_limit`, or `share_used` (the share the job ran on is used up for this period: section 15). It never says which of the first, nor how long the job ran: with the time the job started, either would tell the sender when the receiver's owner came back to their Mac. Optional `commits` and `head_sha` as in a result, `host` as in a result, and `cost_cents` as in a result. No note. The sender can run it again, at home or on another Mac, from those commits.
 
 ### 5.13 `run_cancel`
 
@@ -217,7 +217,7 @@ The request's own sender calls off its `run_request` (its owner cancelled the jo
 
 ### 5.14 `share_offer`
 
-A key holder's Obi gives the receiver's owner a share of a company-paid API account its owner holds the key to (section 16). Schema: [share_offer.schema.json](schemas/v0.1/actions/share_offer.schema.json).
+A key holder's Obi gives the receiver's owner a share of a company-paid API account its owner holds the key to (section 15). Schema: [share_offer.schema.json](schemas/v0.1/actions/share_offer.schema.json).
 
 | Field | Required | Meaning |
 |---|---|---|
@@ -407,11 +407,11 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 
 ## 14. Running on another Obi's Mac
 
-**What a host offers.** An Obi whose owner lets their Mac run other people's jobs publishes its **runner status** in the Sphere's directory ([sphere-api.md](sphere-api.md) section 6.4; [runner-status.schema.json](schemas/v0.1/runner-status.schema.json)): `free`, the `slots` (jobs at once, 0 to 3), the `size` it gives, the `agents` and `kinds` of work it takes, `free_at` when it expects to be free, and `for`, the owners it is offered to (`*` for every member). It says nothing about whether its owner is at the Mac: `free` means only that a job sent now would be accepted. It is signed like an envelope, with the prefix `"obi/0.1 runner_status\n"`, and expires within 15 minutes; the Obi sends a new one when it changes (at most once a minute) and every 10 minutes while it holds.
+**What a host offers.** An Obi whose owner lets their Mac run other people's jobs publishes its **runner status** in the Sphere's directory ([sphere-api.md](sphere-api.md) section 6.4; [runner-status.schema.json](schemas/v0.1/runner-status.schema.json)): `free`, the `slots` (jobs at once, 0 to 3), the `size` it gives, the `agents` and `kinds` of work it takes, `free_at` when it expects to be free, and `for`, the owners it is offered to (`*` for every member). It says nothing about whether its owner is at the Mac: `free` means only that a job sent then would likely be accepted, and it changes at most once every 15 minutes, at a random moment up to 5 minutes after that, so a status never says, to the minute, when the owner came back or left (the receiver decides each request by the Mac as it is: a `free` status can still be declined `not_free`). It is signed like an envelope, with the prefix `"obi/0.1 runner_status\n"`, and expires within 15 minutes; the Obi sends a new one when it changes and every 10 minutes while it holds.
 
 **The receiver decides, by its owner's rules alone.** A `run_request` is accepted only when the receiver's own rules allow it, whatever the status said and whatever the request claims: the sender's owner is one its owner offers the Mac to (and, unless its owner said otherwise, has been allowed once by name), the kind of work and the repository are allowed, a slot is free, and the Mac is free. Otherwise it declines: `policy` (sharing is off, or the rules don't cover the sender), `not_free` (the Mac isn't free now), `busy` (no slot), or `owner_declined`. It runs an accepted job only in a VM of its own, with no network but the job channel, and the job's model calls go back through the channel to the sender's Obi. It never pushes, publishes or opens anything for the job: the sender's Obi publishes the commits that come back, under its own owner.
 
-## 16. Sharing an API account
+## 15. Sharing an API account
 
 **What can be shared.** Only a company-paid API account, one billed per token to a key its holder keeps in their own Obi (an Anthropic API key, for example). A personal plan or a seat (Claude Pro or Max, ChatGPT Plus or Pro, a Team seat) is never shared: its terms are for one person.
 
@@ -421,11 +421,11 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 
 **What the key holder's Obi passes on.** The same as a guest's Obi does with its own login (section 13): only the agent's model paths and the allowlisted headers, any other credential dropped. It also refuses a call that asks for what it can't meter: a model without a list price, or a server tool other than web search.
 
-**Metering, by the key holder's Obi alone.** Each model call's cost is every usage field its response reports (input, output, cache reads and writes, web searches, a faster speed) at the provider's list prices. Before it forwards a call, the key holder's Obi counts the worst it could cost (all its `max_tokens` as output, every byte of the request as an input token, and every web search it allows) and refuses the call when that is more than the share has left; when the answer ends, the count becomes what the usage says, or stays the worst case when the answer ended without saying. So no call takes a share past its limit. Each job's cost is rounded up to a whole cent. The key holder's own jobs on the account count against the same month's budget: a share is a ceiling for one person, not money set aside. A `run_request` on a share is declined (`share_used`) when the money left on it is under what the job would need; when a share runs out during a job, the next call is refused, and the job comes back (`run_return`, `share_used`) with what it did. A share is for the person it was offered to: a `run_request` on it from anyone else's Obi is declined (`policy`). When the key holder takes a share back (`share_revoke`), a job running on it comes back at once (`run_return`, `stopped`).
+**Metering, by the key holder's Obi alone.** Each model call's cost is every usage field its response reports (input, output, cache reads and writes, web searches, a faster speed) at the provider's list prices. Before it forwards a call, the key holder's Obi counts the worst it could cost (all its `max_tokens` as output, every byte of the request as an input token, and every web search it allows, each at the highest rate that could apply: a cache write's, a long prompt's, a faster speed's) and refuses the call when that is more than the share has left, counting what calls already in flight have reserved; a call without `max_tokens` is refused; when the answer ends, the count becomes what the usage says, or stays the worst case when the answer ended without saying. So no call takes a share past its limit. Each job's cost is rounded up to a whole cent. The key holder's own jobs on the account count against the same month's budget: a share is a ceiling for one person, not money set aside. A `run_request` on a share is declined (`share_used`) when the money left on it is under what the job would need; when a share runs out during a job, the next call is refused, and the job comes back (`run_return`, `share_used`) with what it did. A share is for the person it was offered to: a `run_request` on it from anyone else's Obi is declined (`policy`). When the key holder takes a share back (`share_revoke`), a job running on it comes back at once (`run_return`, `host_unavailable`).
 
 **Policy.** A `share_offer` names no repository: only a policy rule for every repository (`repos: "*"`) allows it.
 
-## 17. Open questions
+## 16. Open questions
 
 **Resolved in v0.1** (they were open in the draft):
 

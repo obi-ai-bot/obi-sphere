@@ -248,7 +248,9 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
-  // No words in a guest job's or a share's exchange: a decline there has no note (rule 9).
+  // No words in a guest job's or a share's exchange: a decline there has no note, and a guest
+  // job's takes no status, whose states and note would say when its host's owner is there (rule 9).
+  if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
   if (reply.type === "decline" && (request.type === "run_request" || request.type === "share_offer") && reply.has_note) return `a decline of a ${request.type} has no note`;
   return null;
 }
