@@ -2,7 +2,7 @@
 // connecting and to what, then hands the WebSocket to the exchange's ChannelRelay (src/channel.ts),
 // which pairs the two sides and forwards their frames without reading them.
 
-import { bearer, requireActor, requireScope } from "../auth.ts";
+import { bearer, requireActor, requireScope, tokenHash } from "../auth.ts";
 import { requireSphere } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError } from "../http.ts";
@@ -40,6 +40,8 @@ export async function openChannel(request: Request, env: Env, deps: Deps, sphere
   const problem = await channelProblem(env.DB, sphere.id, correlationId, nowS(deps));
   if (problem) throw apiError("conflict", problem);
   const relay = env.CHANNELS.get(env.CHANNELS.idFromName(`${sphere.id}/${correlationId}`));
-  const headers = new Headers({ Upgrade: "websocket", "X-Obi-Role": role, "X-Obi-Sphere": sphere.id, "X-Obi-Exchange": correlationId, "X-Obi-Guest": row.from_obi, "X-Obi-Host": row.to_obi });
+  // The relay checks this token stays unrevoked (a card rotation or a revocation revokes it).
+  const token = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")![1]!;
+  const headers = new Headers({ Upgrade: "websocket", "X-Obi-Token": await tokenHash(token), "X-Obi-Role": role, "X-Obi-Sphere": sphere.id, "X-Obi-Exchange": correlationId, "X-Obi-Guest": row.from_obi, "X-Obi-Host": row.to_obi });
   return relay.fetch("https://channel.internal/", { headers });
 }

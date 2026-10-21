@@ -2,8 +2,10 @@
 // exchange. It pairs the guest's and the host's WebSocket and forwards each binary frame to the
 // other side, unchanged and unread: the frames are encrypted end to end (protocol.md section 13).
 // Its own text frames say when the other side joins or leaves. Every 5 seconds while a side is
-// connected it looks again at the exchange and the two members, and closes both sides once the
-// exchange has ended, its request has expired or either Obi was revoked.
+// connected it looks again at the exchange, the two members and the tokens each side opened with,
+// and closes both sides once the exchange has ended, its request has expired, either Obi was
+// revoked or either side's token was; a side alone for 10 minutes, or a channel with no frame for
+// 5, is closed too. A side opens at most 30 times in 10 minutes.
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./env.ts";
@@ -12,6 +14,13 @@ import { channelProblem } from "./routes/channels.ts";
 export const MAX_FRAME_BYTES = 262144;
 export const MAX_CHANNEL_BYTES = 8 * 1024 ** 3;
 const CHECK_EVERY_MS = 5000;
+/** A side alone this long, its other side never joining, is closed. */
+export const ALONE_MS = 10 * 60_000;
+/** Both sides there and no frame this long (each side pings every 30 seconds): closed. */
+export const IDLE_MS = 5 * 60_000;
+/** The most a side opens in `OPENS_WINDOW_MS`. */
+export const MAX_OPENS = 30;
+const OPENS_WINDOW_MS = 10 * 60_000;
 /** How often the byte count is written down, so a relay woken from hibernation still counts. */
 const PERSIST_EVERY = 4 * 1024 ** 2;
 
@@ -26,9 +35,17 @@ interface Meta {
 export class ChannelRelay extends DurableObject<Env> {
   private bytes: number | null = null;
   private persisted = 0;
+  private lastSaved = 0;
 
   override async fetch(request: Request): Promise<Response> {
     const role = request.headers.get("X-Obi-Role") as Role;
+    const now = Date.now();
+    const opens = ((await this.ctx.storage.get<number[]>(`opens:${role}`)) ?? []).filter((t) => t > now - OPENS_WINDOW_MS);
+    if (opens.length >= MAX_OPENS) {
+      return Response.json({ error: { code: "rate_limited", message: `a side opens its channel at most ${MAX_OPENS} times in 10 minutes` } }, { status: 429, headers: { "Retry-After": "60" } });
+    }
+    await this.ctx.storage.put(`opens:${role}`, [...opens, now]);
+    await this.ctx.storage.put(`token:${role}`, request.headers.get("X-Obi-Token"));
     const meta: Meta = {
       sphere: request.headers.get("X-Obi-Sphere")!,
       exchange: request.headers.get("X-Obi-Exchange")!,
@@ -40,7 +57,11 @@ export class ChannelRelay extends DurableObject<Env> {
     for (const old of this.ctx.getWebSockets(role)) old.close(4003, "replaced by a new connection");
     const [client, server] = Object.values(new WebSocketPair()) as [WebSocket, WebSocket];
     this.ctx.acceptWebSocket(server, [role]);
-    if (this.ctx.getWebSockets(other(role)).length > 0) this.announce("joined");
+    if (this.ctx.getWebSockets(other(role)).length > 0) {
+      this.announce("joined");
+      await this.ctx.storage.delete("alone");
+      await this.ctx.storage.put("last", now);
+    } else if ((await this.ctx.storage.get("alone")) === undefined) await this.ctx.storage.put("alone", now);
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + CHECK_EVERY_MS);
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -55,6 +76,12 @@ export class ChannelRelay extends DurableObject<Env> {
       this.persisted = this.bytes;
       await this.ctx.storage.put("bytes", this.bytes);
     }
+    // When it last carried a frame, written down at most once a minute.
+    const now = Date.now();
+    if (now - this.lastSaved > 60_000) {
+      this.lastSaved = now;
+      await this.ctx.storage.put("last", now);
+    }
     // Sent while the other side isn't there: dropped. Its next join starts a new handshake.
     for (const peer of this.ctx.getWebSockets(other(roleOf(this.ctx, ws)))) peer.send(message);
   }
@@ -64,6 +91,7 @@ export class ChannelRelay extends DurableObject<Env> {
     // Still there: a replaced connection closing doesn't mean the side left.
     if (this.ctx.getWebSockets(role).some((s) => s !== ws)) return;
     for (const peer of this.ctx.getWebSockets(other(role))) peer.send(JSON.stringify({ peer: "left" }));
+    if (this.ctx.getWebSockets(other(role)).length > 0) await this.ctx.storage.put("alone", Date.now());
   }
 
   override async alarm(): Promise<void> {
@@ -77,6 +105,18 @@ export class ChannelRelay extends DurableObject<Env> {
       .first<{ n: number }>();
     if (problem) return this.closeAll(4001, problem);
     if ((active?.n ?? 0) < 2) return this.closeAll(4001, "an Obi of the exchange was revoked");
+    const tokens = await this.ctx.storage.get<string>(["token:guest", "token:host"]);
+    const hashes = [...tokens.values()].filter((t): t is string => typeof t === "string");
+    const live = await this.env.DB.prepare(`SELECT COUNT(*) AS n FROM tokens WHERE sphere = ?1 AND revoked = 0 AND sha256 IN (${hashes.map((_, i) => `?${i + 2}`).join(", ") || "NULL"})`)
+      .bind(meta.sphere, ...hashes)
+      .first<{ n: number }>();
+    if ((live?.n ?? 0) < hashes.length) return this.closeAll(4001, "a side's token was revoked");
+    const both = this.ctx.getWebSockets("guest").length > 0 && this.ctx.getWebSockets("host").length > 0;
+    const at = Date.now();
+    const alone = await this.ctx.storage.get<number>("alone");
+    if (!both && alone !== undefined && at - alone > ALONE_MS) return this.closeAll(4005, "the other side didn't join within 10 minutes");
+    const last = await this.ctx.storage.get<number>("last");
+    if (both && last !== undefined && at - last > IDLE_MS) return this.closeAll(4006, "no frame for 5 minutes");
     await this.ctx.storage.setAlarm(Date.now() + CHECK_EVERY_MS);
   }
 

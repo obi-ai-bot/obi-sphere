@@ -7,7 +7,7 @@ import { getKeys, loadMemberJson, requireSphere } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
 import { verifyEd25519 } from "../protocol/crypto.ts";
-import { seconds } from "../protocol/envelope.ts";
+import { CLOCK_SKEW_SECONDS, seconds } from "../protocol/envelope.ts";
 import { canonicalBytes, utf8, type JsonObject } from "../protocol/json.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
 
@@ -29,16 +29,21 @@ export function runnerSigningInput(status: JsonObject): Uint8Array {
 export const offeredTo = (status: JsonObject, owner: string): boolean =>
   status.for === "*" || (Array.isArray(status.for) && status.for.includes(owner));
 
-/** The runner statuses `caller` may see, by Obi: only those offered to the caller's owner, unexpired. */
+/**
+ * The runner statuses `caller` may see, by Obi: unexpired, of active members only, and only those
+ * offered to the caller's owner, or the caller's owner's own.
+ */
 export async function visibleRunners(db: D1Database, sphere: string, caller: Caller, now: number, obi?: string): Promise<Map<string, JsonObject>> {
-  const rows = await (obi === undefined
-    ? db.prepare("SELECT obi, status FROM runner_status WHERE sphere = ?1 AND expires_at_s > ?2").bind(sphere, now)
-    : db.prepare("SELECT obi, status FROM runner_status WHERE sphere = ?1 AND obi = ?2 AND expires_at_s > ?3").bind(sphere, obi, now)
-  ).all<{ obi: string; status: string }>();
+  const base = "SELECT r.obi, r.status, m.owner FROM runner_status r JOIN members m ON m.sphere = r.sphere AND m.obi = r.obi AND m.status = 'active' WHERE r.sphere = ?1 AND r.expires_at_s > ?2";
+  const rows = await (obi === undefined ? db.prepare(base).bind(sphere, now) : db.prepare(`${base} AND r.obi = ?3`).bind(sphere, now, obi)).all<{
+    obi: string;
+    status: string;
+    owner: string;
+  }>();
   const out = new Map<string, JsonObject>();
   for (const r of rows.results) {
     const status = JSON.parse(r.status) as JsonObject;
-    if (offeredTo(status, caller.subject)) out.set(r.obi, status);
+    if (r.owner === caller.subject || offeredTo(status, caller.subject)) out.set(r.obi, status);
   }
   return out;
 }
@@ -68,6 +73,7 @@ export async function putRunner(request: Request, env: Env, deps: Deps, sphereId
   const created = seconds(status.created_at as string);
   const expires = seconds(status.expires_at as string);
   const now = nowS(deps);
+  if (created > now + CLOCK_SKEW_SECONDS) throw apiError("bad_request", `created_at is more than ${CLOCK_SKEW_SECONDS} seconds ahead`);
   if (!(expires > now) || !(expires > created) || expires - created > MAX_RUNNER_LIFETIME) {
     throw apiError("bad_request", `expires_at must be after now and at most ${MAX_RUNNER_LIFETIME} seconds after created_at`);
   }
