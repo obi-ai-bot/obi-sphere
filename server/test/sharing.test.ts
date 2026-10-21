@@ -2,7 +2,7 @@
 // sphere-api.md sections 6.3 and 6.4): run_request exchanges, runner status in the directory, and
 // the job channel's relay.
 
-import { env, runDurableObjectAlarm } from "cloudflare:test";
+import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handle } from "../src/app";
 import { runnerSigningInput } from "../src/routes/runner";
@@ -155,6 +155,23 @@ describe("runner status", () => {
     expect((await w.call("PUT", path, { token: host, body: long })).status).toBe(400);
     const away = { ...(await runnerStatus(w, "obi-wellington")), away: true };
     expect((await w.call("PUT", path, { token: host, body: away })).status).toBe(400);
+  });
+
+  it("is always shown to the Mac's own owner, never from the future, and only an active member's", async () => {
+    const w = await sharing("e2e-runner-own");
+    const host = await w.obiToken("obi-wellington");
+    const path = `/v0.1/spheres/${w.sphere}/members/obi-wellington/runner`;
+    // Offered to ernesto only: wellington's own Obi still sees it.
+    const put = await w.call("PUT", path, { token: host, body: await runnerStatus(w, "obi-wellington", { sphere: w.sphere, for: ["ernesto"] }) });
+    expect(put.status).toBe(200);
+    expect(put.body.runner).toBeDefined();
+    const future = await runnerStatus(w, "obi-wellington", { sphere: w.sphere, created_at: w.clock.ts(301), expires_at: w.clock.ts(900) });
+    const refused = await w.call("PUT", path, { token: host, body: future });
+    expect(refused.status).toBe(400);
+    // A member revoked without its status taken away (an older Sphere left it): nobody sees it.
+    await env.DB.prepare("UPDATE members SET status = 'revoked' WHERE sphere = ?1 AND obi = 'obi-wellington'").bind(w.sphere).run();
+    const seen = await w.call("GET", `/v0.1/spheres/${w.sphere}/members`, { token: await w.obiToken("obi-ernesto") });
+    expect(seen.body.members.find((m: { obi: string }) => m.obi === "obi-wellington")?.runner).toBeUndefined();
   });
 
   it("goes with DELETE, and with the member's revocation", async () => {
@@ -335,5 +352,65 @@ describe("share_offer exchanges", () => {
     expect(scoped.status).toBe(403);
     const keyed = await w.send(await w.envelope("obi-wellington", "obi-ernesto", "share_offer", { ...OFFER, key: "sk-not-a-real-key" }), await w.obiToken("obi-wellington"));
     expect(keyed.status).toBe(400);
+  });
+});
+
+describe("job channel limits", () => {
+  async function pair(name: string) {
+    const w = await sharing(name);
+    const { req, guest, host } = await accepted(w);
+    await w.send(await w.reply(req, "accept", {}), host);
+    const relay = env.CHANNELS.get(env.CHANNELS.idFromName(`${w.sphere}/${req.id as string}`));
+    return { w, req, guest, host, relay };
+  }
+
+  it("closes both sides once either side's token is revoked (a card rotation does it)", async () => {
+    const { w, req, guest, host, relay } = await pair("e2e-ch-token");
+    const g = side(await connect(w, req.id as string, guest));
+    const h = side(await connect(w, req.id as string, host));
+    await runDurableObjectAlarm(relay);
+    expect(g.closed).toBeNull();
+    await env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sphere = ?1 AND actor = 'obi-ernesto'").bind(w.sphere).run();
+    await runDurableObjectAlarm(relay);
+    await until(() => g.closed !== null && h.closed !== null);
+    expect([g.closed!.code, h.closed!.code]).toEqual([4001, 4001]);
+  });
+
+  it("closes a side whose other side doesn't join within 10 minutes", async () => {
+    const { w, req, guest, relay } = await pair("e2e-ch-alone");
+    const g = side(await connect(w, req.id as string, guest));
+    await runDurableObjectAlarm(relay);
+    expect(g.closed).toBeNull();
+    await runInDurableObject(relay, async (_i, state) => state.storage.put("alone", Date.now() - 11 * 60_000));
+    await runDurableObjectAlarm(relay);
+    await until(() => g.closed !== null);
+    expect(g.closed!.code).toBe(4005);
+  });
+
+  it("closes a channel that carried no frame for 5 minutes", async () => {
+    const { w, req, guest, host, relay } = await pair("e2e-ch-idle");
+    const g = side(await connect(w, req.id as string, guest));
+    const h = side(await connect(w, req.id as string, host));
+    await until(() => g.texts.includes('{"peer":"joined"}'));
+    await runInDurableObject(relay, async (_i, state) => state.storage.put("last", Date.now() - 6 * 60_000));
+    await runDurableObjectAlarm(relay);
+    await until(() => g.closed !== null && h.closed !== null);
+    expect([g.closed!.code, h.closed!.code]).toEqual([4006, 4006]);
+  });
+
+  it("lets a side open its channel at most 30 times in 10 minutes", async () => {
+    const { w, req, guest } = await pair("e2e-ch-opens");
+    for (let i = 0; i < 30; i++) side(await connect(w, req.id as string, guest));
+    const refused = await connect(w, req.id as string, guest);
+    expect(refused.status).toBe(429);
+  });
+
+  it("refuses a token from another Sphere", async () => {
+    const { req } = await pair("e2e-ch-here");
+    const there = await sharing("e2e-ch-there");
+    const res = await handle(new Request(`${BASE}/v0.1/spheres/e2e-ch-here/channels/${req.id as string}`, {
+      headers: { Authorization: `Bearer ${await there.obiToken("obi-ernesto")}`, Upgrade: "websocket" },
+    }), env, { now: there.clock.now });
+    expect(res.status).toBe(401);
   });
 });

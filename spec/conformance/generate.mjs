@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import {
   ACTION_TYPES, CARD_EXTENSION_URI, PROTOCOL, appendEntry, b64url, canonicalize, entryHash, findingId,
   keyFromSeedString, sha256, signCard, signEnvelope,
+  channelKeys, sealFrame, signHello, x25519FromPrivate, x25519Shared,
 } from "./lib/obi.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -540,6 +541,34 @@ export function buildFixtures() {
 
   // ---- Public key material ------------------------------------------------------------------
   const publicKeys = Object.fromEntries(Object.entries(keys).map(([label, k]) => [label, { seed_string: k.seed, public_key: k.publicKey, key_id: k.keyId }]));
+  // The job channel's known answers (protocol.md section 13): each side's X25519 key and hello,
+  // the hello bytes as sent (their canonical JSON), the salt and keys, and one frame each way.
+  const xg = x25519FromPrivate(sha256(Buffer.from("obi-conformance-channel-guest-x25519", "utf8")));
+  const xh = x25519FromPrivate(sha256(Buffer.from("obi-conformance-channel-host-x25519", "utf8")));
+  const cid = uuidFor("channel-vectors");
+  const hello = (obi, role, x, key) => signHello({ protocol: "obi/0.1 channel", sphere: SPHERE, correlation_id: cid, obi, role, x25519: b64url(x.publicRaw), key_id: key.keyId }, key.privateKey);
+  const gh = hello("obi-b", "guest", xg, B), hh = hello("obi-a", "host", xh, A);
+  const ghBytes = Buffer.from(canonicalize(gh), "utf8"), hhBytes = Buffer.from(canonicalize(hh), "utf8");
+  const shared = x25519Shared(xg.privateKey, xh.publicRaw);
+  if (!shared.equals(x25519Shared(xh.privateKey, xg.publicRaw))) throw new Error("X25519 disagrees");
+  const k = channelKeys(shared, ghBytes, hhBytes);
+  const toHost = Buffer.from(JSON.stringify({ type: "bundle", sha256: "9".repeat(64), bytes: 48213 }), "utf8");
+  const toGuest = Buffer.from("model answer bytes", "utf8");
+  files["channel-vectors.json"] = JSON.stringify({
+    description: "Known answers for the job channel (protocol.md section 13). x25519 keys are raw 32 bytes, base64url; hello_bytes are the UTF-8 bytes each side sent, base64url; frames are the bytes on the wire.",
+    guest: { obi: "obi-b", key_id: B.keyId, public_key: B.publicKey, x25519_private: b64url(sha256(Buffer.from("obi-conformance-channel-guest-x25519", "utf8"))), hello: gh, hello_bytes: b64url(ghBytes) },
+    host: { obi: "obi-a", key_id: A.keyId, public_key: A.publicKey, x25519_private: b64url(sha256(Buffer.from("obi-conformance-channel-host-x25519", "utf8"))), hello: hh, hello_bytes: b64url(hhBytes) },
+    shared: b64url(shared),
+    salt: b64url(k.salt),
+    guest_to_host: b64url(k.guestToHost),
+    host_to_guest: b64url(k.hostToGuest),
+    nonce_0: b64url(Buffer.alloc(12)),
+    nonce_258: "AAAAAAAAAAAAAAEC",
+    frames: [
+      { direction: "guest>host", counter: 0, stream: 2, kind: 0, payload: b64url(toHost), wire: b64url(sealFrame(k.guestToHost, 0, 2, 0, toHost)) },
+      { direction: "host>guest", counter: 258, stream: 3, kind: 1, payload: b64url(toGuest), wire: b64url(sealFrame(k.hostToGuest, 258, 3, 1, toGuest)) },
+    ],
+  }, null, 2) + "\n";
   files["keys.json"] = JSON.stringify({
     description: "Conformance test keys. Each private key is derived from its public seed string: seed = SHA-256(UTF-8(seed_string)), then Ed25519 (RFC 8032) from that 32-byte seed. Anyone can derive them: never use them for anything else.",
     keys: publicKeys,
@@ -558,5 +587,5 @@ export function writeFixtures(files = buildFixtures()) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const count = writeFixtures();
-  console.log(`Wrote ${count} files under spec/conformance/ (fixtures/ and keys.json).`);
+  console.log(`Wrote ${count} files under spec/conformance/ (fixtures/, keys.json and channel-vectors.json).`);
 }
