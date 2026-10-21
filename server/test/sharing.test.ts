@@ -288,3 +288,52 @@ describe("job channels", () => {
     }
   });
 });
+
+// Sharing a company API account (spec/protocol.md sections 5.14 to 5.16 and 16): share_offer
+// exchanges. Wellington holds the key and gives Ernesto a share.
+const OFFER = { grant: "g-0123456789ab", agent: "claude", account: "Deskree API", share: 30, limit_cents: 12000, period: "month", resets: "2026-11-01T00:00:00Z" };
+const TEAM_SHARES = { id: "team-shares", from_owner: "*", to_owner: "*", actions: ["share_offer"], repos: ["*"] };
+
+describe("share_offer exchanges", () => {
+  async function shares(): Promise<World> {
+    const w = new World(`shares-${crypto.randomUUID().slice(0, 8)}`);
+    expect((await w.create()).status).toBe(201);
+    expect((await w.join("wellington", "obi-wellington", ["review_request"])).status).toBe(201);
+    expect((await w.join("ernesto", "obi-ernesto", ["review_request", "share_offer"])).status).toBe(201);
+    expect((await w.putPolicy([TEAM_REVIEWS, TEAM_SHARES])).status).toBe(200);
+    return w;
+  }
+
+  it("relays an offer, its status from its sender, and its revoke; nothing follows the revoke", async () => {
+    const w = await shares();
+    const holder = await w.obiToken("obi-wellington");
+    const offer = await w.envelope("obi-wellington", "obi-ernesto", "share_offer", OFFER);
+    expect((await w.send(offer, holder)).status).toBe(202);
+    const fromHolder = (type: string, body: Record<string, unknown>) =>
+      w.envelope("obi-wellington", "obi-ernesto", type, body, { correlation_id: offer.id, in_reply_to: offer.id });
+    const status = { grant: OFFER.grant, used_cents: 800, limit_cents: 12000, resets: OFFER.resets };
+    expect((await w.send(await fromHolder("share_status", status), holder)).status).toBe(202);
+    expect((await w.send(await fromHolder("share_revoke", { grant: OFFER.grant }), holder)).status).toBe(202);
+    const after = await w.send(await fromHolder("share_status", status), holder);
+    expect(after.status).toBe(409);
+    expect(after.body.error.code).toBe("bad_reply");
+  });
+
+  it("lets the receiver only decline, never send the offer's status or accept it", async () => {
+    const w = await shares();
+    const offer = await w.envelope("obi-wellington", "obi-ernesto", "share_offer", OFFER);
+    await w.send(offer, await w.obiToken("obi-wellington"));
+    const member = await w.obiToken("obi-ernesto");
+    expect((await w.send(await w.reply(offer, "accept", {}), member)).status).toBe(409);
+    expect((await w.send(await w.reply(offer, "share_status", { grant: OFFER.grant, used_cents: 0, limit_cents: 1, resets: OFFER.resets }), member)).status).toBe(409);
+    expect((await w.send(await w.reply(offer, "decline", { reason: "owner_declined" }), member)).status).toBe(202);
+  });
+
+  it("needs the send:share_offer scope, and never takes a key in the offer", async () => {
+    const w = await shares();
+    const scoped = await w.send(await w.envelope("obi-wellington", "obi-ernesto", "share_offer", OFFER), await w.obiToken("obi-wellington", "send:review_request reply receive"));
+    expect(scoped.status).toBe(403);
+    const keyed = await w.send(await w.envelope("obi-wellington", "obi-ernesto", "share_offer", { ...OFFER, key: "sk-not-a-real-key" }), await w.obiToken("obi-wellington"));
+    expect(keyed.status).toBe(400);
+  });
+});

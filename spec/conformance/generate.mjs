@@ -86,6 +86,9 @@ export function buildFixtures() {
     run_progress: { state: "running" },
     run_return: { reason: "owner_back", minutes: 18, commits: { sha256: "a".repeat(64), bytes: 2210 }, head_sha: HEAD, host: { wall_seconds: 1080, cpu_seconds: 2400, peak_memory_mb: 3100 }, note: "Paused 10 minutes, then sent back." },
     run_cancel: { note: "Not needed any more." },
+    share_offer: { grant: "g-0123456789ab", agent: "claude", account: "Deskree API", share: 30, limit_cents: 12000, period: "month", resets: "2026-11-01T00:00:00Z" },
+    share_status: { grant: "g-0123456789ab", used_cents: 2310, limit_cents: 12000, resets: "2026-11-01T00:00:00Z" },
+    share_revoke: { grant: "g-0123456789ab", note: "The project ended." },
   };
   const runResult = { for: "run_request", outcome: "done", repo: "obi-conf/fixture-app", commits: { sha256: "b".repeat(64), bytes: 3077 }, head_sha: HEAD, host: { wall_seconds: 840, cpu_seconds: 1900, peak_memory_mb: 2500 }, summary: "Added four tests; all pass." };
   // What "@Wellington is #251 landing Thursday?" is about, and what the answer draws on.
@@ -98,10 +101,10 @@ export function buildFixtures() {
   // ---- Envelopes ----------------------------------------------------------------------------
   const requestId = uuidFor("review-request");
   const unsigned = (type, body, over = {}) => {
-    const isRequest = ["review_request", "question", "handoff", "run_request"].includes(type);
+    const isRequest = ["review_request", "question", "handoff", "run_request", "share_offer"].includes(type);
     const id = isRequest && type === "review_request" ? requestId : uuidFor(`${type}:${canonicalize(body)}:${canonicalize(over)}`);
-    // Requests come from obi-b, and so does run_cancel, the one reply a request's sender sends.
-    const fromB = isRequest || type === "run_cancel";
+    // Requests come from obi-b, and so do the replies a request's own sender sends.
+    const fromB = isRequest || ["run_cancel", "share_status", "share_revoke"].includes(type);
     return {
       protocol: PROTOCOL, id, type,
       from: fromB ? "obi-b" : "obi-a", to: fromB ? "obi-a" : "obi-b", sphere: SPHERE,
@@ -157,6 +160,19 @@ export function buildFixtures() {
   bad("run-request-bad-bundle-hash", "A bundle named by something other than 64 lower-case hex characters.", signed(unsigned("run_request", { ...clone(bodies.run_request), bundle: { sha256: "G".repeat(64), bytes: 10 } })), "invalid_envelope");
   bad("run-return-unknown-reason", "A run_return that says the receiver's owner is away: it never says that.", signed(unsigned("run_return", { reason: "owner_away", minutes: 3 })), "invalid_envelope");
   bad("result-run-without-host", "A run_request's result must say what it used of the Mac.", signed(unsigned("result", (({ host, ...rest }) => rest)(clone(runResult)))), "invalid_envelope");
+
+  // Sharing an API account (protocol.md sections 5.14 to 5.16 and 16).
+  ok("share_offer", "A key holder's Obi gives the receiver's owner 30% of a company API account's month.", valid.share_offer);
+  ok("share_status", "How much of the share its receiver's owner used this month.", valid.share_status);
+  ok("share_revoke", "The key holder takes the share back.", valid.share_revoke);
+  ok("run-request-on-share", "A job to run on a share the receiver's owner gave: the receiver adds its own key on its Mac.", signed(unsigned("run_request", { ...clone(bodies.run_request), account: { grant: "g-0123456789ab" } })));
+  ok("decline-share-used", "Declined because the share left this month is under what the job needs.", signed(unsigned("decline", { reason: "share_used" })));
+  ok("run-return-share-used", "The share ran out during the job: it comes back with what it did.", signed(unsigned("run_return", { reason: "share_used", minutes: 7 })));
+  bad("share-offer-with-key", "A share_offer that carries the key: the key never travels.", signed(unsigned("share_offer", { ...clone(bodies.share_offer), key: "sk-not-a-real-key" })), "invalid_envelope");
+  bad("share-offer-under-ten-percent", "A share under 10% of the month.", signed(unsigned("share_offer", { ...clone(bodies.share_offer), share: 5 })), "invalid_envelope");
+  bad("share-offer-bad-grant", "A grant id that isn't g- and 12 lower-case hex.", signed(unsigned("share_offer", { ...clone(bodies.share_offer), grant: "grant-1" })), "invalid_envelope");
+  bad("share-offer-yearly", "A share for a period other than a month.", signed(unsigned("share_offer", { ...clone(bodies.share_offer), period: "year" })), "invalid_envelope");
+  bad("run-request-account-with-key", "A run_request whose account carries more than its grant.", signed(unsigned("run_request", { ...clone(bodies.run_request), account: { grant: "g-0123456789ab", api_key: "sk-not-a-real-key" } })), "invalid_envelope");
   ok("expires-one-second-later", "Valid until one second after now.", signed(unsigned("status", { state: "queued" }, { expires_at: "2026-10-14T12:00:01Z" })));
   ok("created-within-skew", "Created 299 seconds ahead of the receiver's clock: inside the allowed skew.", signed(unsigned("status", { state: "queued" }, { created_at: "2026-10-14T12:04:59Z" })));
   ok("text-with-newlines-and-unicode", "Block text keeps newlines, tabs and any language; one-line text keeps any language too.", signed(unsigned("question", { text: "Décider l'arrondi · 丸め\nLine one\n\tLine two: ¿redondear? 🙂", choices: ["Décider l'arrondi · 丸め", "Garder tout · そのまま 🙂"] })));
@@ -193,6 +209,9 @@ export function buildFixtures() {
     run_progress: ["state"],
     run_return: ["reason", "minutes"],
     run_cancel: [],
+    share_offer: ["grant", "agent", "account", "share", "limit_cents", "period", "resets"],
+    share_status: ["grant", "used_cents", "limit_cents", "resets"],
+    share_revoke: ["grant"],
   };
   for (const [key, fields] of Object.entries(required)) {
     const type = key.startsWith("result") ? "result" : key;
@@ -204,7 +223,7 @@ export function buildFixtures() {
   }
 
   // Replies and requests linked wrongly.
-  for (const type of ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel"]) {
+  for (const type of ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"]) {
     const env = unsigned(type, clone(type === "result" ? bodies.result : bodies[type]));
     delete env.in_reply_to;
     bad(`reply-without-in-reply-to-${type}`, `A ${type} that names no request it answers.`, signed(env), "invalid_envelope");
@@ -492,6 +511,15 @@ export function buildFixtures() {
   auditCase("invalid-chain-run-cancel-by-receiver", "The receiver \"cancels\" the request: only its sender may.", { sphere: SPHERE, entries: recordAll([reqRun, runAccept, signed({ ...replyTo(reqRun, "run_cancel", {}, "audit-run-cancel-wrong"), from: "obi-a", to: "obi-b", key_id: A.keyId })]) }, "reject", "bad_reply");
   auditCase("invalid-chain-run-progress-in-review", "run_progress in a review request's exchange.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, replyTo(valid.review_request, "run_progress", { state: "running" }, "audit-review-progress")]) }, "reject", "bad_reply");
   auditCase("invalid-chain-reply-after-run-return", "Progress after the job came back: a run_return ends the exchange.", { sphere: SPHERE, entries: recordAll([reqRun, runAccept, replyTo(reqRun, "run_return", clone(bodies.run_return), "audit-run-return"), progress("running", "audit-run-after-return")]) }, "reject", "bad_reply");
+  // A share_offer's exchange (protocol.md section 4, rule 8).
+  const reqShare = signed({ ...unsigned("share_offer", clone(bodies.share_offer)), id: uuidFor("audit-share"), correlation_id: uuidFor("audit-share") });
+  const shareStatus = (cents, name) => replyTo(reqShare, "share_status", { ...clone(bodies.share_status), used_cents: cents }, name);
+  auditCase("valid-chain-share-used-then-revoked", "A share offered, used twice, then taken back: the offer's sender sends its status and its revoke.", { sphere: SPHERE, entries: recordAll([reqShare, shareStatus(800, "audit-share-1"), shareStatus(2310, "audit-share-2"), replyTo(reqShare, "share_revoke", clone(bodies.share_revoke), "audit-share-revoke")]) }, "accept");
+  auditCase("valid-chain-share-declined", "The receiver's owner doesn't want the share.", { sphere: SPHERE, entries: recordAll([reqShare, signed({ ...replyTo(reqShare, "decline", { reason: "owner_declined" }, "audit-share-decline") })]) }, "accept");
+  auditCase("invalid-chain-share-status-by-receiver", "The receiver sends a share_status: only the offer's sender does.", { sphere: SPHERE, entries: recordAll([reqShare, signed({ ...shareStatus(10, "audit-share-wrong"), from: "obi-a", to: "obi-b", key_id: A.keyId })]) }, "reject", "bad_reply");
+  auditCase("invalid-chain-share-accepted", "An accept to a share_offer: its exchange takes only its status, its revoke and a decline.", { sphere: SPHERE, entries: recordAll([reqShare, replyTo(reqShare, "accept", {}, "audit-share-accept")]) }, "reject", "bad_reply");
+  auditCase("invalid-chain-share-status-in-run", "A share_status in a run_request's exchange.", { sphere: SPHERE, entries: recordAll([reqRun, runAccept, replyTo(reqRun, "share_status", clone(bodies.share_status), "audit-run-share-status")]) }, "reject", "bad_reply");
+  auditCase("invalid-chain-status-after-share-revoke", "A share_status after the share was taken back: a share_revoke ends the exchange.", { sphere: SPHERE, entries: recordAll([reqShare, replyTo(reqShare, "share_revoke", clone(bodies.share_revoke), "audit-share-revoke"), shareStatus(10, "audit-share-after")]) }, "reject", "bad_reply");
   auditCase("invalid-chain-run-result-for-review", "A review result ends a run_request: a result's `for` must be its request's type.", { sphere: SPHERE, entries: recordAll([reqRun, runAccept, replyTo(reqRun, "result", clone(bodies.result), "audit-run-review-result")]) }, "reject", "bad_reply");
   auditCase("valid-chain-decline-after-accept", "A review request accepted, then declined: decline may end an accepted exchange.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, valid.decline]) }, "accept");
   const strangerReply = { sphere: SPHERE, entries: recordAll([valid.review_request, signed(unsigned("accept", {}, { from: "obi-b", to: "obi-a", key_id: B.keyId, id: uuidFor("self-accept") }))]) };

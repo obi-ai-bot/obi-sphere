@@ -36,12 +36,12 @@ Every message is one envelope that carries exactly one typed action in `body`. S
 |---|---|---|
 | `protocol` | yes | Always `obi/0.1` for this version. |
 | `id` | yes | Unique id of this message (UUID). The sender MUST NOT reuse it. |
-| `type` | yes | One of `review_request`, `question`, `handoff`, `run_request`, `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`. Nothing else. |
+| `type` | yes | One of `review_request`, `question`, `handoff`, `run_request`, `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_offer`, `share_status`, `share_revoke`. Nothing else. |
 | `from` | yes | The sending Obi's `obi_id`. |
 | `to` | yes | The receiving Obi's `obi_id`. Different from `from`. Only that Obi may act on the message: any other Obi it reaches rejects it (section 10, check 5). |
 | `sphere` | yes | The Sphere it travels in. |
 | `correlation_id` | yes | The exchange it belongs to. On a request, equal to its own `id`. On a reply, equal to the request's `id`. |
-| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return` and `run_cancel`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
+| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_status` and `share_revoke`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
 | `created_at` | yes | When the sender made it. |
 | `expires_at` | yes | After this time the receiver MUST NOT act on it. Later than `created_at`, at most 2,592,000 seconds after it. |
 | `key_id` | yes | The sender's signing key, as its agent card publishes it (`ed25519:` + base64url of SHA-256 of the raw public key). |
@@ -52,7 +52,7 @@ A whole envelope, in its canonical form (section 9), is at most 65,536 bytes.
 
 ## 4. Exchanges
 
-Requests start an exchange: `review_request`, `question`, `handoff`, `run_request`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, and `run_cancel`, the one reply a request's own sender sends.
+Requests start an exchange: `review_request`, `question`, `handoff`, `run_request`, `share_offer`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, and three a request's own sender sends: `run_cancel`, `share_status` and `share_revoke`.
 
 ```
 review_request, handoff:  request ─► [status…] ─► accept ─► [status…] ─► result or decline
@@ -61,17 +61,19 @@ question:                 request ─► [status…] ─► [accept ─► [stat
 run_request:              request ─► [run_progress…] ─► accept ─► [run_progress…] ─► result, run_return or decline
                              └─────► [run_progress…] ─► decline
                           (and from the request's sender, at any point before the end: run_cancel)
+share_offer:              request ─► [share_status…] ─► share_revoke or decline   (share_status and share_revoke from the request's sender)
 ```
 
 **The exchange rules.** These are the only ones. A receiving Obi applies them to the replies it gets (section 11, step 3), the Sphere applies them at send ([sphere-api.md](sphere-api.md) section 6.1, check 12), a chain's verifier applies them to every reply in the chain ([sphere-api.md](sphere-api.md) section 7.1, check 7), and the reference verifier implements them once (`exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs)). A reply is allowed exactly when all of these hold:
 
-1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The one exception is `run_cancel`, which only the request's sender sends, to its receiver.
-2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return` or `run_cancel` for that request came before it. Each of those ends the exchange; nothing may follow it.
+1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The exceptions are `run_cancel`, `share_status` and `share_revoke`, which only the request's sender sends, to its receiver.
+2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return`, `run_cancel` or `share_revoke` for that request came before it. Each of those ends the exchange; nothing may follow it.
 3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times.
 4. A `result`'s `for` is the request's type, so a `result` finishes only a `review_request` or a `handoff`. An `answer` answers only a `question`.
 5. A `result` comes only after that exchange's `accept`. An `answer` needs no `accept` (an `accept` before it is allowed too).
 6. A `decline` may come at any point before the end, before or after an `accept`.
 7. `run_progress`, `run_return` and `run_cancel` belong only to a `run_request`'s exchange. A `run_return` comes only after its `accept`; `run_progress` and `run_cancel` may come before it or after it.
+8. `share_status` and `share_revoke` belong only to a `share_offer`'s exchange, and a `share_offer`'s exchange takes nothing else but a `decline` (its receiver's owner doesn't want the share). There is no `accept`: a share holds from its offer until its `share_revoke` or `decline`, whatever its `expires_at` (which bounds only when the receiver may first act on the offer).
 
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
@@ -133,7 +135,7 @@ The receiver takes the request on. `by_rule` (optional) names the remembered dec
 
 ### 5.6 `decline`
 
-No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200).
+No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `share_used` (a `run_request` on a share whose money left this period is under what the job would need: section 16), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200).
 
 ### 5.7 `result`
 
@@ -197,6 +199,7 @@ Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14).
 | `bundle` | yes | The code, a git bundle the sender sends on the job channel once the receiver accepts: `{sha256, bytes}`. The receiver checks both before it runs anything. |
 | `size` | yes | `small` (4 cores, 8 GB, 30 GB of disk) or `large` (6, 12, 60). The receiver never gives more than its owner set. |
 | `max_minutes` | yes | The longest the job may run there, 5 to 480. The receiver's own limit wins when it is lower. |
+| `account` | no | `{grant}`: run it on a share of an API account the receiver's owner gave the sender's owner (5.14, section 16), not on the sender's owner's own account. The receiver adds its own key to the job's model calls on its Mac, and they never go back through the job channel. |
 
 ### 5.11 `run_progress`
 
@@ -204,11 +207,35 @@ Where a `run_request`'s job is, from its receiver: `state` is `queued`, `startin
 
 ### 5.12 `run_return`
 
-The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off` or `shutdown`; `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
+The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off`, `shutdown` or `share_used` (the share the job ran on is used up for this period: section 16); `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
 
 ### 5.13 `run_cancel`
 
 The request's own sender calls off its `run_request` (its owner cancelled the job). Ends the exchange. `note` is optional one-line data. The receiver stops the job at once and sends nothing more.
+
+### 5.14 `share_offer`
+
+A key holder's Obi gives the receiver's owner a share of a company-paid API account its owner holds the key to (section 16). Schema: [share_offer.schema.json](schemas/v0.1/actions/share_offer.schema.json).
+
+| Field | Required | Meaning |
+|---|---|---|
+| `grant` | yes | The share's id, `g-` and 12 lower-case hex, chosen by the key holder's Obi. A `run_request`'s `account.grant` names it. |
+| `agent` | yes | `claude` or `codex`: the CLI whose API the account pays for. |
+| `account` | yes | The account's name as its key holder calls it (100). Data. |
+| `share` | yes | The share of the account's monthly budget, 10 to 100 percent. |
+| `limit_cents` | yes | That share in US cents this period: the most the receiver's owner's jobs may cost on it. |
+| `period` | yes | Always `month`. |
+| `resets` | yes | When the period starts again. |
+
+The key itself never travels: not in this message, the job channel or anything else.
+
+### 5.15 `share_status`
+
+How much of a share its receiver's owner used this period, from the key holder's Obi, in the offer's exchange: `grant`, `used_cents`, `limit_cents` (it changes when the key holder changes the share), `resets`, and an optional one-line `note` (data, 200). Sent after each job on the share, when the share changes or its period resets, and at most once an hour otherwise.
+
+### 5.16 `share_revoke`
+
+The key holder takes a share back: `grant` and an optional one-line `note` (data, 200). Ends the offer's exchange. The receiver's Obi stops offering the share at once; the key holder's Obi declines every later `run_request` on it (`policy`).
 
 ## 6. Acceptance conditions
 
@@ -380,7 +407,15 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 
 **The receiver decides, by its owner's rules alone.** A `run_request` is accepted only when the receiver's own rules allow it, whatever the status said and whatever the request claims: the sender's owner is one its owner offers the Mac to (and, unless its owner said otherwise, has been allowed once by name), the kind of work and the repository are allowed, a slot is free, and the Mac is free. Otherwise it declines: `policy` (sharing is off, or the rules don't cover the sender), `not_free` (the Mac isn't free now), `busy` (no slot), or `owner_declined`. It runs an accepted job only in a VM of its own, with no network but the job channel, and the job's model calls go back through the channel to the sender's Obi. It never pushes, publishes or opens anything for the job: the sender's Obi publishes the commits that come back, under its own owner.
 
-## 15. Open questions
+## 16. Sharing an API account
+
+**What can be shared.** Only a company-paid API account, one billed per token to a key its holder keeps in their own Obi (an Anthropic API key, for example). A personal plan or a seat (Claude Pro or Max, ChatGPT Plus or Pro, a Team seat) is never shared: its terms are for one person.
+
+**Where the jobs run.** A job on a share runs on the key holder's Mac, as a `run_request` with `account.grant` (section 14, in a VM of its own): the key holder's Obi adds the key to the job's model calls on its own Mac, outside the VM. The key is never in the VM, the job channel, a message or the Sphere.
+
+**Metering, by the key holder's Obi alone.** Each model call's cost is its response's token counts at the provider's list prices. The key holder's own jobs on the account count against the same month's budget: a share is a ceiling for one person, not money set aside. A `run_request` on a share is declined (`share_used`) when the money left on it is under what the job would need; when a share runs out during a job, the call in flight finishes, the next is refused, and the job comes back (`run_return`, `share_used`) with what it did. A share is for the person it was offered to: a `run_request` on it from anyone else's Obi is declined (`policy`).
+
+## 17. Open questions
 
 **Resolved in v0.1** (they were open in the draft):
 

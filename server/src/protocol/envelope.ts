@@ -10,11 +10,15 @@ export const ENVELOPE_SIGNING_PREFIX = "obi/0.1 envelope\n";
 export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
-export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request"] as const;
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel"] as const;
-export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer"] as const;
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"] as const;
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke"];
 /** The replies that belong only to a run_request's exchange (protocol.md section 4, rule 7). */
 export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
+/** What a share_offer's exchange takes, and nothing else (protocol.md section 4, rule 8). */
+export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
+/** The replies a request's own sender sends, to its receiver (protocol.md section 4, rule 1). */
+export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke"];
 export const SEVERITY_RANK: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 export type RequestType = (typeof REQUEST_TYPES)[number];
@@ -223,11 +227,14 @@ export interface ExchangeMessage {
  */
 export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage | undefined, earlier: ExchangeMessage[]): string | null {
   if (!request || !isRequestType(request.type)) return "replies to no earlier request";
-  // run_cancel is the one reply the request's own sender sends, to its receiver.
-  if (reply.type === "run_cancel") {
-    if (request.from !== reply.from || request.to !== reply.to) return "only the request's sender cancels it, to its receiver";
+  // run_cancel, share_status and share_revoke are the replies the request's own sender sends, to its receiver.
+  if (SENDER_REPLY_TYPES.includes(reply.type)) {
+    if (request.from !== reply.from || request.to !== reply.to) return `only the request's sender sends a ${reply.type}, to its receiver`;
   } else if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
   if (RUN_REPLY_TYPES.includes(reply.type) && request.type !== "run_request") return `a ${reply.type} belongs to a run_request, not a ${request.type}`;
+  // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
+  if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
+    return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
   if (reply.type === "accept" && accepted) return "accepted twice";
