@@ -220,7 +220,13 @@ export interface ExchangeMessage {
   result_for?: string | undefined;
   /** Whether the message's body has a `note` (a decline's words, rule 9). */
   has_note?: boolean | undefined;
+  /** A decline's `reason`, and whether it names a remembered decision (`by_rule`): rule 9. */
+  reason?: string | undefined;
+  has_by_rule?: boolean | undefined;
 }
+
+/** The reasons a decline in a run_request's exchange may give (rule 9): the guest's own doing, or nothing about the host. */
+export const RUN_DECLINE_REASONS = ["unavailable", "expired", "out_of_scope", "share_used"];
 
 /**
  * The exchange rules (protocol.md section 4): why `reply` breaks them, given the request its
@@ -252,6 +258,9 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   // job's takes no status, whose states and note would say when its host's owner is there (rule 9).
   if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
   if (reply.type === "decline" && (request.type === "run_request" || request.type === "share_offer") && reply.has_note) return `a decline of a ${request.type} has no note`;
+  // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
+  if (reply.type === "decline" && request.type === "run_request" && (!RUN_DECLINE_REASONS.includes(reply.reason ?? "") || reply.has_by_rule))
+    return `a decline of a run_request says only ${RUN_DECLINE_REASONS.join(", ")}, with no by_rule`;
   return null;
 }
 
@@ -273,4 +282,6 @@ export const exchangeMessage = (env: Envelope): ExchangeMessage => ({
   to: env.to,
   result_for: env.type === "result" ? (env.body.for as string) : undefined,
   has_note: env.body.note !== undefined,
+  reason: env.type === "decline" ? (env.body.reason as string) : undefined,
+  has_by_rule: env.body.by_rule !== undefined,
 });

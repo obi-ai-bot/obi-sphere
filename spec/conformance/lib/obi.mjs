@@ -423,6 +423,10 @@ export function exchangeProblem(reply, request, earlier) {
   // No words in a guest job's or a share's exchange: a decline there has no note, and a guest job's takes no status.
   if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
   if (reply.type === "decline" && ["run_request", "share_offer"].includes(request.type) && reply.body?.note !== undefined) return `a decline of a ${request.type} has no note`;
+  // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
+  const runDeclineReasons = ["unavailable", "expired", "out_of_scope", "share_used"];
+  if (reply.type === "decline" && request.type === "run_request" && (!runDeclineReasons.includes(reply.body?.reason) || reply.body?.by_rule !== undefined))
+    return `a decline of a run_request says only ${runDeclineReasons.join(", ")}, with no by_rule`;
   return null;
 }
 

@@ -80,7 +80,7 @@ describe("run_request exchanges", () => {
   it("keeps words out: a decline of a run_request has no note, and run replies have none", async () => {
     const w = await sharing("e2e-no-words");
     const { req, host } = await accepted(w);
-    const worded = await w.send(await w.reply(req, "decline", { reason: "not_free", note: "Wellington is at the Mac." }), host);
+    const worded = await w.send(await w.reply(req, "decline", { reason: "unavailable", note: "Wellington is at the Mac." }), host);
     expect(worded.status).toBe(409);
     const progress = await w.send(await w.reply(req, "run_progress", { state: "running", note: "back soon" }), host);
     expect(progress.status).toBe(400);
@@ -92,7 +92,15 @@ describe("run_request exchanges", () => {
     // A job sent back says only that the host was unavailable: no reason of its owner's, no minutes.
     expect((await w.send(await w.reply(req, "run_return", { reason: "owner_back" }), host)).status).toBe(400);
     expect((await w.send(await w.reply(req, "run_return", { reason: "host_unavailable", minutes: 18 }), host)).status).toBe(400);
-    expect((await w.send(await w.reply(req, "decline", { reason: "not_free" }), host)).status).toBe(202);
+    // Nor why it was declined: the owner at the Mac, no slot, sharing off and not allowed all read the same.
+    expect((await w.send(await w.reply(req, "decline", { reason: "not_free" }), host)).status).toBe(400);
+    for (const reason of ["busy", "policy", "owner_declined", "other"]) {
+      const why = await w.send(await w.reply(req, "decline", { reason }), host);
+      expect(why.status).toBe(409);
+      expect(why.body.error.code).toBe("bad_reply");
+    }
+    expect((await w.send(await w.reply(req, "decline", { reason: "unavailable", by_rule: "d-0123456789ab" }), host)).status).toBe(409);
+    expect((await w.send(await w.reply(req, "decline", { reason: "unavailable" }), host)).status).toBe(202);
   });
 
   it("refuses a run_return before the accept, and anything after it", async () => {

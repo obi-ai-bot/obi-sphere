@@ -2646,7 +2646,7 @@ return errors === 0;
 }
 validate42.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema74 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/decline.schema.json","title":"decline body","description":"No to a request. Ends the exchange.","type":"object","additionalProperties":false,"required":["reason"],"properties":{"reason":{"enum":["policy","owner_declined","busy","expired","out_of_scope","other","not_free","share_used"]},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id","description":"The remembered decision that declined it, when the owner was not asked."},"note":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":200}}};
+const schema74 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/decline.schema.json","title":"decline body","description":"No to a request. Ends the exchange.","type":"object","additionalProperties":false,"required":["reason"],"properties":{"reason":{"enum":["policy","owner_declined","busy","expired","out_of_scope","other","share_used","unavailable"],"description":"In a run_request's exchange, only unavailable, expired, out_of_scope or share_used (protocol.md section 4, rule 9)."},"by_rule":{"$ref":"../common.schema.json#/$defs/rule_id","description":"The remembered decision that declined it, when the owner was not asked."},"note":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":200}}};
 
 function validate44(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/actions/decline.schema.json" */;
@@ -2684,7 +2684,7 @@ errors++;
 }
 if(data.reason !== undefined){
 let data0 = data.reason;
-if(!((((((((data0 === "policy") || (data0 === "owner_declined")) || (data0 === "busy")) || (data0 === "expired")) || (data0 === "out_of_scope")) || (data0 === "other")) || (data0 === "not_free")) || (data0 === "share_used"))){
+if(!((((((((data0 === "policy") || (data0 === "owner_declined")) || (data0 === "busy")) || (data0 === "expired")) || (data0 === "out_of_scope")) || (data0 === "other")) || (data0 === "share_used")) || (data0 === "unavailable"))){
 const err2 = {instancePath:instancePath+"/reason",schemaPath:"#/properties/reason/enum",keyword:"enum",params:{allowedValues: schema74.properties.reason.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err2];
