@@ -3,7 +3,7 @@
 // It is what the conformance runner judges fixtures with, and it is meant to be read next to
 // spec/protocol.md, spec/identity.md and spec/sphere-api.md. Node >= 22, node:crypto only, plus ajv.
 
-import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, sign, verify } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -77,6 +77,62 @@ export function keyFromSeed(seed32) {
 }
 
 export const keyFromSeedString = (seedString) => keyFromSeed(sha256(Buffer.from(seedString, "utf8")));
+
+// ---------------------------------------------------------------------------------------------
+// The job channel (protocol.md section 13): the hello's signature, the salt, the two keys, the
+// nonces and a frame. The known-answer vectors in channel-vectors.json come from these.
+
+export const CHANNEL_HELLO_PREFIX = "obi/0.1 channel\n";
+const PKCS8_X25519_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
+const SPKI_X25519_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
+
+/** An X25519 key from 32 private bytes: the key object and its raw public key. */
+export function x25519FromPrivate(raw32) {
+  const privateKey = createPrivateKey({ key: Buffer.concat([PKCS8_X25519_PREFIX, raw32]), format: "der", type: "pkcs8" });
+  return { privateKey, publicRaw: fromB64url(createPublicKey(privateKey).export({ format: "jwk" }).x) };
+}
+
+export const x25519Shared = (privateKey, peerRaw32) =>
+  diffieHellman({ privateKey, publicKey: createPublicKey({ key: Buffer.concat([SPKI_X25519_PREFIX, peerRaw32]), format: "der", type: "spki" }) });
+
+/** What a hello's signature covers: the prefix, then the canonical JSON of the hello without it. */
+export function helloSigningInput(hello) {
+  const { signature: _signature, ...rest } = hello;
+  return Buffer.concat([Buffer.from(CHANNEL_HELLO_PREFIX, "utf8"), canonicalBytes(rest)]);
+}
+
+export const signHello = (unsigned, privateKey) => ({ ...unsigned, signature: signBytes(privateKey, helloSigningInput(unsigned)) });
+
+/** salt = SHA-256(guest's hello bytes ‖ host's hello bytes); one 32-byte key each way. */
+export function channelKeys(shared, guestHelloBytes, hostHelloBytes) {
+  const salt = sha256(Buffer.concat([guestHelloBytes, hostHelloBytes]));
+  const key = (info) => Buffer.from(hkdfSync("sha256", shared, salt, Buffer.from(info, "utf8"), 32));
+  return { salt, guestToHost: key("obi/0.1 channel guest>host"), hostToGuest: key("obi/0.1 channel host>guest") };
+}
+
+/** 4 zero bytes, then the frame's number in its direction, big-endian 64-bit. */
+export function channelNonce(counter) {
+  const nonce = Buffer.alloc(12);
+  nonce.writeBigUInt64BE(BigInt(counter), 4);
+  return nonce;
+}
+
+/** A frame on the wire: ChaCha20-Poly1305 of (stream u32 BE, kind byte, payload), the tag after. */
+export function sealFrame(key, counter, stream, kind, payload) {
+  const plain = Buffer.alloc(5 + payload.length);
+  plain.writeUInt32BE(stream, 0);
+  plain[4] = kind;
+  Buffer.from(payload).copy(plain, 5);
+  const cipher = createCipheriv("chacha20-poly1305", key, channelNonce(counter), { authTagLength: 16 });
+  return Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+}
+
+export function openFrame(key, counter, wire) {
+  const decipher = createDecipheriv("chacha20-poly1305", key, channelNonce(counter), { authTagLength: 16 });
+  decipher.setAuthTag(wire.subarray(wire.length - 16));
+  const plain = Buffer.concat([decipher.update(wire.subarray(0, wire.length - 16)), decipher.final()]);
+  return { stream: plain.readUInt32BE(0), kind: plain[4], payload: plain.subarray(5) };
+}
 
 export function keyIdOf(publicKeyB64url) {
   const raw = fromB64url(publicKeyB64url);
