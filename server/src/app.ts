@@ -4,6 +4,8 @@ import type { Deps, Env } from "./env.ts";
 import { ApiError, INTERNAL_MESSAGE, apiError, errorResponse } from "./http.ts";
 import { tokenEndpoint } from "./oauth.ts";
 import { audit } from "./routes/audit.ts";
+import { openChannel } from "./routes/channels.ts";
+import { deleteRunner, putRunner } from "./routes/runner.ts";
 import { getMemberRoute, invite, listMembers, redeem, revoke, updateCard } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
@@ -29,6 +31,9 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/deliveries$`), deliveries],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/deliveries/ack$`), ack],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/audit$`), audit],
+  ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/channels/${SEGMENT}$`), openChannel],
+  ["PUT", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), putRunner],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), deleteRunner],
 ];
 
 export async function handle(request: Request, env: Env, deps: Deps): Promise<Response> {

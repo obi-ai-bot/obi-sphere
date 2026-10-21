@@ -62,6 +62,9 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `GET /v0.1/spheres/{sphere}/deliveries?limit=&wait=` | Obi token | `receive` | | `200` [deliveries.response](schemas/v0.1/wire/deliveries.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/deliveries/ack` | Obi token | `receive` | [ack.request](schemas/v0.1/wire/ack.request.schema.json) | `200` [ack.response](schemas/v0.1/wire/ack.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}/audit?from_seq=&limit=` | bearer | `audit:read` | | `200` [audit.response](schemas/v0.1/wire/audit.response.schema.json) |
+| `GET /v0.1/spheres/{sphere}/channels/{correlation_id}` (WebSocket) | Obi token of a party | `receive` | | `101`, then frames (section 6.3) |
+| `PUT /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | [runner-status](schemas/v0.1/runner-status.schema.json) | `200` member |
+| `DELETE /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | | `200` member |
 
 A path for a Sphere that doesn't exist is `404 not_found`; a token for another Sphere on it is `401 unauthorized`.
 
@@ -195,6 +198,21 @@ The Sphere never changes the envelope: what it records and delivers is byte-for-
 - A delivery whose envelope expires before it is acknowledged is dropped from the queue. It stays in the audit chain.
 
 `POST /v0.1/spheres/{sphere}/deliveries/ack` with `{"delivery_ids": ["…", "…"]}` (1 to 100 distinct ids) acknowledges deliveries, and answers how many of them were waiting for this Obi: `{"acked": 2}`. Ids that are unknown, already acknowledged, dropped (expired, or the receiver revoked) or another Obi's count 0 and are not an error. A receiver acknowledges only after it has recorded what it decided (protocol.md section 11).
+
+### 6.3 Job channels
+
+`GET /v0.1/spheres/{sphere}/channels/{correlation_id}` with `Upgrade: websocket` opens one side of a `run_request`'s job channel (protocol.md section 13). The Sphere relays what each side sends to the other, unchanged, and reads none of it: everything but its own text frames is encrypted end to end.
+
+- **Who.** An Obi token with `receive` whose actor is the exchange's guest (the request's `from`) or host (its `to`). The request must be a `run_request` in this Sphere whose exchange has its `accept` and hasn't ended (protocol.md section 4), and hasn't expired. Otherwise: `401 unauthorized`, `403 insufficient_scope` or `forbidden` (not a party), `404 not_found` (no such request), `409 conflict` (not accepted yet, or ended). A request without `Upgrade: websocket` is `400 bad_request`.
+- **Pairing.** One connection per side: a new one replaces the side's earlier one, which is closed with code `4003`. When both sides are there, the Sphere sends each a text frame `{"peer": "joined"}`; when one leaves, the other gets `{"peer": "left"}` and stays open, so the side that left can come back. Text frames come only from the Sphere; a side that sends one is closed with `4004`.
+- **What it carries.** Binary frames only, each at most 262,144 bytes, relayed in order. A frame sent while the other side isn't there is dropped: each `{"peer": "joined"}` starts a new handshake (protocol.md section 13). A channel carries at most 8 GiB in all; past that both sides are closed with `4002`.
+- **Closing.** The Sphere closes both sides with `4001` within 10 seconds of the exchange ending (a `result`, `run_return`, `decline` or `run_cancel` recorded), its request expiring, or either Obi being revoked.
+
+### 6.4 Runner status
+
+`PUT /v0.1/spheres/{sphere}/members/{obi}/runner` with a signed runner status (protocol.md section 14) publishes it in the directory, replacing the member's earlier one; `DELETE` takes it away. Only the Obi itself, with its own token (`receive`); another caller is `403 forbidden`. The Sphere checks the schema, that `sphere` and `obi` are the path's, that `key_id` is the Obi's current key and the signature verifies (`400 bad_signature`, `400 unknown_key`), and that `expires_at` is after now and at most 900 seconds after `created_at` (`400 bad_request`). It answers the member as the caller sees it.
+
+The directory (`GET …/members` and `GET …/members/{obi}`) shows a member's `runner` only to a caller whose owner its `for` names (or every caller when `for` is `*`), the member's own owner included, and only until it expires. Nobody else learns that one exists. The status's own signature lets every reader check that the Sphere didn't make it up or change it.
 
 ## 7. Audit chain
 

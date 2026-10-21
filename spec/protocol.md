@@ -36,12 +36,12 @@ Every message is one envelope that carries exactly one typed action in `body`. S
 |---|---|---|
 | `protocol` | yes | Always `obi/0.1` for this version. |
 | `id` | yes | Unique id of this message (UUID). The sender MUST NOT reuse it. |
-| `type` | yes | One of `review_request`, `question`, `handoff`, `status`, `accept`, `decline`, `result`, `answer`. Nothing else. |
+| `type` | yes | One of `review_request`, `question`, `handoff`, `run_request`, `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`. Nothing else. |
 | `from` | yes | The sending Obi's `obi_id`. |
 | `to` | yes | The receiving Obi's `obi_id`. Different from `from`. Only that Obi may act on the message: any other Obi it reaches rejects it (section 10, check 5). |
 | `sphere` | yes | The Sphere it travels in. |
 | `correlation_id` | yes | The exchange it belongs to. On a request, equal to its own `id`. On a reply, equal to the request's `id`. |
-| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result` and `answer`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
+| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return` and `run_cancel`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
 | `created_at` | yes | When the sender made it. |
 | `expires_at` | yes | After this time the receiver MUST NOT act on it. Later than `created_at`, at most 2,592,000 seconds after it. |
 | `key_id` | yes | The sender's signing key, as its agent card publishes it (`ed25519:` + base64url of SHA-256 of the raw public key). |
@@ -52,22 +52,26 @@ A whole envelope, in its canonical form (section 9), is at most 65,536 bytes.
 
 ## 4. Exchanges
 
-Requests start an exchange: `review_request`, `question`, `handoff`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`.
+Requests start an exchange: `review_request`, `question`, `handoff`, `run_request`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, and `run_cancel`, the one reply a request's own sender sends.
 
 ```
 review_request, handoff:  request ─► [status…] ─► accept ─► [status…] ─► result or decline
                              └─────► [status…] ─► decline
 question:                 request ─► [status…] ─► [accept ─► [status…]] ─► answer or decline
+run_request:              request ─► [run_progress…] ─► accept ─► [run_progress…] ─► result, run_return or decline
+                             └─────► [run_progress…] ─► decline
+                          (and from the request's sender, at any point before the end: run_cancel)
 ```
 
 **The exchange rules.** These are the only ones. A receiving Obi applies them to the replies it gets (section 11, step 3), the Sphere applies them at send ([sphere-api.md](sphere-api.md) section 6.1, check 12), a chain's verifier applies them to every reply in the chain ([sphere-api.md](sphere-api.md) section 7.1, check 7), and the reference verifier implements them once (`exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs)). A reply is allowed exactly when all of these hold:
 
-1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender.
-2. The exchange has not ended: no `decline`, `result` or `answer` for that request came before it. A `decline`, a `result` or an `answer` ends the exchange; nothing may follow it.
+1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The one exception is `run_cancel`, which only the request's sender sends, to its receiver.
+2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return` or `run_cancel` for that request came before it. Each of those ends the exchange; nothing may follow it.
 3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times.
 4. A `result`'s `for` is the request's type, so a `result` finishes only a `review_request` or a `handoff`. An `answer` answers only a `question`.
 5. A `result` comes only after that exchange's `accept`. An `answer` needs no `accept` (an `accept` before it is allowed too).
 6. A `decline` may come at any point before the end, before or after an `accept`.
+7. `run_progress`, `run_return` and `run_cancel` belong only to a `run_request`'s exchange. A `run_return` comes only after its `accept`; `run_progress` and `run_cancel` may come before it or after it.
 
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
@@ -129,7 +133,7 @@ The receiver takes the request on. `by_rule` (optional) names the remembered dec
 
 ### 5.6 `decline`
 
-No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200).
+No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_scope`, `not_free` (a `run_request`'s receiver's Mac isn't free to run it now: section 14), `other`. `by_rule` (optional) names the remembered decision that declined it. `note` is optional one-line data (200).
 
 ### 5.7 `result`
 
@@ -137,6 +141,7 @@ Finishes a `review_request` or a `handoff` (an `answer` finishes a question, 5.8
 
 - **`for: review_request`.** `outcome` is `approved`, `changes_requested` or `failed`; `repo`, `head_sha` (the commit actually reviewed), `findings` (0 to 50, section 7), `acceptance` (one entry per condition of the request, required unless `failed`), optional `by_rule` and `summary` (4,000, data).
 - **`for: handoff`.** `outcome` is `done` or `failed`; `repo`, `acceptance`, optional `head_branch`, `head_sha`, `pr`, `by_rule`, `summary` (4,000, data).
+- **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, `host` (what the job used of the Mac it ran on: `{wall_seconds, cpu_seconds, peak_memory_mb}`), optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and `summary` (4,000, data).
 
 Each `acceptance` entry is `{index, kind, severity?, met}`: `index` is the condition's position in the request, `kind` (and `severity`, for `no_findings_at_or_above`) repeat it so the result can be checked on its own, and `met` is a boolean.
 
@@ -175,6 +180,35 @@ A reference names one thing, typed, so that it can be checked and shown, never f
 There is no kind for a URL, a file path or a command. A receiver MAY show a reference as a link it builds itself for the code host it uses, and MUST NOT fetch, open or run anything because of one: a reference says what is meant, not what to do. One it can't see, or a job it doesn't have, is something it doesn't know (section 11, "Questions"), never something to guess at. A reference is judged by what it names, not by the repository it claims: before a job reference's repository decides anything (which sharing rule applies, which remembered decision covers the question), the receiver MUST check that the job is its own and runs in that repository, and treat the reference as unknown otherwise.
 
 The references in one list (`about`, `refs`) are distinct, with repositories compared ignoring ASCII case: `{"kind": "pr", "repo": "Acme/App", "pr": 7}` and `{"kind": "pr", "repo": "acme/app", "pr": 7}` are the same reference twice, and the message is invalid (section 10, check 3).
+
+### 5.10 `run_request`
+
+Ask another Obi to run one of the sender's owner's jobs on its Mac (section 14). Schema: [run_request.schema.json](schemas/v0.1/actions/run_request.schema.json).
+
+| Field | Required | Meaning |
+|---|---|---|
+| `title` | yes | What the job is, one line (200). Data. |
+| `request` | yes | What the sender's owner asked their own agent to do (20,000). Data to the receiver: it is the sender's owner's instruction to their own agent, and reaches only that agent, in the VM, never the receiver's owner's agents or models. |
+| `agent` | yes | `claude` or `codex`: the agent's CLI that runs it, signed in to the sender's owner's own account through the job channel. |
+| `model` | no | The model, as that CLI takes it. |
+| `repo` | yes | `owner/name`, for the receiver's rules and the job's card. |
+| `base_branch`, `base_sha` | yes | Where the job starts: the bundle's `obi-base` branch is `base_sha`. |
+| `branch` | yes | The branch the job commits to. |
+| `bundle` | yes | The code, a git bundle the sender sends on the job channel once the receiver accepts: `{sha256, bytes}`. The receiver checks both before it runs anything. |
+| `size` | yes | `small` (4 cores, 8 GB, 30 GB of disk) or `large` (6, 12, 60). The receiver never gives more than its owner set. |
+| `max_minutes` | yes | The longest the job may run there, 5 to 480. The receiver's own limit wins when it is lower. |
+
+### 5.11 `run_progress`
+
+Where a `run_request`'s job is, from its receiver: `state` is `queued`, `starting`, `running`, `paused` (the receiver's owner came back to their Mac) or `resumed`; `note` is optional one-line data (200). The receiver sends one when the state changes, not as a heartbeat (the job channel has one).
+
+### 5.12 `run_return`
+
+The job stopped before it finished, and comes back to its sender with what it did. Ends the exchange. `reason` is `owner_back` (the receiver's owner came back and stayed), `time_limit`, `stopped` (the receiver's owner stopped it), `sharing_off` or `shutdown`; `minutes` is how long it ran; optional `commits` and `head_sha` as in a result, `host` as in a result, and `note` (one-line data). The sender can run it again, at home or on another Mac, from those commits.
+
+### 5.13 `run_cancel`
+
+The request's own sender calls off its `run_request` (its owner cancelled the job). Ends the exchange. `note` is optional one-line data. The receiver stops the job at once and sends nothing more.
 
 ## 6. Acceptance conditions
 
@@ -308,7 +342,45 @@ Every request costs its receiver. A question its Obi answers by itself costs a m
 
 The agent card is an A2A AgentCard ([identity.md](identity.md)). In v0.1 the only transport is the Sphere relay. When Obis talk over A2A directly (a later version), an envelope travels as an A2A `Message` with a single `DataPart` whose `data` is the signed envelope, unchanged; the envelope's own signature, not the transport, is what the receiver checks.
 
-## 13. Open questions
+## 13. The job channel
+
+A `run_request`'s exchange has a private channel between its two Obis: it carries the code bundle, the job's model calls, its live transcript and its commits. The Sphere relays it ([sphere-api.md](sphere-api.md) section 6.3), so neither Obi opens a port, and it can see only sizes and timing: everything on it is encrypted end to end.
+
+**Opening.** Each side connects to the Sphere's channel endpoint for the exchange's `correlation_id` once the exchange has its `accept`. The request's sender is the **guest**, its receiver the **host**. The Sphere pairs the two connections and tells each when the other is there.
+
+**Handshake.** The first binary frame each side sends is its **hello**, the UTF-8 bytes of a JSON object ([channel-hello.schema.json](schemas/v0.1/channel-hello.schema.json)):
+
+```json
+{"protocol": "obi/0.1 channel", "sphere": "deskree", "correlation_id": "…", "obi": "obi-sangam", "role": "guest",
+ "x25519": "<base64url of a new X25519 public key, 32 bytes>", "key_id": "ed25519:…", "signature": "<base64url>"}
+```
+
+- `x25519` is a key made for this connection only. `signature` is Ed25519 by the Obi's current key over `"obi/0.1 channel\n"` followed by the RFC 8785 canonical JSON of the hello without `signature`.
+- Each side checks the other's hello: the schema, `sphere` and `correlation_id` this exchange's, `obi` the request's other party, `role` the other role, `key_id` that Obi's current key in the directory, and the signature. Anything else closes the channel. A Sphere that swaps a key can't sign for either Obi.
+- **Keys.** `shared` is X25519 of the side's own key and the other's. `salt` is SHA-256 of the guest's hello bytes followed by the host's. Each direction has its own 32-byte key, HKDF-SHA256 (RFC 5869) of `shared` with that `salt` and the info `obi/0.1 channel guest>host` or `obi/0.1 channel host>guest`.
+
+**Frames.** Every later binary frame is ChaCha20-Poly1305 (RFC 8439) with the direction's key, no associated data, and a nonce of 4 zero bytes followed by the frame's number in its direction as a big-endian 64-bit integer, from 0. So a frame that is changed, replayed, dropped or reordered doesn't decrypt, and the receiver closes the channel. A frame is at most 262,144 bytes on the wire. Its plaintext is a stream id (32 bits, big-endian), a kind (one byte) and the payload:
+
+| Kind | Payload |
+|---|---|
+| 0 `open` | JSON: `{"type": "model", "method", "path", "headers": [[name, value]…]}` (a model call from the job, host to guest), `{"type": "model_response", "status", "headers"}` (its answer, guest to host, on the same stream), `{"type": "bundle", "sha256", "bytes"}` (the code, guest to host), `{"type": "commits", "sha256", "bytes"}` (host to guest), `{"type": "transcript", "from": <line>}` (host to guest) |
+| 1 `data` | Bytes of the stream. |
+| 2 `end` | Nothing: the stream ended cleanly. |
+| 3 `reset` | One line of text: the stream failed. |
+
+Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least every 30 seconds. The host opens odd streams and the guest even ones. A bundle that doesn't match its `sha256` and `bytes` is refused.
+
+**Model calls.** The job's agent calls its model API at an address inside its VM; the host's Obi sends each call on the channel as a `model` stream, with the guest's placeholder credentials and hop-by-hop headers taken out. The guest's Obi accepts only its agent's model paths (Claude Code: `POST /v1/messages`, `POST /v1/messages/count_tokens`, `GET /v1/models`; Codex: `POST /v1/responses`, `GET /v1/models`), adds its owner's own credential, sends the call from its own machine and streams the answer back. So the guest's login never leaves the guest's machine, and the call leaves from there.
+
+**Closing.** Either side may close it. The exchange's end, the host's owner stopping the job, the guest cancelling it and either Obi's removal from the Sphere all close it. Every time the Sphere says the other side has joined, both sides start over with new hellos and new keys. So a side that loses its connection connects again and the channel goes on: streams open at the time are lost (a model call fails, and the agent retries it), the transcript stream is opened again `from` the line the guest has, and a bundle is sent again from its start.
+
+## 14. Running on another Obi's Mac
+
+**What a host offers.** An Obi whose owner lets their Mac run other people's jobs publishes its **runner status** in the Sphere's directory ([sphere-api.md](sphere-api.md) section 6.4; [runner-status.schema.json](schemas/v0.1/runner-status.schema.json)): `free`, the `slots` (jobs at once, 0 to 3), the `size` it gives, the `agents` and `kinds` of work it takes, `free_at` when it expects to be free, and `for`, the owners it is offered to (`*` for every member). It says nothing about whether its owner is at the Mac: `free` means only that a job sent now would be accepted. It is signed like an envelope, with the prefix `"obi/0.1 runner_status\n"`, and expires within 15 minutes; the Obi sends a new one when it changes (at most once a minute) and every 10 minutes while it holds.
+
+**The receiver decides, by its owner's rules alone.** A `run_request` is accepted only when the receiver's own rules allow it, whatever the status said and whatever the request claims: the sender's owner is one its owner offers the Mac to (and, unless its owner said otherwise, has been allowed once by name), the kind of work and the repository are allowed, a slot is free, and the Mac is free. Otherwise it declines: `policy` (sharing is off, or the rules don't cover the sender), `not_free` (the Mac isn't free now), `busy` (no slot), or `owner_declined`. It runs an accepted job only in a VM of its own, with no network but the job channel, and the job's model calls go back through the channel to the sender's Obi. It never pushes, publishes or opens anything for the job: the sender's Obi publishes the commits that come back, under its own owner.
+
+## 15. Open questions
 
 **Resolved in v0.1** (they were open in the draft):
 
@@ -327,4 +399,4 @@ The agent card is an A2A AgentCard ([identity.md](identity.md)). In v0.1 the onl
 - Encrypting bodies end to end so the Sphere relays without reading them.
 - Quotas the Sphere enforces: the error code exists (`rate_limited`) and a receiver's limits are recommended (section 11, "Rate limits"), but a Sphere's numbers aren't fixed.
 - Following up in a conversation: no field links a question to an earlier exchange, so each question stands on its own.
-- A `cancel` action for the sender.
+- A `cancel` action for the sender of a request other than `run_request`.

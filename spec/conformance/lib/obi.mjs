@@ -17,10 +17,12 @@ export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const ZERO_HASH = "0".repeat(64);
-export const REQUEST_TYPES = ["review_request", "question", "handoff"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel"];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result", "answer"];
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel"];
+// The replies that belong only to a run_request's exchange (spec/protocol.md section 4, rule 7).
+export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
 export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -243,7 +245,7 @@ export function resultProblems(body) {
   const allMet = acceptance.length > 0 && acceptance.every((a) => a.met);
   if (body.outcome === "approved" && !allMet) problems.push("approved needs every acceptance condition met");
   if (body.outcome === "changes_requested" && allMet) problems.push("changes_requested needs an acceptance condition not met");
-  if (body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
+  if (body.for === "handoff" && body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
   return problems;
 }
 
@@ -337,7 +339,11 @@ export function appendEntry(entries, sphere, envelope, recordedAt) {
 // breaks the rules, or null when it doesn't.
 export function exchangeProblem(reply, request, earlier) {
   if (!request || !REQUEST_TYPES.includes(request.type)) return "replies to no earlier request";
-  if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  // run_cancel is the one reply the request's own sender sends, to its receiver.
+  if (reply.type === "run_cancel") {
+    if (request.from !== reply.from || request.to !== reply.to) return "only the request's sender cancels it, to its receiver";
+  } else if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  if (RUN_REPLY_TYPES.includes(reply.type) && request.type !== "run_request") return `a ${reply.type} belongs to a run_request, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
   // At most one accept per exchange; a status may come before it or after it.
@@ -347,6 +353,8 @@ export function exchangeProblem(reply, request, earlier) {
     // A result (for a review_request or a handoff) comes only after the accept.
     if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // A run_return comes back only from a job that was accepted.
+  if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
   return null;

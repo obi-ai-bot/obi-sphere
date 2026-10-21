@@ -72,6 +72,7 @@ const SKILLS: Record<string, { name: string; description: string }> = {
   review_request: { name: "Review a change", description: "Reviews a change for its owner and answers with typed findings." },
   question: { name: "Answer a question", description: "Answers what its owner knows or decided." },
   handoff: { name: "Take a handoff", description: "Runs a piece of work for its owner." },
+  run_request: { name: "Run a job on this Mac", description: "Runs a teammate's job in a VM of its own, with the teammate's own account." },
 };
 
 export async function makeCard(o: CardOptions): Promise<Record<string, unknown>> {
@@ -207,7 +208,7 @@ export class World {
     return r;
   }
 
-  async delegation(obi: string, scope = "send:review_request send:question send:handoff reply receive directory:read audit:read", lifetime = 3600): Promise<string> {
+  async delegation(obi: string, scope = "send:review_request send:question send:handoff send:run_request reply receive directory:read audit:read", lifetime = 3600): Promise<string> {
     const { owner } = this.obis.get(obi)!;
     const key = await this.ownerKey(owner);
     return signJwt({ iss: owner, sub: owner, aud: `obi-sphere:${this.sphere}`, iat: this.clock.s, exp: this.clock.s + lifetime, jti: crypto.randomUUID(), scope, may_act: { sub: obi } }, key);
