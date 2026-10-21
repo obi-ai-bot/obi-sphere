@@ -12,7 +12,7 @@ const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
 
 /** How long a channel outlives its job's limit: the job's wind-down, and its commits coming back. */
 export const CHANNEL_GRACE_SECONDS = 900;
-/** The most channels an Obi has open at once. */
+/** The most live job exchanges (accepted, not ended, the job's time not up) an Obi may be in when it opens a channel. */
 export const MAX_OPEN_CHANNELS = 8;
 
 /**
@@ -50,14 +50,14 @@ export async function openChannel(request: Request, env: Env, deps: Deps, sphere
   if (!role) throw apiError("forbidden", "only the exchange's two Obis open its channel");
   const problem = await channelProblem(env.DB, sphere.id, correlationId, nowS(deps));
   if (problem) throw apiError("conflict", problem);
-  // At most this many channels open at once for one Obi: its live exchanges other than this one.
+  // At most this many live job exchanges for one Obi when it opens a channel: its others, accepted, not ended, the job's time not up.
   const live = await env.DB.prepare(
     `SELECT COUNT(*) AS n FROM audit r JOIN audit a ON a.sphere = r.sphere AND a.in_reply_to = r.msg_id AND a.type = 'accept'
       WHERE r.sphere = ?1 AND r.type = 'run_request' AND (r.from_obi = ?2 OR r.to_obi = ?2) AND r.msg_id != ?3
         AND NOT EXISTS (SELECT 1 FROM audit t WHERE t.sphere = r.sphere AND t.in_reply_to = r.msg_id AND t.type IN (${TERMINAL_TYPES.map((t) => `'${t}'`).join(", ")}))
         AND CAST(strftime('%s', a.recorded_at) AS INTEGER) + COALESCE(json_extract(r.envelope, '$.body.max_minutes'), 480) * 60 + ?4 > ?5`,
   ).bind(sphere.id, obi, correlationId, CHANNEL_GRACE_SECONDS, nowS(deps)).first<{ n: number }>();
-  if ((live?.n ?? 0) >= MAX_OPEN_CHANNELS) throw apiError("rate_limited", `an Obi has at most ${MAX_OPEN_CHANNELS} job channels open at once`);
+  if ((live?.n ?? 0) >= MAX_OPEN_CHANNELS) throw apiError("rate_limited", `an Obi may be in at most ${MAX_OPEN_CHANNELS} live job exchanges at once`);
   const relay = env.CHANNELS.get(env.CHANNELS.idFromName(`${sphere.id}/${correlationId}`));
   // The relay checks this token stays unrevoked (a card rotation or a revocation revokes it).
   const token = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "")![1]!;

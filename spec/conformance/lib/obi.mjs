@@ -425,8 +425,10 @@ export function exchangeProblem(reply, request, earlier) {
   if (reply.type === "decline" && ["run_request", "share_offer"].includes(request.type) && reply.body?.note !== undefined) return `a decline of a ${request.type} has no note`;
   // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
   const runDeclineReasons = ["unavailable", "expired", "out_of_scope", "share_used"];
-  if (reply.type === "decline" && request.type === "run_request" && (!runDeclineReasons.includes(reply.body?.reason) || reply.body?.by_rule !== undefined))
-    return `a decline of a run_request says only ${runDeclineReasons.join(", ")}, with no by_rule`;
+  if (reply.type === "decline" && request.type === "run_request" && !runDeclineReasons.includes(reply.body?.reason))
+    return `a decline of a run_request says only ${runDeclineReasons.join(", ")}`;
+  // Nor whether a rule or its owner in person answered.
+  if (request.type === "run_request" && reply.body?.by_rule !== undefined) return "no reply to a run_request names a rule (by_rule)";
   return null;
 }
 

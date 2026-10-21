@@ -9195,7 +9195,7 @@ return errors === 0;
 validate21.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const runnerStatus = validate72;
-const schema152 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json","title":"Runner status","description":"What an Obi's Mac offers other members now (protocol.md section 14): signed by the Obi, published in the directory, shown only to the owners `for` names. It never says whether its owner is at the Mac.","type":"object","additionalProperties":false,"required":["protocol","sphere","obi","free","slots","size","agents","kinds","for","created_at","expires_at","key_id","signature"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi":{"$ref":"common.schema.json#/$defs/obi_id"},"free":{"type":"boolean","description":"Whether a job sent now would likely be accepted. It changes at most once every 15 minutes, with jitter, so it never says when the owner is at the Mac (protocol.md section 14)."},"slots":{"type":"integer","minimum":0,"maximum":3,"description":"Jobs it runs at once."},"size":{"$ref":"common.schema.json#/$defs/box_size"},"agents":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/agent"}},"kinds":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":["job","review","check"]}},"for":{"oneOf":[{"const":"*"},{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/owner_id"}}],"description":"The owners it is offered to, or every member (`*`)."},"free_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"When it expects to be free, when it isn't."},"created_at":{"$ref":"common.schema.json#/$defs/timestamp"},"expires_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"At most 900 seconds after created_at."},"key_id":{"$ref":"common.schema.json#/$defs/key_id"},"signature":{"$ref":"common.schema.json#/$defs/signature","description":"Ed25519 over \"obi/0.1 runner_status\\n\" and the canonical JSON of every other field."}}};
+const schema152 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json","title":"Runner status","description":"What an Obi's Mac offers other members now (protocol.md section 14): signed by the Obi, published in the directory, shown only to the owners `for` names. It never says whether its owner is at the Mac.","type":"object","additionalProperties":false,"required":["protocol","sphere","obi","free","slots","size","agents","kinds","for","created_at","expires_at","key_id","signature"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi":{"$ref":"common.schema.json#/$defs/obi_id"},"free":{"type":"boolean","description":"Whether a job sent now would likely be accepted, as the Obi found at its last look: it looks only at moments a random 15 to 20 minutes apart, so it never says when the owner is at the Mac (protocol.md section 14)."},"slots":{"type":"integer","minimum":0,"maximum":3,"description":"Jobs it runs at once."},"size":{"$ref":"common.schema.json#/$defs/box_size"},"agents":{"type":"array","minItems":1,"maxItems":2,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/agent"}},"kinds":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":["job","review","check"]}},"for":{"oneOf":[{"const":"*"},{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/owner_id"}}],"description":"The owners it is offered to, or every member (`*`)."},"created_at":{"$ref":"common.schema.json#/$defs/timestamp"},"expires_at":{"$ref":"common.schema.json#/$defs/timestamp","description":"At most 900 seconds after created_at."},"key_id":{"$ref":"common.schema.json#/$defs/key_id"},"signature":{"$ref":"common.schema.json#/$defs/signature","description":"Ed25519 over \"obi/0.1 runner_status\\n\" and the canonical JSON of every other field."}}};
 
 function validate72(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/runner-status.schema.json" */;
@@ -9804,11 +9804,11 @@ vErrors = null;
 }
 }
 }
-if(data.free_at !== undefined){
-let data12 = data.free_at;
+if(data.created_at !== undefined){
+let data12 = data.created_at;
 if(typeof data12 === "string"){
 if(func1(data12) > 20){
-const err48 = {instancePath:instancePath+"/free_at",schemaPath:"common.schema.json#/$defs/timestamp/maxLength",keyword:"maxLength",params:{limit: 20},message:"must NOT have more than 20 characters"};
+const err48 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/maxLength",keyword:"maxLength",params:{limit: 20},message:"must NOT have more than 20 characters"};
 if(vErrors === null){
 vErrors = [err48];
 }
@@ -9818,7 +9818,7 @@ vErrors.push(err48);
 errors++;
 }
 if(func1(data12) < 20){
-const err49 = {instancePath:instancePath+"/free_at",schemaPath:"common.schema.json#/$defs/timestamp/minLength",keyword:"minLength",params:{limit: 20},message:"must NOT have fewer than 20 characters"};
+const err49 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/minLength",keyword:"minLength",params:{limit: 20},message:"must NOT have fewer than 20 characters"};
 if(vErrors === null){
 vErrors = [err49];
 }
@@ -9828,7 +9828,7 @@ vErrors.push(err49);
 errors++;
 }
 if(!pattern66.test(data12)){
-const err50 = {instancePath:instancePath+"/free_at",schemaPath:"common.schema.json#/$defs/timestamp/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"},message:"must match pattern \""+"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"+"\""};
+const err50 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"},message:"must match pattern \""+"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"+"\""};
 if(vErrors === null){
 vErrors = [err50];
 }
@@ -9839,7 +9839,7 @@ errors++;
 }
 }
 else {
-const err51 = {instancePath:instancePath+"/free_at",schemaPath:"common.schema.json#/$defs/timestamp/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err51 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err51];
 }
@@ -9849,11 +9849,11 @@ vErrors.push(err51);
 errors++;
 }
 }
-if(data.created_at !== undefined){
-let data13 = data.created_at;
+if(data.expires_at !== undefined){
+let data13 = data.expires_at;
 if(typeof data13 === "string"){
 if(func1(data13) > 20){
-const err52 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/maxLength",keyword:"maxLength",params:{limit: 20},message:"must NOT have more than 20 characters"};
+const err52 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/maxLength",keyword:"maxLength",params:{limit: 20},message:"must NOT have more than 20 characters"};
 if(vErrors === null){
 vErrors = [err52];
 }
@@ -9863,7 +9863,7 @@ vErrors.push(err52);
 errors++;
 }
 if(func1(data13) < 20){
-const err53 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/minLength",keyword:"minLength",params:{limit: 20},message:"must NOT have fewer than 20 characters"};
+const err53 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/minLength",keyword:"minLength",params:{limit: 20},message:"must NOT have fewer than 20 characters"};
 if(vErrors === null){
 vErrors = [err53];
 }
@@ -9873,7 +9873,7 @@ vErrors.push(err53);
 errors++;
 }
 if(!pattern66.test(data13)){
-const err54 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"},message:"must match pattern \""+"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"+"\""};
+const err54 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"},message:"must match pattern \""+"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"+"\""};
 if(vErrors === null){
 vErrors = [err54];
 }
@@ -9884,7 +9884,7 @@ errors++;
 }
 }
 else {
-const err55 = {instancePath:instancePath+"/created_at",schemaPath:"common.schema.json#/$defs/timestamp/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err55 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err55];
 }
@@ -9894,11 +9894,11 @@ vErrors.push(err55);
 errors++;
 }
 }
-if(data.expires_at !== undefined){
-let data14 = data.expires_at;
+if(data.key_id !== undefined){
+let data14 = data.key_id;
 if(typeof data14 === "string"){
-if(func1(data14) > 20){
-const err56 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/maxLength",keyword:"maxLength",params:{limit: 20},message:"must NOT have more than 20 characters"};
+if(func1(data14) > 51){
+const err56 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/maxLength",keyword:"maxLength",params:{limit: 51},message:"must NOT have more than 51 characters"};
 if(vErrors === null){
 vErrors = [err56];
 }
@@ -9907,8 +9907,8 @@ vErrors.push(err56);
 }
 errors++;
 }
-if(func1(data14) < 20){
-const err57 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/minLength",keyword:"minLength",params:{limit: 20},message:"must NOT have fewer than 20 characters"};
+if(func1(data14) < 51){
+const err57 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/minLength",keyword:"minLength",params:{limit: 51},message:"must NOT have fewer than 51 characters"};
 if(vErrors === null){
 vErrors = [err57];
 }
@@ -9917,8 +9917,8 @@ vErrors.push(err57);
 }
 errors++;
 }
-if(!pattern66.test(data14)){
-const err58 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/pattern",keyword:"pattern",params:{pattern: "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"},message:"must match pattern \""+"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]Z$"+"\""};
+if(!pattern78.test(data14)){
+const err58 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/pattern",keyword:"pattern",params:{pattern: "^ed25519:[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^ed25519:[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err58];
 }
@@ -9929,7 +9929,7 @@ errors++;
 }
 }
 else {
-const err59 = {instancePath:instancePath+"/expires_at",schemaPath:"common.schema.json#/$defs/timestamp/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err59 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err59];
 }
@@ -9939,11 +9939,11 @@ vErrors.push(err59);
 errors++;
 }
 }
-if(data.key_id !== undefined){
-let data15 = data.key_id;
+if(data.signature !== undefined){
+let data15 = data.signature;
 if(typeof data15 === "string"){
-if(func1(data15) > 51){
-const err60 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/maxLength",keyword:"maxLength",params:{limit: 51},message:"must NOT have more than 51 characters"};
+if(func1(data15) > 86){
+const err60 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/maxLength",keyword:"maxLength",params:{limit: 86},message:"must NOT have more than 86 characters"};
 if(vErrors === null){
 vErrors = [err60];
 }
@@ -9952,8 +9952,8 @@ vErrors.push(err60);
 }
 errors++;
 }
-if(func1(data15) < 51){
-const err61 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/minLength",keyword:"minLength",params:{limit: 51},message:"must NOT have fewer than 51 characters"};
+if(func1(data15) < 86){
+const err61 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/minLength",keyword:"minLength",params:{limit: 86},message:"must NOT have fewer than 86 characters"};
 if(vErrors === null){
 vErrors = [err61];
 }
@@ -9962,8 +9962,8 @@ vErrors.push(err61);
 }
 errors++;
 }
-if(!pattern78.test(data15)){
-const err62 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/pattern",keyword:"pattern",params:{pattern: "^ed25519:[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^ed25519:[A-Za-z0-9_-]{43}$"+"\""};
+if(!pattern79.test(data15)){
+const err62 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{86}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{86}$"+"\""};
 if(vErrors === null){
 vErrors = [err62];
 }
@@ -9974,7 +9974,7 @@ errors++;
 }
 }
 else {
-const err63 = {instancePath:instancePath+"/key_id",schemaPath:"common.schema.json#/$defs/key_id/type",keyword:"type",params:{type: "string"},message:"must be string"};
+const err63 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/type",keyword:"type",params:{type: "string"},message:"must be string"};
 if(vErrors === null){
 vErrors = [err63];
 }
@@ -9984,59 +9984,14 @@ vErrors.push(err63);
 errors++;
 }
 }
-if(data.signature !== undefined){
-let data16 = data.signature;
-if(typeof data16 === "string"){
-if(func1(data16) > 86){
-const err64 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/maxLength",keyword:"maxLength",params:{limit: 86},message:"must NOT have more than 86 characters"};
+}
+else {
+const err64 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
 if(vErrors === null){
 vErrors = [err64];
 }
 else {
 vErrors.push(err64);
-}
-errors++;
-}
-if(func1(data16) < 86){
-const err65 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/minLength",keyword:"minLength",params:{limit: 86},message:"must NOT have fewer than 86 characters"};
-if(vErrors === null){
-vErrors = [err65];
-}
-else {
-vErrors.push(err65);
-}
-errors++;
-}
-if(!pattern79.test(data16)){
-const err66 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{86}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{86}$"+"\""};
-if(vErrors === null){
-vErrors = [err66];
-}
-else {
-vErrors.push(err66);
-}
-errors++;
-}
-}
-else {
-const err67 = {instancePath:instancePath+"/signature",schemaPath:"common.schema.json#/$defs/signature/type",keyword:"type",params:{type: "string"},message:"must be string"};
-if(vErrors === null){
-vErrors = [err67];
-}
-else {
-vErrors.push(err67);
-}
-errors++;
-}
-}
-}
-else {
-const err68 = {instancePath,schemaPath:"#/type",keyword:"type",params:{type: "object"},message:"must be object"};
-if(vErrors === null){
-vErrors = [err68];
-}
-else {
-vErrors.push(err68);
 }
 errors++;
 }
@@ -10046,13 +10001,13 @@ return errors === 0;
 validate72.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const agentCard = validate73;
-const schema164 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/agent-card.schema.json","title":"Obi agent card v0.1 (an A2A AgentCard profile)","description":"The A2A AgentCard an Obi publishes in its Sphere, with the Obi extension and exactly one signature by its owner's key (spec/identity.md). Only the A2A fields listed here are allowed.","type":"object","additionalProperties":false,"required":["protocolVersion","name","description","url","preferredTransport","version","capabilities","defaultInputModes","defaultOutputModes","skills","signatures"],"properties":{"protocolVersion":{"const":"0.3.0","description":"The A2A protocol version the card follows."},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100,"description":"What to call this Obi, as its owner wrote it."},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"url":{"type":"string","minLength":12,"maxLength":500,"pattern":"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$","description":"This Obi's entry in its Sphere's directory. Messages reach it through the Sphere relay."},"preferredTransport":{"const":"HTTP+JSON"},"version":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[0-9A-Za-z.+-]{1,64}$","description":"The Obi implementation's version."},"provider":{"type":"object","additionalProperties":false,"required":["organization"],"properties":{"organization":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"url":{"type":"string","minLength":8,"maxLength":500,"pattern":"^https://[^\\s]{1,492}$"}}},"documentationUrl":{"type":"string","minLength":8,"maxLength":500,"pattern":"^https://[^\\s]{1,492}$"},"capabilities":{"type":"object","additionalProperties":false,"required":["streaming","pushNotifications","extensions"],"properties":{"streaming":{"const":false},"pushNotifications":{"const":false},"extensions":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/obi_extension"}}}},"defaultInputModes":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"application/json"}},"defaultOutputModes":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"application/json"}},"skills":{"type":"array","minItems":1,"maxItems":5,"items":{"$ref":"#/$defs/skill"},"description":"One skill per request type the Obi accepts, the same set as the extension's `accepts`."},"signatures":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/card_signature"}}},"$defs":{"obi_extension":{"type":"object","additionalProperties":false,"required":["uri","required","params"],"properties":{"uri":{"const":"urn:obi-sphere:ext:obi:0.1"},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"required":{"const":true},"params":{"type":"object","additionalProperties":false,"required":["protocol","sphere","obi_id","owner","owner_key","key_id","public_key","accepts","card_seq","issued_at"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi_id":{"$ref":"common.schema.json#/$defs/obi_id"},"owner":{"$ref":"common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The owner's Ed25519 public key, which signs this card."},"key_id":{"$ref":"common.schema.json#/$defs/key_id","description":"The Obi's signing key id: what its envelopes carry in `key_id`."},"public_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The Obi's Ed25519 public key."},"accepts":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/request_type"},"description":"The request types this Obi accepts. Replies are always accepted."},"card_seq":{"type":"integer","minimum":1,"maximum":1000000000,"description":"Grows by at least 1 with every card the owner issues for this Obi in this Sphere."},"issued_at":{"$ref":"common.schema.json#/$defs/timestamp"}}}}},"skill":{"type":"object","additionalProperties":false,"required":["id","name","description","tags"],"properties":{"id":{"$ref":"common.schema.json#/$defs/request_type"},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"tags":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"obi-action"}}}},"card_signature":{"description":"A2A AgentCardSignature: a JWS (RFC 7515) with detached payload. `protected` is the base64url protected header; the payload is the JCS form of the card without `signatures`.","type":"object","additionalProperties":false,"required":["protected","signature"],"properties":{"protected":{"type":"string","minLength":4,"maxLength":1000,"pattern":"^[A-Za-z0-9_-]+$"},"signature":{"$ref":"common.schema.json#/$defs/signature"}}}}};
-const pattern90 = new RegExp("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$", "u");
-const pattern91 = new RegExp("^[0-9A-Za-z.+-]{1,64}$", "u");
-const pattern93 = new RegExp("^https://[^\\s]{1,492}$", "u");
-const schema168 = {"type":"object","additionalProperties":false,"required":["uri","required","params"],"properties":{"uri":{"const":"urn:obi-sphere:ext:obi:0.1"},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"required":{"const":true},"params":{"type":"object","additionalProperties":false,"required":["protocol","sphere","obi_id","owner","owner_key","key_id","public_key","accepts","card_seq","issued_at"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi_id":{"$ref":"common.schema.json#/$defs/obi_id"},"owner":{"$ref":"common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The owner's Ed25519 public key, which signs this card."},"key_id":{"$ref":"common.schema.json#/$defs/key_id","description":"The Obi's signing key id: what its envelopes carry in `key_id`."},"public_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The Obi's Ed25519 public key."},"accepts":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/request_type"},"description":"The request types this Obi accepts. Replies are always accepted."},"card_seq":{"type":"integer","minimum":1,"maximum":1000000000,"description":"Grows by at least 1 with every card the owner issues for this Obi in this Sphere."},"issued_at":{"$ref":"common.schema.json#/$defs/timestamp"}}}}};
-const schema174 = {"description":"An Ed25519 public key: the 32 raw bytes, base64url without padding.","type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"};
-const pattern99 = new RegExp("^[A-Za-z0-9_-]{43}$", "u");
+const schema163 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/agent-card.schema.json","title":"Obi agent card v0.1 (an A2A AgentCard profile)","description":"The A2A AgentCard an Obi publishes in its Sphere, with the Obi extension and exactly one signature by its owner's key (spec/identity.md). Only the A2A fields listed here are allowed.","type":"object","additionalProperties":false,"required":["protocolVersion","name","description","url","preferredTransport","version","capabilities","defaultInputModes","defaultOutputModes","skills","signatures"],"properties":{"protocolVersion":{"const":"0.3.0","description":"The A2A protocol version the card follows."},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100,"description":"What to call this Obi, as its owner wrote it."},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"url":{"type":"string","minLength":12,"maxLength":500,"pattern":"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$","description":"This Obi's entry in its Sphere's directory. Messages reach it through the Sphere relay."},"preferredTransport":{"const":"HTTP+JSON"},"version":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[0-9A-Za-z.+-]{1,64}$","description":"The Obi implementation's version."},"provider":{"type":"object","additionalProperties":false,"required":["organization"],"properties":{"organization":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"url":{"type":"string","minLength":8,"maxLength":500,"pattern":"^https://[^\\s]{1,492}$"}}},"documentationUrl":{"type":"string","minLength":8,"maxLength":500,"pattern":"^https://[^\\s]{1,492}$"},"capabilities":{"type":"object","additionalProperties":false,"required":["streaming","pushNotifications","extensions"],"properties":{"streaming":{"const":false},"pushNotifications":{"const":false},"extensions":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/obi_extension"}}}},"defaultInputModes":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"application/json"}},"defaultOutputModes":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"application/json"}},"skills":{"type":"array","minItems":1,"maxItems":5,"items":{"$ref":"#/$defs/skill"},"description":"One skill per request type the Obi accepts, the same set as the extension's `accepts`."},"signatures":{"type":"array","minItems":1,"maxItems":1,"items":{"$ref":"#/$defs/card_signature"}}},"$defs":{"obi_extension":{"type":"object","additionalProperties":false,"required":["uri","required","params"],"properties":{"uri":{"const":"urn:obi-sphere:ext:obi:0.1"},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"required":{"const":true},"params":{"type":"object","additionalProperties":false,"required":["protocol","sphere","obi_id","owner","owner_key","key_id","public_key","accepts","card_seq","issued_at"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi_id":{"$ref":"common.schema.json#/$defs/obi_id"},"owner":{"$ref":"common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The owner's Ed25519 public key, which signs this card."},"key_id":{"$ref":"common.schema.json#/$defs/key_id","description":"The Obi's signing key id: what its envelopes carry in `key_id`."},"public_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The Obi's Ed25519 public key."},"accepts":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/request_type"},"description":"The request types this Obi accepts. Replies are always accepted."},"card_seq":{"type":"integer","minimum":1,"maximum":1000000000,"description":"Grows by at least 1 with every card the owner issues for this Obi in this Sphere."},"issued_at":{"$ref":"common.schema.json#/$defs/timestamp"}}}}},"skill":{"type":"object","additionalProperties":false,"required":["id","name","description","tags"],"properties":{"id":{"$ref":"common.schema.json#/$defs/request_type"},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"tags":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"obi-action"}}}},"card_signature":{"description":"A2A AgentCardSignature: a JWS (RFC 7515) with detached payload. `protected` is the base64url protected header; the payload is the JCS form of the card without `signatures`.","type":"object","additionalProperties":false,"required":["protected","signature"],"properties":{"protected":{"type":"string","minLength":4,"maxLength":1000,"pattern":"^[A-Za-z0-9_-]+$"},"signature":{"$ref":"common.schema.json#/$defs/signature"}}}}};
+const pattern89 = new RegExp("^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$", "u");
+const pattern90 = new RegExp("^[0-9A-Za-z.+-]{1,64}$", "u");
+const pattern92 = new RegExp("^https://[^\\s]{1,492}$", "u");
+const schema167 = {"type":"object","additionalProperties":false,"required":["uri","required","params"],"properties":{"uri":{"const":"urn:obi-sphere:ext:obi:0.1"},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"required":{"const":true},"params":{"type":"object","additionalProperties":false,"required":["protocol","sphere","obi_id","owner","owner_key","key_id","public_key","accepts","card_seq","issued_at"],"properties":{"protocol":{"$ref":"common.schema.json#/$defs/protocol"},"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"obi_id":{"$ref":"common.schema.json#/$defs/obi_id"},"owner":{"$ref":"common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The owner's Ed25519 public key, which signs this card."},"key_id":{"$ref":"common.schema.json#/$defs/key_id","description":"The Obi's signing key id: what its envelopes carry in `key_id`."},"public_key":{"$ref":"common.schema.json#/$defs/public_key","description":"The Obi's Ed25519 public key."},"accepts":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"common.schema.json#/$defs/request_type"},"description":"The request types this Obi accepts. Replies are always accepted."},"card_seq":{"type":"integer","minimum":1,"maximum":1000000000,"description":"Grows by at least 1 with every card the owner issues for this Obi in this Sphere."},"issued_at":{"$ref":"common.schema.json#/$defs/timestamp"}}}}};
+const schema173 = {"description":"An Ed25519 public key: the 32 raw bytes, base64url without padding.","type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"};
+const pattern98 = new RegExp("^[A-Za-z0-9_-]{43}$", "u");
 
 function validate74(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -10282,7 +10237,7 @@ vErrors.push(err19);
 errors++;
 }
 for(const key1 in data3){
-if(!(func69.call(schema168.properties.params.properties, key1))){
+if(!(func69.call(schema167.properties.params.properties, key1))){
 const err20 = {instancePath:instancePath+"/params",schemaPath:"#/properties/params/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key1},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err20];
@@ -10463,7 +10418,7 @@ vErrors.push(err35);
 }
 errors++;
 }
-if(!pattern99.test(data8)){
+if(!pattern98.test(data8)){
 const err36 = {instancePath:instancePath+"/params/owner_key",schemaPath:"common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err36];
@@ -10553,7 +10508,7 @@ vErrors.push(err43);
 }
 errors++;
 }
-if(!pattern99.test(data10)){
+if(!pattern98.test(data10)){
 const err44 = {instancePath:instancePath+"/params/public_key",schemaPath:"common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err44];
@@ -10752,7 +10707,7 @@ return errors === 0;
 }
 validate74.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema179 = {"type":"object","additionalProperties":false,"required":["id","name","description","tags"],"properties":{"id":{"$ref":"common.schema.json#/$defs/request_type"},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"tags":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"obi-action"}}}};
+const schema178 = {"type":"object","additionalProperties":false,"required":["id","name","description","tags"],"properties":{"id":{"$ref":"common.schema.json#/$defs/request_type"},"name":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"description":{"$ref":"common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300},"tags":{"type":"array","minItems":1,"maxItems":1,"items":{"const":"obi-action"}}}};
 
 function validate76(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -10988,8 +10943,8 @@ return errors === 0;
 }
 validate76.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
-const schema183 = {"description":"A2A AgentCardSignature: a JWS (RFC 7515) with detached payload. `protected` is the base64url protected header; the payload is the JCS form of the card without `signatures`.","type":"object","additionalProperties":false,"required":["protected","signature"],"properties":{"protected":{"type":"string","minLength":4,"maxLength":1000,"pattern":"^[A-Za-z0-9_-]+$"},"signature":{"$ref":"common.schema.json#/$defs/signature"}}};
-const pattern105 = new RegExp("^[A-Za-z0-9_-]+$", "u");
+const schema182 = {"description":"A2A AgentCardSignature: a JWS (RFC 7515) with detached payload. `protected` is the base64url protected header; the payload is the JCS form of the card without `signatures`.","type":"object","additionalProperties":false,"required":["protected","signature"],"properties":{"protected":{"type":"string","minLength":4,"maxLength":1000,"pattern":"^[A-Za-z0-9_-]+$"},"signature":{"$ref":"common.schema.json#/$defs/signature"}}};
+const pattern104 = new RegExp("^[A-Za-z0-9_-]+$", "u");
 
 function validate78(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 let vErrors = null;
@@ -11057,7 +11012,7 @@ vErrors.push(err4);
 }
 errors++;
 }
-if(!pattern105.test(data0)){
+if(!pattern104.test(data0)){
 const err5 = {instancePath:instancePath+"/protected",schemaPath:"#/properties/protected/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]+$"},message:"must match pattern \""+"^[A-Za-z0-9_-]+$"+"\""};
 if(vErrors === null){
 vErrors = [err5];
@@ -11264,7 +11219,7 @@ vErrors.push(err10);
 errors++;
 }
 for(const key0 in data){
-if(!(func69.call(schema164.properties, key0))){
+if(!(func69.call(schema163.properties, key0))){
 const err11 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err11];
@@ -11404,7 +11359,7 @@ vErrors.push(err22);
 }
 errors++;
 }
-if(!pattern90.test(data3)){
+if(!pattern89.test(data3)){
 const err23 = {instancePath:instancePath+"/url",schemaPath:"#/properties/url/pattern",keyword:"pattern",params:{pattern: "^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$"},message:"must match pattern \""+"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?/v0\\.1/spheres/[a-z0-9-]{1,63}/members/[a-z0-9-]{1,63}$"+"\""};
 if(vErrors === null){
 vErrors = [err23];
@@ -11461,7 +11416,7 @@ vErrors.push(err27);
 }
 errors++;
 }
-if(!pattern91.test(data5)){
+if(!pattern90.test(data5)){
 const err28 = {instancePath:instancePath+"/version",schemaPath:"#/properties/version/pattern",keyword:"pattern",params:{pattern: "^[0-9A-Za-z.+-]{1,64}$"},message:"must match pattern \""+"^[0-9A-Za-z.+-]{1,64}$"+"\""};
 if(vErrors === null){
 vErrors = [err28];
@@ -11578,7 +11533,7 @@ vErrors.push(err37);
 }
 errors++;
 }
-if(!pattern93.test(data8)){
+if(!pattern92.test(data8)){
 const err38 = {instancePath:instancePath+"/provider/url",schemaPath:"#/properties/provider/properties/url/pattern",keyword:"pattern",params:{pattern: "^https://[^\\s]{1,492}$"},message:"must match pattern \""+"^https://[^\\s]{1,492}$"+"\""};
 if(vErrors === null){
 vErrors = [err38];
@@ -11635,7 +11590,7 @@ vErrors.push(err42);
 }
 errors++;
 }
-if(!pattern93.test(data9)){
+if(!pattern92.test(data9)){
 const err43 = {instancePath:instancePath+"/documentationUrl",schemaPath:"#/properties/documentationUrl/pattern",keyword:"pattern",params:{pattern: "^https://[^\\s]{1,492}$"},message:"must match pattern \""+"^https://[^\\s]{1,492}$"+"\""};
 if(vErrors === null){
 vErrors = [err43];
@@ -11977,8 +11932,8 @@ return errors === 0;
 validate73.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const auditEntry = validate80;
-const schema185 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/audit-entry.schema.json","title":"Audit chain entry v0.1","description":"One entry of a Sphere's audit chain (spec/sphere-api.md, \"Audit chain\"). `hash` is SHA-256 over the hashing input of every other field; `prev` is the previous entry's hash (64 zeros for seq 1). The envelope is exactly as the sender signed it.","type":"object","additionalProperties":false,"required":["sphere","seq","prev","recorded_at","envelope","hash"],"properties":{"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"prev":{"$ref":"common.schema.json#/$defs/hash"},"recorded_at":{"$ref":"common.schema.json#/$defs/timestamp"},"envelope":{"$ref":"envelope.schema.json"},"hash":{"$ref":"common.schema.json#/$defs/hash"}}};
-const schema187 = {"description":"A SHA-256 digest in lower-case hex.","type":"string","minLength":64,"maxLength":64,"pattern":"^[0-9a-f]{64}$"};
+const schema184 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/audit-entry.schema.json","title":"Audit chain entry v0.1","description":"One entry of a Sphere's audit chain (spec/sphere-api.md, \"Audit chain\"). `hash` is SHA-256 over the hashing input of every other field; `prev` is the previous entry's hash (64 zeros for seq 1). The envelope is exactly as the sender signed it.","type":"object","additionalProperties":false,"required":["sphere","seq","prev","recorded_at","envelope","hash"],"properties":{"sphere":{"$ref":"common.schema.json#/$defs/sphere_id"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"prev":{"$ref":"common.schema.json#/$defs/hash"},"recorded_at":{"$ref":"common.schema.json#/$defs/timestamp"},"envelope":{"$ref":"envelope.schema.json"},"hash":{"$ref":"common.schema.json#/$defs/hash"}}};
+const schema186 = {"description":"A SHA-256 digest in lower-case hex.","type":"string","minLength":64,"maxLength":64,"pattern":"^[0-9a-f]{64}$"};
 
 function validate80(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/audit-entry.schema.json" */;
@@ -12302,7 +12257,7 @@ return errors === 0;
 validate80.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const createSphereRequest = validate82;
-const schema190 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/create-sphere.request.schema.json","title":"POST /v0.1/spheres request","description":"Create a Sphere (a team). Operator only.","type":"object","additionalProperties":false,"required":["sphere","name","admin"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"name":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"admin":{"type":"object","additionalProperties":false,"required":["owner","owner_key"],"properties":{"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"}}}}};
+const schema189 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/create-sphere.request.schema.json","title":"POST /v0.1/spheres request","description":"Create a Sphere (a team). Operator only.","type":"object","additionalProperties":false,"required":["sphere","name","admin"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"name":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"admin":{"type":"object","additionalProperties":false,"required":["owner","owner_key"],"properties":{"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"}}}}};
 
 function validate82(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/create-sphere.request.schema.json" */;
@@ -12553,7 +12508,7 @@ vErrors.push(err20);
 }
 errors++;
 }
-if(!pattern99.test(data4)){
+if(!pattern98.test(data4)){
 const err21 = {instancePath:instancePath+"/admin/owner_key",schemaPath:"../common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err21];
@@ -12604,7 +12559,7 @@ return errors === 0;
 validate82.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const invitationRequest = validate83;
-const schema195 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.request.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations request","description":"Invite one Obi of one owner. Admin only.","type":"object","additionalProperties":false,"required":["owner","obi","expires_in"],"properties":{"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"expires_in":{"type":"integer","minimum":60,"maximum":2592000}}};
+const schema194 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.request.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations request","description":"Invite one Obi of one owner. Admin only.","type":"object","additionalProperties":false,"required":["owner","obi","expires_in"],"properties":{"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"expires_in":{"type":"integer","minimum":60,"maximum":2592000}}};
 
 function validate83(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.request.schema.json" */;
@@ -12802,7 +12757,7 @@ return errors === 0;
 validate83.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const redeemRequest = validate84;
-const schema198 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/redeem.request.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/redeem request","description":"Pair an Obi: redeem its invitation with its owner-signed agent card. The secret is the authentication.","type":"object","additionalProperties":false,"required":["secret","owner_key","card"],"properties":{"secret":{"type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"},"card":{"$ref":"../agent-card.schema.json"}}};
+const schema197 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/redeem.request.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/redeem request","description":"Pair an Obi: redeem its invitation with its owner-signed agent card. The secret is the authentication.","type":"object","additionalProperties":false,"required":["secret","owner_key","card"],"properties":{"secret":{"type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"},"card":{"$ref":"../agent-card.schema.json"}}};
 
 function validate84(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/redeem.request.schema.json" */;
@@ -12881,7 +12836,7 @@ vErrors.push(err5);
 }
 errors++;
 }
-if(!pattern99.test(data0)){
+if(!pattern98.test(data0)){
 const err6 = {instancePath:instancePath+"/secret",schemaPath:"#/properties/secret/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err6];
@@ -12926,7 +12881,7 @@ vErrors.push(err9);
 }
 errors++;
 }
-if(!pattern99.test(data1)){
+if(!pattern98.test(data1)){
 const err10 = {instancePath:instancePath+"/owner_key",schemaPath:"../common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err10];
@@ -12971,7 +12926,7 @@ return errors === 0;
 validate84.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const cardUpdateRequest = validate86;
-const schema200 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/card-update.request.schema.json","title":"PUT /v0.1/spheres/{sphere}/members/{obi}/card request","description":"A new card for the same Obi: a higher card_seq, signed by the same owner key. A new key_id rotates the Obi's key.","type":"object","additionalProperties":false,"required":["card"],"properties":{"card":{"$ref":"../agent-card.schema.json"}}};
+const schema199 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/card-update.request.schema.json","title":"PUT /v0.1/spheres/{sphere}/members/{obi}/card request","description":"A new card for the same Obi: a higher card_seq, signed by the same owner key. A new key_id rotates the Obi's key.","type":"object","additionalProperties":false,"required":["card"],"properties":{"card":{"$ref":"../agent-card.schema.json"}}};
 
 function validate86(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/card-update.request.schema.json" */;
@@ -13030,8 +12985,8 @@ return errors === 0;
 validate86.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const policyPutRequest = validate88;
-const schema201 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy-put.request.schema.json","title":"PUT /v0.1/spheres/{sphere}/policy request","description":"Replace the whole policy. `expected_version` is the version being replaced; a mismatch is 409 conflict.","type":"object","additionalProperties":false,"required":["expected_version","rules"],"properties":{"expected_version":{"type":"integer","minimum":0,"maximum":1000000000},"rules":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["id","from_owner","to_owner","actions","repos"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/rule_id"},"from_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"to_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"actions":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/request_type"}},"repos":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":140,"pattern":"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"}}}}}}};
-const pattern122 = new RegExp("^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$", "u");
+const schema200 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy-put.request.schema.json","title":"PUT /v0.1/spheres/{sphere}/policy request","description":"Replace the whole policy. `expected_version` is the version being replaced; a mismatch is 409 conflict.","type":"object","additionalProperties":false,"required":["expected_version","rules"],"properties":{"expected_version":{"type":"integer","minimum":0,"maximum":1000000000},"rules":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["id","from_owner","to_owner","actions","repos"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/rule_id"},"from_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"to_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"actions":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/request_type"}},"repos":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":140,"pattern":"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"}}}}}}};
+const pattern121 = new RegExp("^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$", "u");
 
 function validate88(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy-put.request.schema.json" */;
@@ -13520,7 +13475,7 @@ vErrors.push(err37);
 }
 errors++;
 }
-if(!pattern122.test(data9)){
+if(!pattern121.test(data9)){
 const err38 = {instancePath:instancePath+"/rules/" + i0+"/repos/" + i3,schemaPath:"#/properties/rules/items/properties/repos/items/pattern",keyword:"pattern",params:{pattern: "^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"},message:"must match pattern \""+"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"+"\""};
 if(vErrors === null){
 vErrors = [err38];
@@ -13619,7 +13574,7 @@ return errors === 0;
 validate88.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const ackRequest = validate89;
-const schema206 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.request.schema.json","title":"POST /v0.1/spheres/{sphere}/deliveries/ack request","description":"Acknowledge deliveries the Obi has recorded durably.","type":"object","additionalProperties":false,"required":["delivery_ids"],"properties":{"delivery_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/uuid"}}}};
+const schema205 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.request.schema.json","title":"POST /v0.1/spheres/{sphere}/deliveries/ack request","description":"Acknowledge deliveries the Obi has recorded durably.","type":"object","additionalProperties":false,"required":["delivery_ids"],"properties":{"delivery_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/uuid"}}}};
 
 function validate89(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.request.schema.json" */;
@@ -13773,7 +13728,7 @@ return errors === 0;
 validate89.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const jwsHeader = validate90;
-const schema208 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/jws-header.schema.json","title":"JWS protected header","description":"The protected header of every JWS in this protocol: owner and Obi assertions (typ JWT) and card signatures (typ JOSE).","type":"object","additionalProperties":false,"required":["alg","kid","typ"],"properties":{"alg":{"const":"EdDSA"},"kid":{"$ref":"../common.schema.json#/$defs/key_id"},"typ":{"enum":["JWT","JOSE"]}}};
+const schema207 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/jws-header.schema.json","title":"JWS protected header","description":"The protected header of every JWS in this protocol: owner and Obi assertions (typ JWT) and card signatures (typ JOSE).","type":"object","additionalProperties":false,"required":["alg","kid","typ"],"properties":{"alg":{"const":"EdDSA"},"kid":{"$ref":"../common.schema.json#/$defs/key_id"},"typ":{"enum":["JWT","JOSE"]}}};
 
 function validate90(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/jws-header.schema.json" */;
@@ -13889,7 +13844,7 @@ errors++;
 if(data.typ !== undefined){
 let data2 = data.typ;
 if(!((data2 === "JWT") || (data2 === "JOSE"))){
-const err9 = {instancePath:instancePath+"/typ",schemaPath:"#/properties/typ/enum",keyword:"enum",params:{allowedValues: schema208.properties.typ.enum},message:"must be equal to one of the allowed values"};
+const err9 = {instancePath:instancePath+"/typ",schemaPath:"#/properties/typ/enum",keyword:"enum",params:{allowedValues: schema207.properties.typ.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err9];
 }
@@ -13916,9 +13871,9 @@ return errors === 0;
 validate90.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const delegationClaims = validate91;
-const schema210 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/delegation.claims.schema.json","title":"Owner assertion claims (subject_token)","description":"The JWT payload an owner signs: a delegation to one Obi (with may_act), or a short assertion for the owner's own token (without).","type":"object","additionalProperties":false,"required":["iss","sub","aud","iat","exp","jti","scope"],"properties":{"iss":{"$ref":"../common.schema.json#/$defs/owner_id"},"sub":{"$ref":"../common.schema.json#/$defs/owner_id"},"aud":{"type":"string","minLength":12,"maxLength":75,"pattern":"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991},"jti":{"$ref":"../common.schema.json#/$defs/uuid"},"scope":{"type":"string","minLength":1,"maxLength":500,"pattern":"^[a-z_:]+( [a-z_:]+)*$"},"may_act":{"type":"object","additionalProperties":false,"required":["sub"],"properties":{"sub":{"$ref":"../common.schema.json#/$defs/obi_id"}}}}};
-const pattern127 = new RegExp("^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", "u");
-const pattern129 = new RegExp("^[a-z_:]+( [a-z_:]+)*$", "u");
+const schema209 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/delegation.claims.schema.json","title":"Owner assertion claims (subject_token)","description":"The JWT payload an owner signs: a delegation to one Obi (with may_act), or a short assertion for the owner's own token (without).","type":"object","additionalProperties":false,"required":["iss","sub","aud","iat","exp","jti","scope"],"properties":{"iss":{"$ref":"../common.schema.json#/$defs/owner_id"},"sub":{"$ref":"../common.schema.json#/$defs/owner_id"},"aud":{"type":"string","minLength":12,"maxLength":75,"pattern":"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991},"jti":{"$ref":"../common.schema.json#/$defs/uuid"},"scope":{"type":"string","minLength":1,"maxLength":500,"pattern":"^[a-z_:]+( [a-z_:]+)*$"},"may_act":{"type":"object","additionalProperties":false,"required":["sub"],"properties":{"sub":{"$ref":"../common.schema.json#/$defs/obi_id"}}}}};
+const pattern126 = new RegExp("^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$", "u");
+const pattern128 = new RegExp("^[a-z_:]+( [a-z_:]+)*$", "u");
 
 function validate91(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/delegation.claims.schema.json" */;
@@ -14127,7 +14082,7 @@ vErrors.push(err17);
 }
 errors++;
 }
-if(!pattern127.test(data2)){
+if(!pattern126.test(data2)){
 const err18 = {instancePath:instancePath+"/aud",schemaPath:"#/properties/aud/pattern",keyword:"pattern",params:{pattern: "^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},message:"must match pattern \""+"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"+"\""};
 if(vErrors === null){
 vErrors = [err18];
@@ -14287,7 +14242,7 @@ vErrors.push(err31);
 }
 errors++;
 }
-if(!pattern129.test(data6)){
+if(!pattern128.test(data6)){
 const err32 = {instancePath:instancePath+"/scope",schemaPath:"#/properties/scope/pattern",keyword:"pattern",params:{pattern: "^[a-z_:]+( [a-z_:]+)*$"},message:"must match pattern \""+"^[a-z_:]+( [a-z_:]+)*$"+"\""};
 if(vErrors === null){
 vErrors = [err32];
@@ -14408,7 +14363,7 @@ return errors === 0;
 validate91.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const actorClaims = validate92;
-const schema215 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/actor.claims.schema.json","title":"Obi assertion claims (actor_token)","description":"The JWT payload an Obi signs with its own key to prove it is the actor.","type":"object","additionalProperties":false,"required":["iss","sub","aud","iat","exp","jti"],"properties":{"iss":{"$ref":"../common.schema.json#/$defs/obi_id"},"sub":{"$ref":"../common.schema.json#/$defs/obi_id"},"aud":{"type":"string","minLength":12,"maxLength":75,"pattern":"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991},"jti":{"$ref":"../common.schema.json#/$defs/uuid"}}};
+const schema214 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/actor.claims.schema.json","title":"Obi assertion claims (actor_token)","description":"The JWT payload an Obi signs with its own key to prove it is the actor.","type":"object","additionalProperties":false,"required":["iss","sub","aud","iat","exp","jti"],"properties":{"iss":{"$ref":"../common.schema.json#/$defs/obi_id"},"sub":{"$ref":"../common.schema.json#/$defs/obi_id"},"aud":{"type":"string","minLength":12,"maxLength":75,"pattern":"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},"iat":{"type":"integer","minimum":0,"maximum":9007199254740991},"exp":{"type":"integer","minimum":0,"maximum":9007199254740991},"jti":{"$ref":"../common.schema.json#/$defs/uuid"}}};
 
 function validate92(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/actor.claims.schema.json" */;
@@ -14607,7 +14562,7 @@ vErrors.push(err16);
 }
 errors++;
 }
-if(!pattern127.test(data2)){
+if(!pattern126.test(data2)){
 const err17 = {instancePath:instancePath+"/aud",schemaPath:"#/properties/aud/pattern",keyword:"pattern",params:{pattern: "^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"},message:"must match pattern \""+"^obi-sphere:[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"+"\""};
 if(vErrors === null){
 vErrors = [err17];
@@ -14761,7 +14716,7 @@ return errors === 0;
 validate92.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const healthResponse = validate93;
-const schema219 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/health.response.schema.json","title":"GET /v0.1/health","description":"Liveness. Answers without authentication.","type":"object","additionalProperties":false,"required":["ok","protocol"],"properties":{"ok":{"const":true},"protocol":{"$ref":"../common.schema.json#/$defs/protocol"}}};
+const schema218 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/health.response.schema.json","title":"GET /v0.1/health","description":"Liveness. Answers without authentication.","type":"object","additionalProperties":false,"required":["ok","protocol"],"properties":{"ok":{"const":true},"protocol":{"$ref":"../common.schema.json#/$defs/protocol"}}};
 
 function validate93(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/health.response.schema.json" */;
@@ -14848,7 +14803,7 @@ return errors === 0;
 validate93.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const sphere = validate94;
-const schema221 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/sphere.schema.json","title":"Sphere","description":"A Sphere as the API returns it.","type":"object","additionalProperties":false,"required":["sphere","name","protocol","admin_owner","created_at"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"name":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"protocol":{"$ref":"../common.schema.json#/$defs/protocol"},"admin_owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"created_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
+const schema220 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/sphere.schema.json","title":"Sphere","description":"A Sphere as the API returns it.","type":"object","additionalProperties":false,"required":["sphere","name","protocol","admin_owner","created_at"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"name":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":100},"protocol":{"$ref":"../common.schema.json#/$defs/protocol"},"admin_owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"created_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
 
 function validate94(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/sphere.schema.json" */;
@@ -15135,8 +15090,8 @@ return errors === 0;
 validate94.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const tokenResponse = validate95;
-const schema227 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/token.response.schema.json","title":"POST /v0.1/oauth/token answer","description":"RFC 8693 token exchange response. The access token is opaque.","type":"object","additionalProperties":false,"required":["access_token","issued_token_type","token_type","expires_in","scope"],"properties":{"access_token":{"type":"string","minLength":32,"maxLength":512,"pattern":"^[A-Za-z0-9._~-]+$"},"issued_token_type":{"const":"urn:ietf:params:oauth:token-type:access_token"},"token_type":{"const":"Bearer"},"expires_in":{"type":"integer","minimum":1,"maximum":3600},"scope":{"type":"string","minLength":1,"maxLength":500,"pattern":"^[a-z_:]+( [a-z_:]+)*$"}}};
-const pattern139 = new RegExp("^[A-Za-z0-9._~-]+$", "u");
+const schema226 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/token.response.schema.json","title":"POST /v0.1/oauth/token answer","description":"RFC 8693 token exchange response. The access token is opaque.","type":"object","additionalProperties":false,"required":["access_token","issued_token_type","token_type","expires_in","scope"],"properties":{"access_token":{"type":"string","minLength":32,"maxLength":512,"pattern":"^[A-Za-z0-9._~-]+$"},"issued_token_type":{"const":"urn:ietf:params:oauth:token-type:access_token"},"token_type":{"const":"Bearer"},"expires_in":{"type":"integer","minimum":1,"maximum":3600},"scope":{"type":"string","minLength":1,"maxLength":500,"pattern":"^[a-z_:]+( [a-z_:]+)*$"}}};
+const pattern138 = new RegExp("^[A-Za-z0-9._~-]+$", "u");
 
 function validate95(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/token.response.schema.json" */;
@@ -15235,7 +15190,7 @@ vErrors.push(err7);
 }
 errors++;
 }
-if(!pattern139.test(data0)){
+if(!pattern138.test(data0)){
 const err8 = {instancePath:instancePath+"/access_token",schemaPath:"#/properties/access_token/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9._~-]+$"},message:"must match pattern \""+"^[A-Za-z0-9._~-]+$"+"\""};
 if(vErrors === null){
 vErrors = [err8];
@@ -15339,7 +15294,7 @@ vErrors.push(err16);
 }
 errors++;
 }
-if(!pattern129.test(data4)){
+if(!pattern128.test(data4)){
 const err17 = {instancePath:instancePath+"/scope",schemaPath:"#/properties/scope/pattern",keyword:"pattern",params:{pattern: "^[a-z_:]+( [a-z_:]+)*$"},message:"must match pattern \""+"^[a-z_:]+( [a-z_:]+)*$"+"\""};
 if(vErrors === null){
 vErrors = [err17];
@@ -15378,7 +15333,7 @@ return errors === 0;
 validate95.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const invitationResponse = validate96;
-const schema228 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.response.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations answer","description":"The invitation. `secret` is shown once; the Sphere keeps only its SHA-256.","type":"object","additionalProperties":false,"required":["invitation_id","sphere","owner","obi","secret","expires_at"],"properties":{"invitation_id":{"$ref":"../common.schema.json#/$defs/uuid"},"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"secret":{"type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"},"expires_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
+const schema227 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.response.schema.json","title":"POST /v0.1/spheres/{sphere}/invitations answer","description":"The invitation. `secret` is shown once; the Sphere keeps only its SHA-256.","type":"object","additionalProperties":false,"required":["invitation_id","sphere","owner","obi","secret","expires_at"],"properties":{"invitation_id":{"$ref":"../common.schema.json#/$defs/uuid"},"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"secret":{"type":"string","minLength":43,"maxLength":43,"pattern":"^[A-Za-z0-9_-]{43}$"},"expires_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
 
 function validate96(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation.response.schema.json" */;
@@ -15667,7 +15622,7 @@ vErrors.push(err24);
 }
 errors++;
 }
-if(!pattern99.test(data4)){
+if(!pattern98.test(data4)){
 const err25 = {instancePath:instancePath+"/secret",schemaPath:"#/properties/secret/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err25];
@@ -15751,7 +15706,7 @@ return errors === 0;
 validate96.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const member = validate97;
-const schema234 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/member.schema.json","title":"Member","description":"One Obi in the directory, with its current card and every key it ever had.","type":"object","additionalProperties":false,"required":["obi","owner","owner_key","owner_key_id","status","joined_at","card","keys"],"properties":{"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"},"owner_key_id":{"$ref":"../common.schema.json#/$defs/key_id"},"status":{"enum":["active","revoked"]},"joined_at":{"$ref":"../common.schema.json#/$defs/timestamp"},"revoked_at":{"$ref":"../common.schema.json#/$defs/timestamp","description":"When the member was revoked: present exactly when status is revoked (sphere-api.md, \"Directory\")."},"card":{"$ref":"../agent-card.schema.json"},"keys":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["key_id","public_key","valid_from_seq","valid_until_seq"],"properties":{"key_id":{"$ref":"../common.schema.json#/$defs/key_id"},"public_key":{"$ref":"../common.schema.json#/$defs/public_key"},"valid_from_seq":{"type":"integer","minimum":1,"maximum":9007199254740991,"description":"The first audit seq this key may sign."},"valid_until_seq":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"The last audit seq this key may sign, or null while it is current."}}}},"runner":{"$ref":"../runner-status.schema.json","description":"The member's runner status, only when it is offered to the caller's owner and hasn't expired (sphere-api.md section 6.4)."}}};
+const schema233 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/member.schema.json","title":"Member","description":"One Obi in the directory, with its current card and every key it ever had.","type":"object","additionalProperties":false,"required":["obi","owner","owner_key","owner_key_id","status","joined_at","card","keys"],"properties":{"obi":{"$ref":"../common.schema.json#/$defs/obi_id"},"owner":{"$ref":"../common.schema.json#/$defs/owner_id"},"owner_key":{"$ref":"../common.schema.json#/$defs/public_key"},"owner_key_id":{"$ref":"../common.schema.json#/$defs/key_id"},"status":{"enum":["active","revoked"]},"joined_at":{"$ref":"../common.schema.json#/$defs/timestamp"},"revoked_at":{"$ref":"../common.schema.json#/$defs/timestamp","description":"When the member was revoked: present exactly when status is revoked (sphere-api.md, \"Directory\")."},"card":{"$ref":"../agent-card.schema.json"},"keys":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["key_id","public_key","valid_from_seq","valid_until_seq"],"properties":{"key_id":{"$ref":"../common.schema.json#/$defs/key_id"},"public_key":{"$ref":"../common.schema.json#/$defs/public_key"},"valid_from_seq":{"type":"integer","minimum":1,"maximum":9007199254740991,"description":"The first audit seq this key may sign."},"valid_until_seq":{"type":["integer","null"],"minimum":0,"maximum":9007199254740991,"description":"The last audit seq this key may sign, or null while it is current."}}}},"runner":{"$ref":"../runner-status.schema.json","description":"The member's runner status, only when it is offered to the caller's owner and hasn't expired (sphere-api.md section 6.4)."}}};
 
 function validate97(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/member.schema.json" */;
@@ -15846,7 +15801,7 @@ vErrors.push(err7);
 errors++;
 }
 for(const key0 in data){
-if(!(func69.call(schema234.properties, key0))){
+if(!(func69.call(schema233.properties, key0))){
 const err8 = {instancePath,schemaPath:"#/additionalProperties",keyword:"additionalProperties",params:{additionalProperty: key0},message:"must NOT have additional properties"};
 if(vErrors === null){
 vErrors = [err8];
@@ -15970,7 +15925,7 @@ vErrors.push(err18);
 }
 errors++;
 }
-if(!pattern99.test(data2)){
+if(!pattern98.test(data2)){
 const err19 = {instancePath:instancePath+"/owner_key",schemaPath:"../common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err19];
@@ -16040,7 +15995,7 @@ errors++;
 if(data.status !== undefined){
 let data4 = data.status;
 if(!((data4 === "active") || (data4 === "revoked"))){
-const err25 = {instancePath:instancePath+"/status",schemaPath:"#/properties/status/enum",keyword:"enum",params:{allowedValues: schema234.properties.status.enum},message:"must be equal to one of the allowed values"};
+const err25 = {instancePath:instancePath+"/status",schemaPath:"#/properties/status/enum",keyword:"enum",params:{allowedValues: schema233.properties.status.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err25];
 }
@@ -16293,7 +16248,7 @@ vErrors.push(err46);
 }
 errors++;
 }
-if(!pattern99.test(data11)){
+if(!pattern98.test(data11)){
 const err47 = {instancePath:instancePath+"/keys/" + i0+"/public_key",schemaPath:"../common.schema.json#/$defs/public_key/pattern",keyword:"pattern",params:{pattern: "^[A-Za-z0-9_-]{43}$"},message:"must match pattern \""+"^[A-Za-z0-9_-]{43}$"+"\""};
 if(vErrors === null){
 vErrors = [err47];
@@ -16353,7 +16308,7 @@ errors++;
 if(data9.valid_until_seq !== undefined){
 let data13 = data9.valid_until_seq;
 if((!(((typeof data13 == "number") && (!(data13 % 1) && !isNaN(data13))) && (isFinite(data13)))) && (data13 !== null)){
-const err52 = {instancePath:instancePath+"/keys/" + i0+"/valid_until_seq",schemaPath:"#/properties/keys/items/properties/valid_until_seq/type",keyword:"type",params:{type: schema234.properties.keys.items.properties.valid_until_seq.type},message:"must be integer,null"};
+const err52 = {instancePath:instancePath+"/keys/" + i0+"/valid_until_seq",schemaPath:"#/properties/keys/items/properties/valid_until_seq/type",keyword:"type",params:{type: schema233.properties.keys.items.properties.valid_until_seq.type},message:"must be integer,null"};
 if(vErrors === null){
 vErrors = [err52];
 }
@@ -16432,7 +16387,7 @@ return errors === 0;
 validate97.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const membersResponse = validate100;
-const schema243 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/members.response.schema.json","title":"GET /v0.1/spheres/{sphere}/members answer","description":"The directory.","type":"object","additionalProperties":false,"required":["sphere","members"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"members":{"type":"array","maxItems":1000,"items":{"$ref":"member.schema.json"}}}};
+const schema242 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/members.response.schema.json","title":"GET /v0.1/spheres/{sphere}/members answer","description":"The directory.","type":"object","additionalProperties":false,"required":["sphere","members"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"members":{"type":"array","maxItems":1000,"items":{"$ref":"member.schema.json"}}}};
 
 function validate100(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/members.response.schema.json" */;
@@ -16572,7 +16527,7 @@ return errors === 0;
 validate100.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const policy = validate102;
-const schema245 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy.schema.json","title":"Policy","description":"Who may send which request to whom: allow rules only; a request no rule allows is refused. `version` grows by 1 with every change.","type":"object","additionalProperties":false,"required":["version","rules","updated_at"],"properties":{"version":{"type":"integer","minimum":0,"maximum":1000000000},"rules":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["id","from_owner","to_owner","actions","repos"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/rule_id"},"from_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"to_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"actions":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/request_type"}},"repos":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":140,"pattern":"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"}}}}},"updated_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
+const schema244 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy.schema.json","title":"Policy","description":"Who may send which request to whom: allow rules only; a request no rule allows is refused. `version` grows by 1 with every change.","type":"object","additionalProperties":false,"required":["version","rules","updated_at"],"properties":{"version":{"type":"integer","minimum":0,"maximum":1000000000},"rules":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["id","from_owner","to_owner","actions","repos"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/rule_id"},"from_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"to_owner":{"anyOf":[{"const":"*"},{"$ref":"../common.schema.json#/$defs/owner_id"}]},"actions":{"type":"array","minItems":1,"maxItems":5,"uniqueItems":true,"items":{"$ref":"../common.schema.json#/$defs/request_type"}},"repos":{"type":"array","minItems":1,"maxItems":50,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":140,"pattern":"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"}}}}},"updated_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
 
 function validate102(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/policy.schema.json" */;
@@ -17071,7 +17026,7 @@ vErrors.push(err38);
 }
 errors++;
 }
-if(!pattern122.test(data9)){
+if(!pattern121.test(data9)){
 const err39 = {instancePath:instancePath+"/rules/" + i0+"/repos/" + i3,schemaPath:"#/properties/rules/items/properties/repos/items/pattern",keyword:"pattern",params:{pattern: "^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"},message:"must match pattern \""+"^(\\*|[A-Za-z0-9]([A-Za-z0-9-]{0,38})/(\\*|[A-Za-z0-9_][A-Za-z0-9._-]{0,99}))$"+"\""};
 if(vErrors === null){
 vErrors = [err39];
@@ -17215,7 +17170,7 @@ return errors === 0;
 validate102.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const sendResponse = validate103;
-const schema251 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/send.response.schema.json","title":"POST /v0.1/spheres/{sphere}/messages answer","description":"The message was checked, appended to the audit chain and queued for its recipient.","type":"object","additionalProperties":false,"required":["id","seq","entry_hash","recorded_at"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/uuid"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"entry_hash":{"$ref":"../common.schema.json#/$defs/hash"},"recorded_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
+const schema250 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/send.response.schema.json","title":"POST /v0.1/spheres/{sphere}/messages answer","description":"The message was checked, appended to the audit chain and queued for its recipient.","type":"object","additionalProperties":false,"required":["id","seq","entry_hash","recorded_at"],"properties":{"id":{"$ref":"../common.schema.json#/$defs/uuid"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"entry_hash":{"$ref":"../common.schema.json#/$defs/hash"},"recorded_at":{"$ref":"../common.schema.json#/$defs/timestamp"}}};
 
 function validate103(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/send.response.schema.json" */;
@@ -17468,7 +17423,7 @@ return errors === 0;
 validate103.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const deliveriesResponse = validate104;
-const schema255 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/deliveries.response.schema.json","title":"GET /v0.1/spheres/{sphere}/deliveries answer","description":"Messages waiting for the calling Obi, oldest first, until it acknowledges them.","type":"object","additionalProperties":false,"required":["deliveries"],"properties":{"deliveries":{"type":"array","maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["delivery_id","seq","relayed_at","envelope"],"properties":{"delivery_id":{"$ref":"../common.schema.json#/$defs/uuid"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"relayed_at":{"$ref":"../common.schema.json#/$defs/timestamp"},"envelope":{"$ref":"../envelope.schema.json"}}}}}};
+const schema254 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/deliveries.response.schema.json","title":"GET /v0.1/spheres/{sphere}/deliveries answer","description":"Messages waiting for the calling Obi, oldest first, until it acknowledges them.","type":"object","additionalProperties":false,"required":["deliveries"],"properties":{"deliveries":{"type":"array","maxItems":100,"items":{"type":"object","additionalProperties":false,"required":["delivery_id","seq","relayed_at","envelope"],"properties":{"delivery_id":{"$ref":"../common.schema.json#/$defs/uuid"},"seq":{"type":"integer","minimum":1,"maximum":9007199254740991},"relayed_at":{"$ref":"../common.schema.json#/$defs/timestamp"},"envelope":{"$ref":"../envelope.schema.json"}}}}}};
 
 function validate104(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/deliveries.response.schema.json" */;
@@ -17745,7 +17700,7 @@ return errors === 0;
 validate104.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const ackResponse = validate106;
-const schema258 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.response.schema.json","title":"POST /v0.1/spheres/{sphere}/deliveries/ack answer","description":"How many of the ids were waiting and are now acknowledged. Unknown or already acknowledged ids count 0.","type":"object","additionalProperties":false,"required":["acked"],"properties":{"acked":{"type":"integer","minimum":0,"maximum":100}}};
+const schema257 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.response.schema.json","title":"POST /v0.1/spheres/{sphere}/deliveries/ack answer","description":"How many of the ids were waiting and are now acknowledged. Unknown or already acknowledged ids count 0.","type":"object","additionalProperties":false,"required":["acked"],"properties":{"acked":{"type":"integer","minimum":0,"maximum":100}}};
 
 function validate106(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/ack.response.schema.json" */;
@@ -17833,7 +17788,7 @@ return errors === 0;
 validate106.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const auditResponse = validate107;
-const schema259 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/audit.response.schema.json","title":"GET /v0.1/spheres/{sphere}/audit answer","description":"A page of the audit chain, in seq order, and the chain's head now.","type":"object","additionalProperties":false,"required":["sphere","entries","head"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"entries":{"type":"array","maxItems":1000,"items":{"$ref":"../audit-entry.schema.json"}},"head":{"type":"object","additionalProperties":false,"required":["seq","hash"],"properties":{"seq":{"type":"integer","minimum":0,"maximum":9007199254740991},"hash":{"$ref":"../common.schema.json#/$defs/hash"}}}}};
+const schema258 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/audit.response.schema.json","title":"GET /v0.1/spheres/{sphere}/audit answer","description":"A page of the audit chain, in seq order, and the chain's head now.","type":"object","additionalProperties":false,"required":["sphere","entries","head"],"properties":{"sphere":{"$ref":"../common.schema.json#/$defs/sphere_id"},"entries":{"type":"array","maxItems":1000,"items":{"$ref":"../audit-entry.schema.json"}},"head":{"type":"object","additionalProperties":false,"required":["seq","hash"],"properties":{"seq":{"type":"integer","minimum":0,"maximum":9007199254740991},"hash":{"$ref":"../common.schema.json#/$defs/hash"}}}}};
 
 function validate107(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/audit.response.schema.json" */;
@@ -18110,7 +18065,7 @@ return errors === 0;
 validate107.evaluated = {"props":true,"dynamicProps":false,"dynamicItems":false};
 
 export const error = validate109;
-const schema262 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/error.schema.json","title":"Sphere error","description":"Every non-2xx answer of the Sphere API except the token endpoint (which answers OAuth errors, RFC 6749 section 5.2).","type":"object","additionalProperties":false,"required":["error"],"properties":{"error":{"type":"object","additionalProperties":false,"required":["code","message"],"properties":{"code":{"enum":["bad_request","invalid_envelope","wrong_sphere","bad_signature","unknown_key","expired","clock_skew","duplicate","policy_denied","unknown_recipient","recipient_revoked","bad_reply","unauthorized","insufficient_scope","forbidden","not_found","conflict","invitation_invalid","card_invalid","payload_too_large","rate_limited","internal"]},"message":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":500},"details":{"type":"array","maxItems":20,"items":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300}}}}}};
+const schema261 = {"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/error.schema.json","title":"Sphere error","description":"Every non-2xx answer of the Sphere API except the token endpoint (which answers OAuth errors, RFC 6749 section 5.2).","type":"object","additionalProperties":false,"required":["error"],"properties":{"error":{"type":"object","additionalProperties":false,"required":["code","message"],"properties":{"code":{"enum":["bad_request","invalid_envelope","wrong_sphere","bad_signature","unknown_key","expired","clock_skew","duplicate","policy_denied","unknown_recipient","recipient_revoked","bad_reply","unauthorized","insufficient_scope","forbidden","not_found","conflict","invitation_invalid","card_invalid","payload_too_large","rate_limited","internal"]},"message":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":500},"details":{"type":"array","maxItems":20,"items":{"$ref":"../common.schema.json#/$defs/line_text","x-obi-text":"data","minLength":1,"maxLength":300}}}}}};
 
 function validate109(data, {instancePath="", parentData, parentDataProperty, rootData=data, dynamicAnchors={}}={}){
 /*# sourceURL="https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/error.schema.json" */;
@@ -18184,7 +18139,7 @@ errors++;
 if(data0.code !== undefined){
 let data1 = data0.code;
 if(!((((((((((((((((((((((data1 === "bad_request") || (data1 === "invalid_envelope")) || (data1 === "wrong_sphere")) || (data1 === "bad_signature")) || (data1 === "unknown_key")) || (data1 === "expired")) || (data1 === "clock_skew")) || (data1 === "duplicate")) || (data1 === "policy_denied")) || (data1 === "unknown_recipient")) || (data1 === "recipient_revoked")) || (data1 === "bad_reply")) || (data1 === "unauthorized")) || (data1 === "insufficient_scope")) || (data1 === "forbidden")) || (data1 === "not_found")) || (data1 === "conflict")) || (data1 === "invitation_invalid")) || (data1 === "card_invalid")) || (data1 === "payload_too_large")) || (data1 === "rate_limited")) || (data1 === "internal"))){
-const err5 = {instancePath:instancePath+"/error/code",schemaPath:"#/properties/error/properties/code/enum",keyword:"enum",params:{allowedValues: schema262.properties.error.properties.code.enum},message:"must be equal to one of the allowed values"};
+const err5 = {instancePath:instancePath+"/error/code",schemaPath:"#/properties/error/properties/code/enum",keyword:"enum",params:{allowedValues: schema261.properties.error.properties.code.enum},message:"must be equal to one of the allowed values"};
 if(vErrors === null){
 vErrors = [err5];
 }

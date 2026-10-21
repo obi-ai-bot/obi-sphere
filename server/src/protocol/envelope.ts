@@ -259,8 +259,10 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
   if (reply.type === "decline" && (request.type === "run_request" || request.type === "share_offer") && reply.has_note) return `a decline of a ${request.type} has no note`;
   // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
-  if (reply.type === "decline" && request.type === "run_request" && (!RUN_DECLINE_REASONS.includes(reply.reason ?? "") || reply.has_by_rule))
-    return `a decline of a run_request says only ${RUN_DECLINE_REASONS.join(", ")}, with no by_rule`;
+  if (reply.type === "decline" && request.type === "run_request" && !RUN_DECLINE_REASONS.includes(reply.reason ?? ""))
+    return `a decline of a run_request says only ${RUN_DECLINE_REASONS.join(", ")}`;
+  // Nor whether a rule or its owner in person answered.
+  if (request.type === "run_request" && reply.has_by_rule) return `no reply to a run_request names a rule (by_rule)`;
   return null;
 }
 

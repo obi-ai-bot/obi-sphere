@@ -100,6 +100,8 @@ describe("run_request exchanges", () => {
       expect(why.body.error.code).toBe("bad_reply");
     }
     expect((await w.send(await w.reply(req, "decline", { reason: "unavailable", by_rule: "d-0123456789ab" }), host)).status).toBe(409);
+    // Nor whether a rule said yes, which says the owner didn't answer in person.
+    expect((await w.send(await w.reply(req, "accept", { by_rule: "d-0123456789ab" }), host)).status).toBe(409);
     expect((await w.send(await w.reply(req, "decline", { reason: "unavailable" }), host)).status).toBe(202);
   });
 
