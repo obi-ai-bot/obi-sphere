@@ -1,7 +1,7 @@
 // Policy: who may ask whose Obi for what (spec/sphere-api.md section 5).
 
 import { bearer, requireOwnerToken, requireScope } from "../auth.ts";
-import { guardedWrite, requireSphere, withRetries, type PolicyRule, type SphereRow } from "../db.ts";
+import { guardedWrite, requireBound, requireSphere, withRetries, type PolicyRule, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
 import { timestamp } from "../protocol/envelope.ts";
@@ -57,6 +57,7 @@ export async function putPolicy(request: Request, env: Env, deps: Deps, sphereId
     if (ids.has(r.id)) throw apiError("bad_request", `the rule id ${r.id} appears twice`);
     ids.add(r.id);
   }
+  await requireBound(env.DB, sphere0.id, req.rules.flatMap((r) => [r.from_owner, r.to_owner]), "the policy");
   return withRetries(async () => {
     const sphere = await requireSphere(env.DB, sphere0.id);
     if (req.expected_version !== sphere.policy_version) throw apiError("conflict", `the policy is at version ${sphere.policy_version}`);

@@ -6,7 +6,7 @@ import { tokenEndpoint } from "./oauth.ts";
 import { audit } from "./routes/audit.ts";
 import { openChannel } from "./routes/channels.ts";
 import { deleteRunner, putRunner } from "./routes/runner.ts";
-import { getMemberRoute, invite, listMembers, redeem, revoke, updateCard } from "./routes/members.ts";
+import { getMemberRoute, invite, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
 import { createSphere, getSphereRoute, health } from "./routes/spheres.ts";
@@ -20,6 +20,8 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["POST", /^\/v0\.1\/oauth\/token$/, tokenEndpoint],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), getSphereRoute],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations$`), invite],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}$`), withdrawInvitation],
+  ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}/preview$`), previewInvitation],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}/redeem$`), redeem],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members$`), listMembers],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}$`), getMemberRoute],

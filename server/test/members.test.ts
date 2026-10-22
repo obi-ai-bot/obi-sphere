@@ -148,6 +148,175 @@ describe("redeeming (pairing an Obi)", () => {
   });
 });
 
+describe("open invitations (one link for a team)", () => {
+  async function setup(maxUses = 2, expiresIn = 3600) {
+    const w = await team();
+    const r = await w.call("POST", "/v0.1/spheres/e2e/invitations", { token: await w.ownerToken(), body: { expires_in: expiresIn, max_uses: maxUses } });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    const inv = r.body;
+    const redeem = (body: unknown, id = inv.invitation_id) => w.call("POST", `/v0.1/spheres/e2e/invitations/${id}/redeem`, { body });
+    const preview = (secret = inv.secret, id = inv.invitation_id) => w.call("POST", `/v0.1/spheres/e2e/invitations/${id}/preview`, { body: { secret } });
+    // A redeem whose card names its own Obi and owner.
+    const joinAs = async (owner: string, obi: string, ownerKey?: Awaited<ReturnType<typeof newKey>>) => {
+      const key = ownerKey ?? (await w.ownerKey(owner));
+      const card = await makeCard({ sphere: "e2e", obi, owner, ownerKey: key, obiKey: await newKey(), issuedAt: w.clock.ts() });
+      return redeem({ secret: inv.secret, owner_key: key.publicKey, card });
+    };
+    return { w, inv, redeem, preview, joinAs };
+  }
+
+  it("leaves owner and obi out and says how many may use it", async () => {
+    const { inv } = await setup(50, 604800);
+    expectSchema("invitationResponse", inv);
+    expect(inv).toMatchObject({ sphere: "e2e", max_uses: 50, expires_at: "2026-10-21T12:00:00Z" });
+    expect(inv).not.toHaveProperty("owner");
+    expect(inv).not.toHaveProperty("obi");
+  });
+
+  it("is used once when max_uses is left out, and a named one says max_uses 1", async () => {
+    const w = await team();
+    const token = await w.ownerToken();
+    const open = await w.call("POST", "/v0.1/spheres/e2e/invitations", { token, body: { expires_in: 3600 } });
+    expect(open.body.max_uses).toBe(1);
+    const named = await w.invite("someone", "obi-someone");
+    expectSchema("invitationResponse", named.body);
+    expect(named.body.max_uses).toBe(1);
+  });
+
+  it("checks its body: owner and obi come together, a named one takes no max_uses, max_uses is 1 to 1,000", async () => {
+    const w = await team();
+    const token = await w.ownerToken();
+    for (const body of [{ owner: "x", expires_in: 3600 }, { obi: "obi-x", expires_in: 3600 }, { owner: "x", obi: "obi-x", expires_in: 3600, max_uses: 2 }, { expires_in: 3600, max_uses: 0 }, { expires_in: 3600, max_uses: 1001 }, { expires_in: 3600, email_domain: "deskree.com" }]) {
+      const r = await w.call("POST", "/v0.1/spheres/e2e/invitations", { token, body });
+      expect(r.status, JSON.stringify(body)).toBe(400);
+      expect(r.body.error.code).toBe("bad_request");
+    }
+  });
+
+  it("pairs up to max_uses Obis, each card naming its own Obi and owner, binding each new owner's key", async () => {
+    const { w, joinAs } = await setup(2);
+    const a = await joinAs("ana", "obi-ana");
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    expectSchema("member", a.body);
+    expect(a.body).toMatchObject({ obi: "obi-ana", owner: "ana", owner_key: (await w.ownerKey("ana")).publicKey, status: "active" });
+    expect((await joinAs("bo", "obi-bo")).status).toBe(201);
+    const third = await joinAs("cy", "obi-cy");
+    expect(third.status).toBe(403);
+    expect(third.body.error.code).toBe("invitation_invalid");
+  });
+
+  it("never reuses an Obi id, and a refused redeem uses nothing", async () => {
+    const { w, joinAs } = await setup(1);
+    await w.call("DELETE", "/v0.1/spheres/e2e/members/obi-ernesto", { token: await w.ownerToken() });
+    for (const obi of ["obi-wellington", "obi-ernesto"]) {
+      const r = await joinAs("dee", obi);
+      expect(r.status, obi).toBe(409);
+      expect(r.body.error.code).toBe("conflict");
+    }
+    expect((await joinAs("dee", "obi-dee")).status).toBe(201);
+  });
+
+  it("can't take a bound owner's id with another key, and lets a bound owner add an Obi with theirs", async () => {
+    const { w, joinAs } = await setup(2);
+    const squat = await joinAs("ernesto", "obi-not-ernesto", await newKey());
+    expect(squat.status).toBe(403);
+    expect(squat.body.error.code).toBe("forbidden");
+    const admin = await joinAs("wellington", "obi-wellington-laptop", await newKey());
+    expect(admin.body.error.code).toBe("forbidden");
+    const own = await joinAs("ernesto", "obi-ernesto-laptop");
+    expect(own.status).toBe(201);
+    expect(own.body.owner_key).toBe((await w.ownerKey("ernesto")).publicKey);
+  });
+
+  it("can't be used past max_uses at once", async () => {
+    const { joinAs } = await setup(1);
+    const results = await Promise.all([joinAs("p1", "obi-p1"), joinAs("p2", "obi-p2"), joinAs("p3", "obi-p3")]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 403, 403]);
+  });
+
+  it("is withdrawn by the admin at once: preview and redeem are invalid from then on", async () => {
+    const { w, inv, preview, joinAs } = await setup(5);
+    const path = `/v0.1/spheres/e2e/invitations/${inv.invitation_id}`;
+    expect((await joinAs("ana", "obi-ana")).status).toBe(201);
+    for (const token of [await w.ownerToken("ernesto", "directory:read"), await w.obiToken("obi-ernesto")]) {
+      const r = await w.call("DELETE", path, { token });
+      expect(r.status).toBe(403);
+      expect(r.body.error.code).toBe("insufficient_scope");
+    }
+    expect((await w.call("DELETE", path, { token: await w.ownerToken() })).status).toBe(204);
+    expect((await preview()).body.error.code).toBe("invitation_invalid");
+    expect((await joinAs("bo", "obi-bo")).body.error.code).toBe("invitation_invalid");
+    const again = await w.call("DELETE", path, { token: await w.ownerToken() });
+    expect(again.status).toBe(404);
+    expect(again.body.error.code).toBe("not_found");
+  });
+
+  it("is withdrawn before a redeem lands, or after it, never both", async () => {
+    const { w, inv, joinAs } = await setup(5);
+    const withdraw = w.call("DELETE", `/v0.1/spheres/e2e/invitations/${inv.invitation_id}`, { token: await w.ownerToken() });
+    const [gone, joined] = await Promise.all([withdraw, joinAs("ana", "obi-ana")]);
+    expect(gone.status).toBe(204);
+    const member = await w.call("GET", "/v0.1/spheres/e2e/members/obi-ana", { token: await w.ownerToken() });
+    expect(joined.status === 201 ? member.status : joined.body.error.code).toBe(joined.status === 201 ? 200 : "invitation_invalid");
+    expect((await joinAs("bo", "obi-bo")).body.error.code).toBe("invitation_invalid");
+  });
+
+  it("is 400 card_invalid for a card for another Sphere", async () => {
+    const { w, inv, redeem } = await setup();
+    const key = await w.ownerKey("eve");
+    const card = await makeCard({ sphere: "other", obi: "obi-eve", owner: "eve", ownerKey: key, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    const r = await redeem({ secret: inv.secret, owner_key: key.publicKey, card });
+    expect(r.status).toBe(400);
+    expect(r.body.error.code).toBe("card_invalid");
+  });
+});
+
+describe("previewing an invitation (the Join screen)", () => {
+  it("says the Sphere's name, its active members and the expiry, and uses nothing up", async () => {
+    const w = await team();
+    await w.call("DELETE", "/v0.1/spheres/e2e/members/obi-ernesto", { token: await w.ownerToken() });
+    const inv = (await w.call("POST", "/v0.1/spheres/e2e/invitations", { token: await w.ownerToken(), body: { expires_in: 3600 } })).body;
+    for (let i = 0; i < 2; i++) {
+      const r = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.invitation_id}/preview`, { body: { secret: inv.secret } });
+      expect(r.status).toBe(200);
+      expectSchema("invitationPreviewResponse", r.body);
+      expect(r.body).toEqual({ sphere: "e2e", name: "E2E sphere", member_count: 1, expires_at: inv.expires_at });
+    }
+    const key = await w.ownerKey("ana");
+    const card = await makeCard({ sphere: "e2e", obi: "obi-ana", owner: "ana", ownerKey: key, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    expect((await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.invitation_id}/redeem`, { body: { secret: inv.secret, owner_key: key.publicKey, card } })).status).toBe(201);
+  });
+
+  it("answers every invitation failure the same: unknown, wrong secret, used up, expired", async () => {
+    const w = await team();
+    const token = await w.ownerToken();
+    const inv = (await w.call("POST", "/v0.1/spheres/e2e/invitations", { token, body: { expires_in: 60 } })).body;
+    const used = (await w.invite("ana", "obi-ana")).body;
+    const key = await w.ownerKey("ana");
+    const card = await makeCard({ sphere: "e2e", obi: "obi-ana", owner: "ana", ownerKey: key, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    expect((await w.call("POST", `/v0.1/spheres/e2e/invitations/${used.invitation_id}/redeem`, { body: { secret: used.secret, owner_key: key.publicKey, card } })).status).toBe(201);
+    const preview = (id: string, secret: string) => w.call("POST", `/v0.1/spheres/e2e/invitations/${id}/preview`, { body: { secret } });
+    const answers = [await preview(crypto.randomUUID(), inv.secret), await preview(inv.invitation_id, "A".repeat(43)), await preview(used.invitation_id, used.secret)];
+    w.clock.advance(60);
+    answers.push(await preview(inv.invitation_id, inv.secret));
+    for (const r of answers) {
+      expect(r.status).toBe(403);
+      expect(r.body.error.code).toBe("invitation_invalid");
+    }
+    expect(new Set(answers.map((r) => r.body.error.message)).size).toBe(1);
+  });
+
+  it("checks its body: 400 bad_request", async () => {
+    const w = await team();
+    const inv = (await w.call("POST", "/v0.1/spheres/e2e/invitations", { token: await w.ownerToken(), body: { expires_in: 3600 } })).body;
+    for (const body of [{}, { secret: "short" }, { secret: inv.secret, extra: 1 }]) {
+      const r = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.invitation_id}/preview`, { body });
+      expect(r.status).toBe(400);
+      expect(r.body.error.code).toBe("bad_request");
+    }
+  });
+});
+
 describe("the directory", () => {
   it("lists every member by joined_at then obi, each with its card and keys", async () => {
     const w = new World();

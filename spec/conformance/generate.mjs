@@ -553,6 +553,28 @@ export function buildFixtures() {
   wrongSphere.sphere = "other-sphere";
   auditCase("invalid-chain-other-sphere", "A chain presented as another Sphere's.", wrongSphere, "reject", "wrong_sphere");
 
+  // ---- Wire documents: invitations (sphere-api.md section 4) -----------------------------------
+  // A Sphere server judges these by schema alone: the wire schema `context.schema` names.
+  const wireCase = (name, description, schema, input, expect) =>
+    add("wire", name, { description, expect, ...(expect === "reject" ? { reason: "bad_request" } : {}), context: { schema }, input });
+  const INV = "wire/invitation.request";
+  wireCase("valid-invitation-named", "A named invitation: one Obi of one owner.", INV, { owner: "owner-c", obi: "obi-c", expires_in: 3600 }, "accept");
+  wireCase("valid-invitation-open", "An open invitation: no owner or obi, up to 50 Obis.", INV, { expires_in: 604800, max_uses: 50 }, "accept");
+  wireCase("valid-invitation-open-one-use", "An open invitation without max_uses: one use.", INV, { expires_in: 3600 }, "accept");
+  wireCase("invalid-invitation-owner-without-obi", "An owner but no obi: they come together.", INV, { owner: "owner-c", expires_in: 3600 }, "reject");
+  wireCase("invalid-invitation-obi-without-owner", "An obi but no owner: they come together.", INV, { obi: "obi-c", expires_in: 3600 }, "reject");
+  wireCase("invalid-invitation-named-max-uses", "A named invitation with max_uses: it is used once.", INV, { owner: "owner-c", obi: "obi-c", expires_in: 3600, max_uses: 2 }, "reject");
+  wireCase("invalid-invitation-max-uses-zero", "max_uses 0.", INV, { expires_in: 3600, max_uses: 0 }, "reject");
+  wireCase("invalid-invitation-max-uses-too-many", "max_uses over 1,000.", INV, { expires_in: 3600, max_uses: 1001 }, "reject");
+  wireCase("invalid-invitation-email-domain", "A domain limit: not in v0.1, the Sphere can't enforce it without an identity provider.", INV, { expires_in: 3600, max_uses: 50, email_domain: "example.com" }, "reject");
+  const secret = "A".repeat(43);
+  wireCase("valid-invitation-response-open", "An open invitation as the Sphere answers it.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, max_uses: 50, secret, expires_at: NOW }, "accept");
+  wireCase("invalid-invitation-response-owner-without-obi", "An answer naming an owner but no obi.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, owner: "owner-c", max_uses: 1, secret, expires_at: NOW }, "reject");
+  wireCase("valid-invitation-preview-request", "The secret, and nothing else.", "wire/invitation-preview.request", { secret }, "accept");
+  wireCase("invalid-invitation-preview-request-short-secret", "A secret that isn't 43 base64url characters.", "wire/invitation-preview.request", { secret: "A".repeat(42) }, "reject");
+  wireCase("valid-invitation-preview-response", "The Sphere's name, its active members and the invitation's expiry.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 2, expires_at: NOW }, "accept");
+  wireCase("invalid-invitation-preview-response-members", "A preview that lists members: it gives only their count.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 1, expires_at: NOW, members: ["obi-a"] }, "reject");
+
   // ---- Public key material ------------------------------------------------------------------
   const publicKeys = Object.fromEntries(Object.entries(keys).map(([label, k]) => [label, { seed_string: k.seed, public_key: k.publicKey, key_id: k.keyId }]));
   // The job channel's known answers (protocol.md section 13): each side's X25519 key and hello,

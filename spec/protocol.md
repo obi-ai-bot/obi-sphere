@@ -445,7 +445,8 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 **Still open:**
 
 - Rotating an owner key, and recovering when an owner loses it.
-- Owner identity beyond a bound key (OIDC or another identity provider in front of the token endpoint).
+- Owner identity beyond a bound key (OIDC or another identity provider in front of the token endpoint), and with it invitations limited to an email domain ([sphere-api.md](sphere-api.md) section 4).
+- Withdrawing an invitation before it expires.
 - Direct Obi-to-Obi transport over A2A without the Sphere, and federation between Spheres.
 - Auditing membership and policy changes in the chain (v0.1 records relayed messages only).
 - Cross-checking a result's `acceptance` against the request's conditions on the Sphere (today each Obi checks its own exchanges).

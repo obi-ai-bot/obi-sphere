@@ -90,9 +90,9 @@ The conformance suite has card fixtures for each of these.
 
 ## 3. Joining, rotating and leaving
 
-**Binding the owner key.** A Sphere binds one owner key per owner, the first time it sees that owner: when the Sphere is created (its admin) or when the owner's first invitation is redeemed. The invitation's one-time secret is what authorizes the binding. From then on every card for that owner MUST be signed by the bound key.
+**Binding the owner key.** A Sphere binds one owner key per owner, the first time it sees that owner: when the Sphere is created (its admin) or when the first invitation for that owner is redeemed: a named invitation's owner, or the owner an open invitation's card names. The invitation's secret is what authorizes the binding. From then on every card for that owner MUST be signed by the bound key.
 
-**Joining.** An admin invites one Obi of one owner; the Obi redeems the invitation with its signed card ([sphere-api.md](sphere-api.md), "Invitations"). Its first key becomes valid from the next audit sequence number.
+**Joining.** An admin invites one Obi of one owner (a named invitation), or makes one link for up to `max_uses` Obis whose cards name their own `obi_id` and owner (an open invitation); the Obi redeems it with its signed card ([sphere-api.md](sphere-api.md), "Invitations"). Its first key becomes valid from the next audit sequence number.
 
 **Pinning, in every Obi.** The Sphere binds owner keys, so a Sphere's operator could bind or serve one of its own and sit in the middle of what two Obis say directly to each other (the job channel, protocol.md section 13). So each Obi also pins, by itself, the owner key it first saw for each owner in the directory (trust on first use), and trusts a member's card (and so its `key_id`, and anything signed with it) only when the card's signature verifies with the owner key it pinned for that card's owner. It also keeps the highest `card_seq` it has trusted for each Obi and refuses a card with a lower one: a Sphere can't serve an older card whose key was rotated away. A changed owner key is never followed silently: the Obi treats that member as unknown until its own owner has compared the new key's **fingerprint** (its key id, `ed25519:…`) with that person out of band and accepted it. Each Obi shows its owner every member's fingerprint.
 

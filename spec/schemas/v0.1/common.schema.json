@@ -30,7 +30,7 @@
       "pattern": "^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$"
     },
     "obi_id": {
-      "description": "An Obi's id, unique within its Sphere. Chosen when the Obi is invited.",
+      "description": "An Obi's id, unique within its Sphere and never reused. Chosen by the admin for a named invitation, or by the Obi's own card for an open one.",
       "$ref": "#/$defs/slug"
     },
     "owner_id": {
