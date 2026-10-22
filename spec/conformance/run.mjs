@@ -15,7 +15,11 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFixtures } from "./generate.mjs";
-import { ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, judge, schemas } from "./lib/obi.mjs";
+import {
+  ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, channelKeys, fromB64url, helloSigningInput, judge, openFrame, schemas, sealFrame,
+  x25519FromPrivate, x25519Shared,
+} from "./lib/obi.mjs";
+import { createPublicKey, verify } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -153,11 +157,43 @@ function checkJcs() {
   console.log(`${ok} of ${vectors.length} vectors canonicalize as expected.`);
 }
 
+/** The job channel's known answers (channel-vectors.json), recomputed from their inputs. */
+function checkChannel() {
+  section("Job channel known answers (protocol.md section 13)");
+  const v = JSON.parse(readFileSync(join(here, "channel-vectors.json"), "utf8"));
+  const eq = (what, got, want) => (Buffer.from(got).equals(fromB64url(want)) ? 1 : (failed("channel", `${what} differs`), 0));
+  let ok = 0;
+  const sides = {};
+  for (const role of ["guest", "host"]) {
+    const s = v[role];
+    const x = x25519FromPrivate(fromB64url(s.x25519_private));
+    ok += eq(`${role}'s X25519 public key`, x.publicRaw, s.hello.x25519);
+    ok += eq(`${role}'s hello bytes`, Buffer.from(canonicalize(s.hello), "utf8"), s.hello_bytes);
+    const pub = createPublicKey({ key: { kty: "OKP", crv: "Ed25519", x: s.public_key }, format: "jwk" });
+    if (verify(null, helloSigningInput(s.hello), pub, fromB64url(s.hello.signature))) ok++;
+    else failed("channel", `${role}'s hello signature doesn't verify`);
+    sides[role] = x;
+  }
+  const shared = x25519Shared(sides.guest.privateKey, sides.host.publicRaw);
+  ok += eq("the shared secret", shared, v.shared);
+  const k = channelKeys(shared, fromB64url(v.guest.hello_bytes), fromB64url(v.host.hello_bytes));
+  ok += eq("the salt", k.salt, v.salt) + eq("guest>host key", k.guestToHost, v.guest_to_host) + eq("host>guest key", k.hostToGuest, v.host_to_guest);
+  for (const f of v.frames) {
+    const key = f.direction === "guest>host" ? k.guestToHost : k.hostToGuest;
+    ok += eq(`the ${f.direction} frame`, sealFrame(key, f.counter, f.stream, f.kind, fromB64url(f.payload)), f.wire);
+    const opened = openFrame(key, f.counter, fromB64url(f.wire));
+    if (opened.stream === f.stream && opened.kind === f.kind) ok++;
+    else failed("channel", `the ${f.direction} frame opens wrong`);
+  }
+  console.log(`${ok} channel answers as expected.`);
+}
+
 function checkDeterminism() {
   section("Fixtures are reproducible");
   const expected = buildFixtures();
   const onDisk = new Set(listFiles(join(here, "fixtures")).map((p) => relative(here, p)));
   onDisk.add("keys.json");
+  onDisk.add("channel-vectors.json");
   let same = 0;
   for (const [path, content] of Object.entries(expected)) {
     let actual = null;
@@ -266,6 +302,7 @@ async function selfCheck() {
   console.log("Obi-to-Obi protocol v0.1: conformance self-check");
   lintSchemas();
   checkJcs();
+  checkChannel();
   checkDeterminism();
   checkSecretScanAllowlist();
   const cases = checkVerdicts();

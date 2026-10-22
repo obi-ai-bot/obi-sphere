@@ -12,6 +12,7 @@ import { constantTimeEqual, keyIdOf, randomToken, sha256, sha256Hex, uuid } from
 import { timestamp } from "../protocol/envelope.ts";
 import { canonicalize, utf8 } from "../protocol/json.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
+import { visibleRunners } from "./runner.ts";
 
 const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
 
@@ -122,7 +123,12 @@ export async function listMembers(request: Request, env: Env, deps: Deps, sphere
   const ownerBy = new Map((owners!.results as unknown as OwnerRow[]).map((o) => [o.owner, o]));
   const keysBy = new Map<string, KeyRow[]>();
   for (const k of keys!.results as unknown as KeyRow[]) keysBy.set(k.obi, [...(keysBy.get(k.obi) ?? []), k]);
-  const list = (members!.results as unknown as MemberRow[]).map((m) => memberJson(m, ownerBy.get(m.owner)!, keysBy.get(m.obi) ?? []));
+  const runners = await visibleRunners(env.DB, sphere.id, caller, nowS(deps));
+  const list = (members!.results as unknown as MemberRow[]).map((m) => {
+    const member = memberJson(m, ownerBy.get(m.owner)!, keysBy.get(m.obi) ?? []);
+    const runner = runners.get(m.obi);
+    return runner ? { ...member, runner } : member;
+  });
   return json(200, { sphere: sphere.id, members: list });
 }
 
@@ -130,7 +136,9 @@ export async function getMemberRoute(request: Request, env: Env, deps: Deps, sph
   const sphere = await requireSphere(env.DB, sphereId);
   const caller = await bearer(request, env, sphere, nowS(deps));
   requireScope(caller, "directory:read");
-  return json(200, await loadMemberJson(env.DB, sphere.id, obi));
+  const member = await loadMemberJson(env.DB, sphere.id, obi);
+  const runner = (await visibleRunners(env.DB, sphere.id, caller, nowS(deps), obi)).get(obi);
+  return json(200, runner ? { ...member, runner } : member);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -201,6 +209,7 @@ export async function revoke(request: Request, env: Env, deps: Deps, sphereId: s
       env.DB.prepare("UPDATE members SET status = 'revoked', revoked_at = ?1 WHERE sphere = ?2 AND obi = ?3").bind(revokedAt, sphere.id, obi),
       env.DB.prepare("UPDATE deliveries SET state = 'dropped' WHERE sphere = ?1 AND to_obi = ?2 AND state = 'queued'").bind(sphere.id, obi),
       env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sphere = ?1 AND actor = ?2").bind(sphere.id, obi),
+      env.DB.prepare("DELETE FROM runner_status WHERE sphere = ?1 AND obi = ?2").bind(sphere.id, obi),
     ]);
     if (!written) return null;
     return json(200, await loadMemberJson(env.DB, sphere.id, obi));

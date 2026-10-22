@@ -2,6 +2,8 @@
 
 export interface Env {
   DB: D1Database;
+  /** One ChannelRelay per run_request exchange: its job channel (src/channel.ts). */
+  CHANNELS: DurableObjectNamespace<import("./channel.ts").ChannelRelay>;
   /** The operator token that creates Spheres: a Worker secret, at least 32 characters. Unset: every operator call is 403. */
   SPHERE_OPERATOR_TOKEN?: string;
 }

@@ -62,6 +62,9 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `GET /v0.1/spheres/{sphere}/deliveries?limit=&wait=` | Obi token | `receive` | | `200` [deliveries.response](schemas/v0.1/wire/deliveries.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/deliveries/ack` | Obi token | `receive` | [ack.request](schemas/v0.1/wire/ack.request.schema.json) | `200` [ack.response](schemas/v0.1/wire/ack.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}/audit?from_seq=&limit=` | bearer | `audit:read` | | `200` [audit.response](schemas/v0.1/wire/audit.response.schema.json) |
+| `GET /v0.1/spheres/{sphere}/channels/{correlation_id}` (WebSocket) | Obi token of a party | `receive` | | `101`, then frames (section 6.3) |
+| `PUT /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | [runner-status](schemas/v0.1/runner-status.schema.json) | `200` member |
+| `DELETE /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | | `200` member |
 
 A path for a Sphere that doesn't exist is `404 not_found`; a token for another Sphere on it is `401 unauthorized`.
 
@@ -168,7 +171,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
 | 9 | `key_id` is the sender's current key (protocol.md section 10, "Which key is valid for a message"), and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
 | 10 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
 | 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). | as written |
-| 12 | A request is allowed by the policy (section 5). A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded: the reply is from the request's `to` and to its `from`; the exchange has no `decline`, `result` or `answer` yet; an `accept` comes only when there is no `accept` yet; a `result`'s `for` is the request's type, and an `answer` replies to a `question`; a `result` comes only after its `accept`. | `403 policy_denied`, `409 bad_reply` |
+| 12 | A request is allowed by the policy (section 5). A reply keeps every exchange rule of protocol.md section 4 against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded (the reference verifier's `exchangeProblem` is those rules, once). | `403 policy_denied`, `409 bad_reply` |
 | 13 | Record it: in one transaction, append the audit entry (section 7) and queue a delivery for `to`. | `500 internal` (nothing recorded); `429 rate_limited` with `Retry-After` when the record could not be made because of concurrent writes to the same Sphere (nothing recorded) |
 
 Check 8 comes before the key and expiry checks so that a sender whose answer was lost can always learn that its message was recorded: retrying the same bytes answers `200` with the original `seq`, whatever happened since. Only the sender can learn it (check 6), and only for bytes the Sphere already checked when it recorded them.
@@ -195,6 +198,23 @@ The Sphere never changes the envelope: what it records and delivers is byte-for-
 - A delivery whose envelope expires before it is acknowledged is dropped from the queue. It stays in the audit chain.
 
 `POST /v0.1/spheres/{sphere}/deliveries/ack` with `{"delivery_ids": ["…", "…"]}` (1 to 100 distinct ids) acknowledges deliveries, and answers how many of them were waiting for this Obi: `{"acked": 2}`. Ids that are unknown, already acknowledged, dropped (expired, or the receiver revoked) or another Obi's count 0 and are not an error. A receiver acknowledges only after it has recorded what it decided (protocol.md section 11).
+
+### 6.3 Job channels
+
+`GET /v0.1/spheres/{sphere}/channels/{correlation_id}` with `Upgrade: websocket` opens one side of a `run_request`'s job channel (protocol.md section 13). The Sphere relays what each side sends to the other, unchanged, and reads none of it: everything but its own text frames is encrypted end to end.
+
+- **Who.** An Obi token with `receive` whose actor is the exchange's guest (the request's `from`) or host (its `to`). The request must be a `run_request` in this Sphere whose exchange has its `accept` and hasn't ended (protocol.md section 4), and whose job's time isn't up (below: the request's `expires_at` doesn't count). Otherwise: `401 unauthorized`, `403 insufficient_scope` or `forbidden` (not a party), `404 not_found` (no such request), `409 conflict` (not accepted yet, or ended). A request without `Upgrade: websocket` is `400 bad_request`.
+- **Pairing.** One connection per side: a new one replaces the side's earlier one, which is closed with code `4003`. When both sides are there, the Sphere sends each a text frame `{"peer": "joined"}`; when one leaves, the other gets `{"peer": "left"}` and stays open, so the side that left can come back. Text frames come only from the Sphere; a side that sends one is closed with `4004`.
+- **What it carries.** Binary frames only, each at most 262,144 bytes, relayed in order. A frame sent while the other side isn't there is dropped: each `{"peer": "joined"}` starts a new handshake (protocol.md section 13). A channel carries at most 8 GiB in all; past that both sides are closed with `4002`.
+- **How long.** A channel lasts until its job's time is up: the `accept`'s `recorded_at` plus the request's `max_minutes` plus 15 minutes, whatever the request's `expires_at` says. An Obi may have at most 8 live job exchanges at once, as guest or host (accepted, not ended, the job's time not up): opening the channel of one more is `429 rate_limited`, however many of the others have a connection.
+- **Closing.** The Sphere closes both sides with `4001` within 30 seconds of the exchange ending (a `result`, `run_return`, `decline` or `run_cancel` recorded), the job's time being up, or either Obi being revoked. A side whose token is revoked (a card rotation revokes the Obi's tokens) is closed with `4001`, and one whose token has expired with `4007`: it opens again with a new token. A side alone for 10 minutes, its other side never joining, is closed with `4005`; a channel that carried no frame for 5 minutes (each side pings every 30 seconds), with `4006`.
+- **Opening again.** A side opens its channel at most 30 times in 10 minutes; past that, `429 rate_limited` with `Retry-After`.
+
+### 6.4 Runner status
+
+`PUT /v0.1/spheres/{sphere}/members/{obi}/runner` with a signed runner status (protocol.md section 14) publishes it in the directory, replacing the member's earlier one; `DELETE` takes it away. Only the Obi itself, with its own token (`receive`); another caller is `403 forbidden`. The Sphere checks the schema, that `sphere` and `obi` are the path's, that `key_id` is the Obi's current key and the signature verifies (`400 bad_signature`, `400 unknown_key`), and that `created_at` is at most 300 seconds ahead of the Sphere's clock and not older than the status it replaces, and `expires_at` is after now and at most 900 seconds after `created_at` (`400 bad_request`). It answers the member as the caller sees it.
+
+The directory (`GET …/members` and `GET …/members/{obi}`) shows a member's `runner` only while the member is active, only until it expires, and only to a caller whose owner its `for` names (or every caller when `for` is `*`) or who is the member's own owner, whatever `for` says; and only while its `key_id` is the member's current key. Each owner it is offered to sees the whole `for` list (it is signed): an owner who doesn't want that list seen offers to everyone (`*`). Nobody else learns that one exists. The status's own signature lets every reader check that the Sphere didn't make it up or change it.
 
 ## 7. Audit chain
 
@@ -239,9 +259,11 @@ Take the entries from seq 1 (fetch more pages until the last answer's `head.seq`
 4. Its envelope passes protocol.md section 10 checks 2 and 3, names the chain's Sphere, was created at most 300 seconds after `recorded_at`, and expires after `recorded_at`.
 5. Its `key_id` is a key of the envelope's `from`, valid at this seq (`valid_from_seq` ≤ seq, and seq ≤ `valid_until_seq` unless that is null), whose public key hashes to `key_id`; and the signature verifies with it.
 6. No earlier entry has the same envelope `id`.
-7. A reply keeps the exchange rules (protocol.md section 4, rules 1 to 6) against the earlier request its `in_reply_to` names and the earlier replies to it: it is from the request's `to` and to its `from`; no `decline`, `result` or `answer` for that request comes before it; an `accept` has no earlier `accept`; a `result`'s `for` is the request's type, and an `answer` replies to a `question`; a `result` has an earlier `accept`. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
+7. A reply keeps every exchange rule of protocol.md section 4 against the earlier request its `in_reply_to` names and the earlier replies to it, as `exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs) implements them. (The same rules as section 6.1, check 12, so a chain the Sphere built always passes.)
 
-Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash. The conformance suite has chains that pass and fail each of these: [conformance/fixtures/audit/](conformance/fixtures/audit/).
+Then `prev_hash` becomes this entry's `hash`. A verifier that has checked a chain up to some head can later check only the new entries, starting from that head's hash.
+
+**No rollback, no fork.** Each Obi MUST keep the last head it verified (`seq` and `hash`) and the `seq` and `hash` the Sphere answered for each of its own sends, and reject a chain whose head is lower than the one it verified, whose entry at that `seq` has another hash, or that lacks one of its own sends at its `seq` with its `hash`. A Sphere that rolled its chain back, or shows an Obi a chain without one of its sends, is caught by the first Obi that reads it again. A fork made after an Obi's last receipt, shown to other Obis only, is caught only when Obis compare the heads they verified. The conformance suite has no fixtures for these: they need a verifier's kept head and receipts, which its audit cases don't carry.
 
 ## 8. Running a Sphere locally
 

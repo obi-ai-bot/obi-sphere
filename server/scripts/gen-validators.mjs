@@ -25,6 +25,7 @@ const SCHEMA_BASE = "https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/sche
 // documents it checks on its own (cards, chains, assertion headers), and what it answers.
 const EXPORTS = {
   envelope: "envelope.schema.json",
+  runnerStatus: "runner-status.schema.json",
   agentCard: "agent-card.schema.json",
   auditEntry: "audit-entry.schema.json",
   createSphereRequest: "wire/create-sphere.request.schema.json",

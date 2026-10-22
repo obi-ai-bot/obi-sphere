@@ -94,6 +94,8 @@ The conformance suite has card fixtures for each of these.
 
 **Joining.** An admin invites one Obi of one owner; the Obi redeems the invitation with its signed card ([sphere-api.md](sphere-api.md), "Invitations"). Its first key becomes valid from the next audit sequence number.
 
+**Pinning, in every Obi.** The Sphere binds owner keys, so a Sphere's operator could bind or serve one of its own and sit in the middle of what two Obis say directly to each other (the job channel, protocol.md section 13). So each Obi also pins, by itself, the owner key it first saw for each owner in the directory (trust on first use), and trusts a member's card (and so its `key_id`, and anything signed with it) only when the card's signature verifies with the owner key it pinned for that card's owner. It also keeps the highest `card_seq` it has trusted for each Obi and refuses a card with a lower one: a Sphere can't serve an older card whose key was rotated away. A changed owner key is never followed silently: the Obi treats that member as unknown until its own owner has compared the new key's **fingerprint** (its key id, `ed25519:…`) with that person out of band and accepted it. Each Obi shows its owner every member's fingerprint.
+
 **Rotating an Obi key.** The Obi gets a new card from its owner: same `obi_id`, `sphere` and `owner_key`, a higher `card_seq`, the new `key_id` and `public_key`, signed by the owner key. It sends it with `PUT /v0.1/spheres/{sphere}/members/{obi}/card`, authenticated with a token whose actor proof was signed by its current key. The Sphere then:
 
 - closes the old key (`valid_until_seq` = the chain's head seq now) and opens the new one (`valid_from_seq` = head seq + 1);
@@ -137,13 +139,13 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 | Scope | Lets the token holder |
 |---|---|
 | `admin` | Invite, write the policy, revoke members. Only for the Sphere's admin owner, only without an actor. |
-| `send:review_request`, `send:question`, `send:handoff` | Send requests of that type. |
+| `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer` | Send requests of that type. |
 | `reply` | Send `status`, `accept`, `decline`, `result` and `answer`. |
 | `receive` | Fetch and acknowledge its deliveries. |
 | `directory:read` | Read the members and the policy. |
 | `audit:read` | Read the audit chain. |
 
-**Canonical order.** Wherever the Sphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `reply`, `receive`, `directory:read`, `audit:read`. So an Obi's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Sphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
+**Canonical order.** Wherever the Sphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `reply`, `receive`, `directory:read`, `audit:read`. So an Obi's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Sphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
 
 An Obi's token can carry every scope but `admin`, limited to what the delegation grants. An owner's own token can carry `admin` (if they are the admin), `directory:read` and `audit:read`.
 

@@ -3,7 +3,7 @@
 // It is what the conformance runner judges fixtures with, and it is meant to be read next to
 // spec/protocol.md, spec/identity.md and spec/sphere-api.md. Node >= 22, node:crypto only, plus ajv.
 
-import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, sign, verify } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,10 +17,16 @@ export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const ZERO_HASH = "0".repeat(64);
-export const REQUEST_TYPES = ["review_request", "question", "handoff"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result", "answer"];
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke"];
+// The replies that belong only to a run_request's exchange (spec/protocol.md section 4, rule 7).
+export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
+// What a share_offer's exchange takes, and nothing else (spec/protocol.md section 4, rule 8).
+export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
+// The replies a request's own sender sends, to its receiver (spec/protocol.md section 4, rule 1).
+export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke"];
 export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +81,62 @@ export function keyFromSeed(seed32) {
 }
 
 export const keyFromSeedString = (seedString) => keyFromSeed(sha256(Buffer.from(seedString, "utf8")));
+
+// ---------------------------------------------------------------------------------------------
+// The job channel (protocol.md section 13): the hello's signature, the salt, the two keys, the
+// nonces and a frame. The known-answer vectors in channel-vectors.json come from these.
+
+export const CHANNEL_HELLO_PREFIX = "obi/0.1 channel\n";
+const PKCS8_X25519_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
+const SPKI_X25519_PREFIX = Buffer.from("302a300506032b656e032100", "hex");
+
+/** An X25519 key from 32 private bytes: the key object and its raw public key. */
+export function x25519FromPrivate(raw32) {
+  const privateKey = createPrivateKey({ key: Buffer.concat([PKCS8_X25519_PREFIX, raw32]), format: "der", type: "pkcs8" });
+  return { privateKey, publicRaw: fromB64url(createPublicKey(privateKey).export({ format: "jwk" }).x) };
+}
+
+export const x25519Shared = (privateKey, peerRaw32) =>
+  diffieHellman({ privateKey, publicKey: createPublicKey({ key: Buffer.concat([SPKI_X25519_PREFIX, peerRaw32]), format: "der", type: "spki" }) });
+
+/** What a hello's signature covers: the prefix, then the canonical JSON of the hello without it. */
+export function helloSigningInput(hello) {
+  const { signature: _signature, ...rest } = hello;
+  return Buffer.concat([Buffer.from(CHANNEL_HELLO_PREFIX, "utf8"), canonicalBytes(rest)]);
+}
+
+export const signHello = (unsigned, privateKey) => ({ ...unsigned, signature: signBytes(privateKey, helloSigningInput(unsigned)) });
+
+/** salt = SHA-256(guest's hello bytes ‖ host's hello bytes); one 32-byte key each way. */
+export function channelKeys(shared, guestHelloBytes, hostHelloBytes) {
+  const salt = sha256(Buffer.concat([guestHelloBytes, hostHelloBytes]));
+  const key = (info) => Buffer.from(hkdfSync("sha256", shared, salt, Buffer.from(info, "utf8"), 32));
+  return { salt, guestToHost: key("obi/0.1 channel guest>host"), hostToGuest: key("obi/0.1 channel host>guest") };
+}
+
+/** 4 zero bytes, then the frame's number in its direction, big-endian 64-bit. */
+export function channelNonce(counter) {
+  const nonce = Buffer.alloc(12);
+  nonce.writeBigUInt64BE(BigInt(counter), 4);
+  return nonce;
+}
+
+/** A frame on the wire: ChaCha20-Poly1305 of (stream u32 BE, kind byte, payload), the tag after. */
+export function sealFrame(key, counter, stream, kind, payload) {
+  const plain = Buffer.alloc(5 + payload.length);
+  plain.writeUInt32BE(stream, 0);
+  plain[4] = kind;
+  Buffer.from(payload).copy(plain, 5);
+  const cipher = createCipheriv("chacha20-poly1305", key, channelNonce(counter), { authTagLength: 16 });
+  return Buffer.concat([cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+}
+
+export function openFrame(key, counter, wire) {
+  const decipher = createDecipheriv("chacha20-poly1305", key, channelNonce(counter), { authTagLength: 16 });
+  decipher.setAuthTag(wire.subarray(wire.length - 16));
+  const plain = Buffer.concat([decipher.update(wire.subarray(0, wire.length - 16)), decipher.final()]);
+  return { stream: plain.readUInt32BE(0), kind: plain[4], payload: plain.subarray(5) };
+}
 
 export function keyIdOf(publicKeyB64url) {
   const raw = fromB64url(publicKeyB64url);
@@ -243,7 +305,7 @@ export function resultProblems(body) {
   const allMet = acceptance.length > 0 && acceptance.every((a) => a.met);
   if (body.outcome === "approved" && !allMet) problems.push("approved needs every acceptance condition met");
   if (body.outcome === "changes_requested" && allMet) problems.push("changes_requested needs an acceptance condition not met");
-  if (body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
+  if (body.for === "handoff" && body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
   return problems;
 }
 
@@ -337,7 +399,14 @@ export function appendEntry(entries, sphere, envelope, recordedAt) {
 // breaks the rules, or null when it doesn't.
 export function exchangeProblem(reply, request, earlier) {
   if (!request || !REQUEST_TYPES.includes(request.type)) return "replies to no earlier request";
-  if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  // run_cancel, share_status and share_revoke are the replies the request's own sender sends, to its receiver.
+  if (SENDER_REPLY_TYPES.includes(reply.type)) {
+    if (request.from !== reply.from || request.to !== reply.to) return `only the request's sender sends a ${reply.type}, to its receiver`;
+  } else if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  if (RUN_REPLY_TYPES.includes(reply.type) && request.type !== "run_request") return `a ${reply.type} belongs to a run_request, not a ${request.type}`;
+  // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
+  if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
+    return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
   // At most one accept per exchange; a status may come before it or after it.
@@ -347,8 +416,19 @@ export function exchangeProblem(reply, request, earlier) {
     // A result (for a review_request or a handoff) comes only after the accept.
     if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // A run_return comes back only from a job that was accepted.
+  if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
+  // No words in a guest job's or a share's exchange: a decline there has no note, and a guest job's takes no status.
+  if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
+  if (reply.type === "decline" && ["run_request", "share_offer"].includes(request.type) && reply.body?.note !== undefined) return `a decline of a ${request.type} has no note`;
+  // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
+  const runDeclineReasons = ["unavailable", "expired", "out_of_scope", "share_used"];
+  if (reply.type === "decline" && request.type === "run_request" && !runDeclineReasons.includes(reply.body?.reason))
+    return `a decline of a run_request says only ${runDeclineReasons.join(", ")}`;
+  // Nor whether a rule or its owner in person answered.
+  if (request.type === "run_request" && reply.body?.by_rule !== undefined) return "no reply to a run_request names a rule (by_rule)";
   return null;
 }
 
