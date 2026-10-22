@@ -26,3 +26,15 @@ regexes = [
   '''uvPsVSM4yoagSvPLJ_9trskiok2az7Xwc1VZlWdH8bk''',
   '''RX8-irCtsWuRqyd1II8LKF5FMnJYEeUmyJwVOLpMjnY''',
 ]
+
+[[allowlists]]
+description = "The job channel's derived test keys in commit 7c981d8's channel-vectors.json (SHA-256 of public seed strings, not secrets; renamed in 8825561 so they no longer look like keys)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+commits = ["7c981d8aef323e9c4c6bfd1ff5e2c405f8d32ba3"]
+paths = ['''^spec/conformance/channel-vectors\.json$''']
+regexTarget = "match"
+regexes = [
+  '''18lEK8uvo9KZ1Yh6bTYUF84EI0gNmZ2SMrc8Mgt0qr0''', # guest>host
+  '''stJJdufM2GLtmRXQHYLEDNgbu97ZXUpvGPoIoHGQUfs''', # host>guest
+]

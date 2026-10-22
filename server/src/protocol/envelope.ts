@@ -10,9 +10,15 @@ export const ENVELOPE_SIGNING_PREFIX = "obi/0.1 envelope\n";
 export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
-export const REQUEST_TYPES = ["review_request", "question", "handoff"] as const;
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer"] as const;
-export const TERMINAL_TYPES = ["decline", "result", "answer"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer"] as const;
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"] as const;
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke"];
+/** The replies that belong only to a run_request's exchange (protocol.md section 4, rule 7). */
+export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
+/** What a share_offer's exchange takes, and nothing else (protocol.md section 4, rule 8). */
+export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
+/** The replies a request's own sender sends, to its receiver (protocol.md section 4, rule 1). */
+export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke"];
 export const SEVERITY_RANK: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 export type RequestType = (typeof REQUEST_TYPES)[number];
@@ -93,7 +99,7 @@ export function resultProblems(body: JsonObject): string[] {
   const allMet = acceptance.length > 0 && acceptance.every((a) => a.met);
   if (body.outcome === "approved" && !allMet) problems.push("approved needs every acceptance condition met");
   if (body.outcome === "changes_requested" && allMet) problems.push("changes_requested needs an acceptance condition not met");
-  if (body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
+  if (body.for === "handoff" && body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
   return problems;
 }
 
@@ -212,7 +218,15 @@ export interface ExchangeMessage {
   from: string;
   to: string;
   result_for?: string | undefined;
+  /** Whether the message's body has a `note` (a decline's words, rule 9). */
+  has_note?: boolean | undefined;
+  /** A decline's `reason`, and whether it names a remembered decision (`by_rule`): rule 9. */
+  reason?: string | undefined;
+  has_by_rule?: boolean | undefined;
 }
+
+/** The reasons a decline in a run_request's exchange may give (rule 9): the guest's own doing, or nothing about the host. */
+export const RUN_DECLINE_REASONS = ["unavailable", "expired", "out_of_scope", "share_used"];
 
 /**
  * The exchange rules (protocol.md section 4): why `reply` breaks them, given the request its
@@ -221,7 +235,14 @@ export interface ExchangeMessage {
  */
 export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage | undefined, earlier: ExchangeMessage[]): string | null {
   if (!request || !isRequestType(request.type)) return "replies to no earlier request";
-  if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  // run_cancel, share_status and share_revoke are the replies the request's own sender sends, to its receiver.
+  if (SENDER_REPLY_TYPES.includes(reply.type)) {
+    if (request.from !== reply.from || request.to !== reply.to) return `only the request's sender sends a ${reply.type}, to its receiver`;
+  } else if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
+  if (RUN_REPLY_TYPES.includes(reply.type) && request.type !== "run_request") return `a ${reply.type} belongs to a run_request, not a ${request.type}`;
+  // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
+  if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
+    return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
   if (reply.type === "accept" && accepted) return "accepted twice";
@@ -229,8 +250,19 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
     if (reply.result_for !== request.type) return `a result for ${reply.result_for} answers a ${request.type}`;
     if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
   }
+  // A run_return comes back only from a job that was accepted.
+  if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
   // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
   if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
+  // No words in a guest job's or a share's exchange: a decline there has no note, and a guest
+  // job's takes no status, whose states and note would say when its host's owner is there (rule 9).
+  if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
+  if (reply.type === "decline" && (request.type === "run_request" || request.type === "share_offer") && reply.has_note) return `a decline of a ${request.type} has no note`;
+  // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
+  if (reply.type === "decline" && request.type === "run_request" && !RUN_DECLINE_REASONS.includes(reply.reason ?? ""))
+    return `a decline of a run_request says only ${RUN_DECLINE_REASONS.join(", ")}`;
+  // Nor whether a rule or its owner in person answered.
+  if (request.type === "run_request" && reply.has_by_rule) return `no reply to a run_request names a rule (by_rule)`;
   return null;
 }
 
@@ -251,4 +283,7 @@ export const exchangeMessage = (env: Envelope): ExchangeMessage => ({
   from: env.from,
   to: env.to,
   result_for: env.type === "result" ? (env.body.for as string) : undefined,
+  has_note: env.body.note !== undefined,
+  reason: env.type === "decline" ? (env.body.reason as string) : undefined,
+  has_by_rule: env.body.by_rule !== undefined,
 });

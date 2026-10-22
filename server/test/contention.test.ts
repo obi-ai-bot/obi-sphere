@@ -59,7 +59,7 @@ function contended(sphere: string, steal: number, rewrite: (sql: string) => stri
 }
 
 async function sendThrough(w: World, db: D1Database, envelope: unknown, token: string, retryBudgetMs?: number) {
-  const workerEnv: Env = { DB: db, SPHERE_OPERATOR_TOKEN: env.SPHERE_OPERATOR_TOKEN };
+  const workerEnv: Env = { DB: db, CHANNELS: env.CHANNELS, SPHERE_OPERATOR_TOKEN: env.SPHERE_OPERATOR_TOKEN };
   const res = await handle(
     new Request(`${BASE}/v0.1/spheres/${w.sphere}/messages`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(envelope) }),
     workerEnv,
