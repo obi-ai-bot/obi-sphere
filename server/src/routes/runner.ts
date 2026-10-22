@@ -3,7 +3,7 @@
 // the Mac's owner is at it, and nobody it isn't offered to learns there is one.
 
 import { bearer, requireActor, requireScope, type Caller } from "../auth.ts";
-import { getKeys, loadMemberJson, requireSphere } from "../db.ts";
+import { getKeys, loadMemberJson, requireBound, requireSphere } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
 import { verifyEd25519 } from "../protocol/crypto.ts";
@@ -88,6 +88,7 @@ export async function putRunner(request: Request, env: Env, deps: Deps, sphereId
   const current = (await getKeys(env.DB, sphere.id, obi)).find((k) => k.valid_until_seq === null);
   if (!current || current.key_id !== status.key_id) throw apiError("unknown_key", `${String(status.key_id)} is not ${obi}'s current key`);
   if (!(await verifyEd25519(current.public_key, runnerSigningInput(status), status.signature as string))) throw apiError("bad_signature", "the signature does not verify");
+  if (Array.isArray(status.for)) await requireBound(env.DB, sphere.id, status.for as string[], "the status's for");
   await env.DB.prepare(
     "INSERT INTO runner_status (sphere, obi, status, expires_at_s) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (sphere, obi) DO UPDATE SET status = ?3, expires_at_s = ?4",
   ).bind(sphere.id, obi, JSON.stringify(status), expires).run();

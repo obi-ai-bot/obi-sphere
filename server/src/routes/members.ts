@@ -47,6 +47,27 @@ export async function invite(request: Request, env: Env, deps: Deps, sphereId: s
 }
 
 // ---------------------------------------------------------------------------------------------
+// DELETE /v0.1/spheres/{sphere}/invitations/{invitation_id}: withdrawn, at once.
+
+export async function withdrawInvitation(request: Request, env: Env, deps: Deps, sphereId: string, invitationId: string): Promise<Response> {
+  const sphere0 = await requireSphere(env.DB, sphereId);
+  const caller = await bearer(request, env, sphere0, nowS(deps));
+  requireScope(caller, "admin");
+  requireOwnerToken(caller);
+  return withRetries(async () => {
+    const sphere = await requireSphere(env.DB, sphere0.id);
+    const found = await env.DB.prepare("SELECT 1 AS found FROM invitations WHERE id = ?1 AND sphere = ?2").bind(invitationId, sphere.id).first();
+    if (!found) throw apiError("not_found", `no invitation ${invitationId}`);
+    // A guarded write: a redeem that read the invitation before this loses its turn and reads again.
+    const written = await guardedWrite(env.DB, sphere.id, sphere.rev, [
+      env.DB.prepare("DELETE FROM invitations WHERE id = ?1 AND sphere = ?2").bind(invitationId, sphere.id),
+    ]);
+    if (!written) return null;
+    return new Response(null, { status: 204 });
+  }, deps.retryBudgetMs);
+}
+
+// ---------------------------------------------------------------------------------------------
 // POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/redeem
 
 interface InvitationRow {
@@ -119,7 +140,8 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
     const member: MemberRow = { sphere: sphere.id, obi: p.obi_id, owner: p.owner, status: "active", joined_at: joinedAt, revoked_at: null, card: canonicalize(req.card), card_seq: p.card_seq };
     const key: KeyRow = { sphere: sphere.id, key_id: p.key_id, obi: p.obi_id, public_key: p.public_key, valid_from_seq: sphere.head_seq + 1, valid_until_seq: null };
     const written = await guardedWrite(env.DB, sphere.id, sphere.rev, [
-      env.DB.prepare("UPDATE invitations SET uses = uses + 1 WHERE id = ?1 AND uses < max_uses").bind(inv.id),
+      // Past max_uses, the table's check aborts the whole batch.
+      env.DB.prepare("UPDATE invitations SET uses = uses + 1 WHERE id = ?1").bind(inv.id),
       env.DB.prepare("INSERT OR IGNORE INTO owners (sphere, owner, owner_key, owner_key_id) VALUES (?1, ?2, ?3, ?4)").bind(owner.sphere, owner.owner, owner.owner_key, owner.owner_key_id),
       env.DB.prepare("INSERT INTO members (sphere, obi, owner, status, joined_at, card, card_seq) VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6)").bind(
         member.sphere, member.obi, member.owner, member.joined_at, member.card, member.card_seq,

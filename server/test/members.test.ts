@@ -234,6 +234,33 @@ describe("open invitations (one link for a team)", () => {
     expect(results.map((r) => r.status).sort()).toEqual([201, 403, 403]);
   });
 
+  it("is withdrawn by the admin at once: preview and redeem are invalid from then on", async () => {
+    const { w, inv, preview, joinAs } = await setup(5);
+    const path = `/v0.1/spheres/e2e/invitations/${inv.invitation_id}`;
+    expect((await joinAs("ana", "obi-ana")).status).toBe(201);
+    for (const token of [await w.ownerToken("ernesto", "directory:read"), await w.obiToken("obi-ernesto")]) {
+      const r = await w.call("DELETE", path, { token });
+      expect(r.status).toBe(403);
+      expect(r.body.error.code).toBe("insufficient_scope");
+    }
+    expect((await w.call("DELETE", path, { token: await w.ownerToken() })).status).toBe(204);
+    expect((await preview()).body.error.code).toBe("invitation_invalid");
+    expect((await joinAs("bo", "obi-bo")).body.error.code).toBe("invitation_invalid");
+    const again = await w.call("DELETE", path, { token: await w.ownerToken() });
+    expect(again.status).toBe(404);
+    expect(again.body.error.code).toBe("not_found");
+  });
+
+  it("is withdrawn before a redeem lands, or after it, never both", async () => {
+    const { w, inv, joinAs } = await setup(5);
+    const withdraw = w.call("DELETE", `/v0.1/spheres/e2e/invitations/${inv.invitation_id}`, { token: await w.ownerToken() });
+    const [gone, joined] = await Promise.all([withdraw, joinAs("ana", "obi-ana")]);
+    expect(gone.status).toBe(204);
+    const member = await w.call("GET", "/v0.1/spheres/e2e/members/obi-ana", { token: await w.ownerToken() });
+    expect(joined.status === 201 ? member.status : joined.body.error.code).toBe(joined.status === 201 ? 200 : "invitation_invalid");
+    expect((await joinAs("bo", "obi-bo")).body.error.code).toBe("invitation_invalid");
+  });
+
   it("is 400 card_invalid for a card for another Sphere", async () => {
     const { w, inv, redeem } = await setup();
     const key = await w.ownerKey("eve");

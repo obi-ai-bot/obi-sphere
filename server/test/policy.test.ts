@@ -9,6 +9,7 @@ describe("GET and PUT /policy", () => {
   it("replaces the policy whole, version by version, rules in the order given", async () => {
     const w = new World();
     await w.create();
+    expect((await w.join("ernesto", "obi-ernesto")).status).toBe(201);
     w.clock.advance(6);
     const rules = [TEAM_REVIEWS, { id: "questions", from_owner: "ernesto", to_owner: "*", actions: ["question"], repos: ["*"] }];
     const r = await w.putPolicy(rules);
@@ -31,6 +32,19 @@ describe("GET and PUT /policy", () => {
       expect(r.status, JSON.stringify(rules)).toBe(400);
       expect(r.body.error.code).toBe("bad_request");
     }
+  });
+
+  it("names only owners who have joined, or * (409 conflict): an open link can't inherit a rule", async () => {
+    const w = await team();
+    for (const rule of [{ ...TEAM_REVIEWS, from_owner: "bob" }, { ...TEAM_REVIEWS, to_owner: "bob" }]) {
+      const r = await w.putPolicy([rule], 1);
+      expect(r.status, JSON.stringify(rule)).toBe(409);
+      expect(r.body.error.code).toBe("conflict");
+      expect(r.body.error.message).toContain("bob");
+    }
+    // Ernesto has joined; his Obi revoked, his owner id stays bound.
+    await w.call("DELETE", "/v0.1/spheres/e2e/members/obi-ernesto", { token: await w.ownerToken() });
+    expect((await w.putPolicy([{ ...TEAM_REVIEWS, from_owner: "ernesto", to_owner: "wellington" }], 1)).status).toBe(200);
   });
 
   it("is written by the admin only, and read with directory:read or admin", async () => {

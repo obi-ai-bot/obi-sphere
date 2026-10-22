@@ -71,6 +71,21 @@ export async function requireSphere(db: D1Database, id: string): Promise<SphereR
 export const getOwner = (db: D1Database, sphere: string, owner: string): Promise<OwnerRow | null> =>
   db.prepare("SELECT * FROM owners WHERE sphere = ?1 AND owner = ?2").bind(sphere, owner).first<OwnerRow>();
 
+/**
+ * Refuses (`409 conflict`) owner ids in `owners` with no bound key: an offer or a rule names only
+ * people who have joined, so whoever first redeems an open invitation as that id can't inherit it
+ * (sphere-api.md section 4, "What an open invitation's secret proves"). `*` isn't an owner id.
+ */
+export async function requireBound(db: D1Database, sphere: string, owners: string[], what: string): Promise<void> {
+  const named = [...new Set(owners.filter((o) => o !== "*"))];
+  if (!named.length) return;
+  const r = await db.prepare("SELECT value FROM json_each(?2) WHERE value NOT IN (SELECT owner FROM owners WHERE sphere = ?1)")
+    .bind(sphere, JSON.stringify(named))
+    .all<{ value: string }>();
+  const unbound = r.results.map((row) => row.value);
+  if (unbound.length) throw apiError("conflict", `${what} names ${unbound.join(", ")}, who hasn't joined this Sphere: it can name only owners who have, or *`);
+}
+
 export const getMember = (db: D1Database, sphere: string, obi: string): Promise<MemberRow | null> =>
   db.prepare("SELECT * FROM members WHERE sphere = ?1 AND obi = ?2").bind(sphere, obi).first<MemberRow>();
 

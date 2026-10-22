@@ -158,6 +158,19 @@ describe("runner status", () => {
     expect(sangam.body.runner).toBeUndefined();
   });
 
+  it("is offered only to owners who have joined, or * (409 conflict): an open link can't inherit it", async () => {
+    const w = await sharing();
+    const host = await w.obiToken("obi-wellington");
+    const path = "/v0.1/spheres/e2e/members/obi-wellington/runner";
+    const early = await w.call("PUT", path, { token: host, body: await runnerStatus(w, "obi-wellington", { for: ["ernesto", "bob"] }) });
+    expect(early.status).toBe(409);
+    expect(early.body.error.code).toBe("conflict");
+    expect(early.body.error.message).toContain("bob");
+    expect((await w.call("GET", "/v0.1/spheres/e2e/members/obi-wellington", { token: host })).body.runner).toBeUndefined();
+    expect((await w.join("bob", "obi-bob")).status).toBe(201);
+    expect((await w.call("PUT", path, { token: host, body: await runnerStatus(w, "obi-wellington", { for: ["ernesto", "bob"] }) })).status).toBe(200);
+  });
+
   it("is for every member with for `*`, and gone once it expires", async () => {
     const w = await sharing();
     const host = await w.obiToken("obi-wellington");

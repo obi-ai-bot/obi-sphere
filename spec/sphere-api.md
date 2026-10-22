@@ -51,6 +51,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `POST /v0.1/oauth/token` | none | | form (identity.md 4.3) | `200` [token.response](schemas/v0.1/wire/token.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}` | bearer | any | | `200` sphere |
 | `POST /v0.1/spheres/{sphere}/invitations` | owner token | `admin` | [invitation.request](schemas/v0.1/wire/invitation.request.schema.json) | `201` [invitation.response](schemas/v0.1/wire/invitation.response.schema.json) |
+| `DELETE /v0.1/spheres/{sphere}/invitations/{invitation_id}` | owner token | `admin` | | `204` |
 | `POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/preview` | none (secret) | | [invitation-preview.request](schemas/v0.1/wire/invitation-preview.request.schema.json) | `200` [invitation-preview.response](schemas/v0.1/wire/invitation-preview.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/redeem` | none (secret) | | [redeem.request](schemas/v0.1/wire/redeem.request.schema.json) | `201` [member](schemas/v0.1/wire/member.schema.json) |
 | `GET /v0.1/spheres/{sphere}/members` | bearer | `directory:read` | | `200` [members.response](schemas/v0.1/wire/members.response.schema.json) |
@@ -113,6 +114,8 @@ POST /v0.1/spheres/e2e/invitations
 
 `owner` and `obi` come together or not at all, and a named invitation takes no `max_uses` (`400 bad_request`). The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. A named invitation's `obi` id that is or was a member is `409 conflict`: ids are never reused.
 
+**Withdraw.** `DELETE /invitations/{invitation_id}`, by the admin with an owner token, withdraws an invitation at once, used or not: `204`, and from then on its preview and redeem are `403 invitation_invalid`, as for one that never existed. A redeem that lands before the withdrawal stays (the member is revoked as any other); one that comes after it uses nothing. An invitation the Sphere doesn't have (never made, or withdrawn already) is `404 not_found`.
+
 **Preview.** Before joining, whoever holds the link can read what it leads to, so a Join screen can show it. The secret is the credential, sent in the body to keep it out of URLs and logs, as for redeeming; nothing is used up:
 
 ```json
@@ -155,8 +158,9 @@ A redeem that fails uses nothing. Then, in one transaction: the invitation is us
 
 - the first redeem that names an owner who has no bound key yet takes that owner id for good: a later owner with that id and another key is `403 forbidden`, and owner ids are never released, even when every Obi of that owner is revoked;
 - an owner who is already bound (the admin, or anyone who joined) can't be impersonated: a card naming them must carry, and be signed by, their bound key;
-- a policy rule that names an owner (section 5) gives its permissions to whoever binds that owner id first. An admin writes such rules for people who have joined, after checking their `owner_key_id` with them, or uses a named invitation;
-- the admin sees every member in the directory and revokes what it doesn't recognise (identity.md section 3). `expires_in` and `max_uses` bound what a leaked link can do; v0.1 has no call to withdraw an invitation before it expires.
+- nothing waits for an owner id before it is bound: a policy rule (section 5) and a runner status's `for` (section 6.4) name only owners with a bound key (`409 conflict` otherwise), so whoever first redeems a link as that id inherits no permission or offer. A rule or offer for `*` is for everyone who joins, through any invitation. An admin who names someone checks their `owner_key_id` with them first, or uses a named invitation;
+- an open redeem can take an Obi id that a named invitation still waiting to be redeemed is for: that invitation's redeem is then `409 conflict` (check 7), and the admin invites the person again with another id;
+- the admin sees every member in the directory and revokes what it doesn't recognise (identity.md section 3). `expires_in` and `max_uses` bound what a leaked link can do, and the admin withdraws a link at once (above).
 
 **Limiting an invitation to an email domain** (anyone at `@example.com`) is not in v0.1, and the Sphere can't enforce it without an identity provider: owner ids and card names are chosen by the redeemer, and nothing in a redeem proves an email address. To add it, a Sphere would trust an OpenID Connect issuer (configured by its operator), an invitation would carry the domain, and a redeem would carry an ID token from that issuer whose audience is the Sphere and whose `nonce` binds it to the invitation and the `owner_key`. The Sphere would check its signature against the issuer's keys, `iss`, `aud`, `exp` and `nonce`, require `email_verified` and the domain (for Google Workspace, the `hd` claim), and bind the owner id to that verified address, one owner id per address. An address an issuer relays or hides (Sign in with Apple's private relay) proves no domain. Until then, a client that shows such a limit must not say it is enforced.
 
@@ -186,7 +190,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
  "rules": [{"id": "team-reviews", "from_owner": "*", "to_owner": "*", "actions": ["review_request", "question"], "repos": ["*"]}]}
 ```
 
-`PUT /policy` replaces it whole: `{"expected_version": 0, "rules": [ … ]}`. The version must be the current one (`409 conflict` otherwise); rule ids must be unique (`400 bad_request`). The new policy has `version` + 1, `updated_at` the Sphere's clock when it was written, and the rules in the order given; it applies to every message sent after the answer.
+`PUT /policy` replaces it whole: `{"expected_version": 0, "rules": [ … ]}`. The version must be the current one (`409 conflict` otherwise); rule ids must be unique (`400 bad_request`); a `from_owner` or `to_owner` other than `*` must be an owner with a bound key, one who has joined (`409 conflict`, section 4). The new policy has `version` + 1, `updated_at` the Sphere's clock when it was written, and the rules in the order given; it applies to every message sent after the answer.
 
 ## 6. Messages
 
@@ -248,7 +252,7 @@ The Sphere never changes the envelope: what it records and delivers is byte-for-
 
 ### 6.4 Runner status
 
-`PUT /v0.1/spheres/{sphere}/members/{obi}/runner` with a signed runner status (protocol.md section 14) publishes it in the directory, replacing the member's earlier one; `DELETE` takes it away. Only the Obi itself, with its own token (`receive`); another caller is `403 forbidden`. The Sphere checks the schema, that `sphere` and `obi` are the path's, that `key_id` is the Obi's current key and the signature verifies (`400 bad_signature`, `400 unknown_key`), and that `created_at` is at most 300 seconds ahead of the Sphere's clock and not older than the status it replaces, and `expires_at` is after now and at most 900 seconds after `created_at` (`400 bad_request`). It answers the member as the caller sees it.
+`PUT /v0.1/spheres/{sphere}/members/{obi}/runner` with a signed runner status (protocol.md section 14) publishes it in the directory, replacing the member's earlier one; `DELETE` takes it away. Only the Obi itself, with its own token (`receive`); another caller is `403 forbidden`. The Sphere checks the schema, that `sphere` and `obi` are the path's, that `key_id` is the Obi's current key and the signature verifies (`400 bad_signature`, `400 unknown_key`), and that `created_at` is at most 300 seconds ahead of the Sphere's clock and not older than the status it replaces, and `expires_at` is after now and at most 900 seconds after `created_at` (`400 bad_request`). A `for` list names only owners with a bound key, who have joined (`409 conflict`, section 4); `*` is everyone. It answers the member as the caller sees it.
 
 The directory (`GET …/members` and `GET …/members/{obi}`) shows a member's `runner` only while the member is active, only until it expires, and only to a caller whose owner its `for` names (or every caller when `for` is `*`) or who is the member's own owner, whatever `for` says; and only while its `key_id` is the member's current key. Each owner it is offered to sees the whole `for` list (it is signed): an owner who doesn't want that list seen offers to everyone (`*`). Nobody else learns that one exists. The status's own signature lets every reader check that the Sphere didn't make it up or change it.
 
