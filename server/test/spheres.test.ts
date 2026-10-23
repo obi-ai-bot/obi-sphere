@@ -19,8 +19,15 @@ describe("health", () => {
     const r = await handle(new Request(`${BASE}/join`), env, { now: () => 0 });
     expect(r.status).toBe(200);
     expect(r.headers.get("Content-Type")).toContain("text/html");
-    expect(r.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
-    expect(await r.text()).toContain("Settings › Obysphere");
+    const csp = r.headers.get("Content-Security-Policy")!;
+    expect(csp).toContain("default-src 'none'");
+    const page = await r.text();
+    expect(page).toContain("Settings › Obysphere");
+    // Open in Oby: oby://join/<host>#<fragment>, built in the page; its one script is the only one the CSP allows.
+    const script = /<script>(.*)<\/script>/s.exec(page)![1]!;
+    expect(script).toContain(`"oby://join/"+location.host+location.hash`);
+    const hash = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(script)))));
+    expect(csp).toContain(`script-src 'sha256-${hash}'`);
   });
 
   it("answers 404 not_found for anything not in the API", async () => {

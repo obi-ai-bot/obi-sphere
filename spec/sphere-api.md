@@ -72,7 +72,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 
 A path for a Sphere that doesn't exist is `404 not_found`; a token for another Sphere on it is `401 unauthorized`.
 
-Outside `/v0.1`, a Sphere server may answer `GET /join` with a page for people: invite links are `https://<server>/join#…`, everything after `#` staying in the browser, so one opened in a browser lands there. The page reads nothing and runs no script.
+Outside `/v0.1`, a Sphere server may answer `GET /join` with a page for people: invite links are `https://<server>/join#…`, everything after `#` staying in the browser, so one opened in a browser lands there. The page reads nothing and sends nothing. Its only script may build, from the page's own address, a link that opens the invite in Oby: `oby://join/<host>#<fragment>`, the server's host and the part after `#` unchanged.
 
 ## 3. Spheres
 
