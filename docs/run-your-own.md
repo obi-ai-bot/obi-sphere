@@ -37,7 +37,7 @@ npx wrangler login
 pnpm run deploy -- --env acme
 ```
 
-[`scripts/deploy.mjs`](../server/scripts/deploy.mjs) deploys the Worker, which makes its D1 database the first time, applies the migrations, and makes the **operator token** (the one secret that creates Obyspheres): it goes straight to `wrangler secret put` and, on a Mac, into your login Keychain (service `obi-sphere-operator-token`). It is never printed, written to a file or put in git.
+[`scripts/deploy.mjs`](../server/scripts/deploy.mjs) deploys the Worker, which makes its D1 database the first time, applies the migrations, and makes the **operator token** (the one secret that creates Obyspheres): it goes straight to `wrangler secret put` and, on a Mac, into your login Keychain (service `obi-sphere-operator-token`, account your server's host; Oby sends it to that host only). It is never printed, written to a file or put in git.
 
 Check it: `curl https://sphere.acme.com/v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`.
 
