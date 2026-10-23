@@ -6,9 +6,9 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 |---|---|
 | URL | https://obysphere.deskree.com (`GET /v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`) |
 | Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in `env.deskree` of [`server/wrangler.jsonc`](../server/wrangler.jsonc), which holds every Deskree value; the top level is neutral ([run-your-own.md](run-your-own.md)). |
-| Worker | `obi-sphere`, version `e4753f15-941b-4107-be86-822a3b12097c` (2026-10-23), on the custom domain only (its workers.dev address is off), with the `ChannelRelay` Durable Object for job channels |
-| Code | `dev` at `63ef6b6` (Google sign-in), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
-| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0004_signin.sql` applied |
+| Worker | `obi-sphere`, version `67a4ed81-8318-4701-8d1a-3bff55ba0316` (2026-10-23), on the custom domain only (its workers.dev address is off), with the Durable Objects `ChannelRelay` (job channels), `Doorbell` (long polls) and `PhoneRelay` (paired phones) |
+| Code | `dev` at `fb62208` (the Doorbell and the phone relay), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
+| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0005_relays.sql` applied |
 | Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `obysphere.deskree.com` (the server's host: Oby sends it to that host only). Nothing else holds it. |
 | Telemetry | Off, as `wrangler.jsonc` sets it: Cloudflare keeps no Workers logs or traces |
 
@@ -80,6 +80,7 @@ To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --e
 
 | Version | Code | Deployed | D1 after it |
 |---|---|---|---|
+| `67a4ed81-8318-4701-8d1a-3bff55ba0316` | `fb62208`, the Doorbell and the phone relay | 2026-10-23 | `0005` |
 | `e4753f15-941b-4107-be86-822a3b12097c` | `63ef6b6`, Google sign-in | 2026-10-23 | `0004` |
 | `e0c87c86-f30e-4dc0-89b5-5c5e797b9b74` | `d997e8d`, open invitations | 2026-10-22 | `0003` |
 | `7c7284b9-5707-4ac0-8f63-0bcd1c13946d` | `c156106`, sharing | 2026-10-22 | `0002` |
@@ -91,6 +92,7 @@ Before each migration, take a Time Travel bookmark (`wrangler d1 time-travel inf
 
 | Just before | Bookmark |
 |---|---|
+| `0005` | `0000000b-00000000-0000510d-0f64a7599f457852f2ffab55f956e91a` |
 | `0004` | `0000000a-00000000-0000510d-13b126b7287dd48b25e099cee83a2c84` |
 | `0003` | `00000006-00000000-0000510c-d80adb35a36196f9309aa53d7a08ddca` |
 
