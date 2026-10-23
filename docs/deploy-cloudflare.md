@@ -6,10 +6,10 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 |---|---|
 | URL | https://obysphere.deskree.com (`GET /v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`) |
 | Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in `env.deskree` of [`server/wrangler.jsonc`](../server/wrangler.jsonc), which holds every Deskree value; the top level is neutral ([run-your-own.md](run-your-own.md)). |
-| Worker | `obi-sphere`, version `2f24b987-c346-4d5e-8c8b-0959d7c98524`, on the custom domain only (its workers.dev address is off) |
-| Code | `dev` at `d2857d5`, plus the account, D1 id and route in `server/wrangler.jsonc` |
-| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migration `0001_init.sql` applied |
-| Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `deskree`. Nothing else holds it. |
+| Worker | `obi-sphere`, version `e4753f15-941b-4107-be86-822a3b12097c` (2026-10-23), on the custom domain only (its workers.dev address is off), with the `ChannelRelay` Durable Object for job channels |
+| Code | `dev` at `63ef6b6` (Google sign-in), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
+| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0004_signin.sql` applied |
+| Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `obysphere.deskree.com` (the server's host: Oby sends it to that host only). Nothing else holds it. |
 | Telemetry | Off, as `wrangler.jsonc` sets it: Cloudflare keeps no Workers logs or traces |
 
 The first test deploy ran in the owner's personal account at `obi-sphere.well0cp.workers.dev`, with D1 `b93094ac-9fe4-4dee-88fc-f67297899392`. It held only test Spheres and was replaced by this deploy, so it can be deleted.
@@ -22,7 +22,7 @@ The first test deploy ran in the owner's personal account at `obi-sphere.well0cp
   ```sh
   cd server
   OBI_SPHERE_URL=https://obysphere.deskree.com \
-  SPHERE_OPERATOR_TOKEN="$(security find-generic-password -s obi-sphere-operator-token -w)" \
+  SPHERE_OPERATOR_TOKEN="$(security find-generic-password -s obi-sphere-operator-token -a obysphere.deskree.com -w)" \
     node e2e/scenario.mjs
   ```
 
@@ -47,7 +47,7 @@ The owner does this once (or anyone at Deskree, signed in, from Oby's **+**). In
 
 ```sh
 curl -sS https://obysphere.deskree.com/v0.1/spheres \
-  -H "Authorization: Bearer $(security find-generic-password -s obi-sphere-operator-token -w)" \
+  -H "Authorization: Bearer $(security find-generic-password -s obi-sphere-operator-token -a obysphere.deskree.com -w)" \
   -H 'Content-Type: application/json' \
   -d '{"sphere":"deskree","name":"Deskree","admin":{"owner":"<handle>","owner_key":"<base64url>"}}'
 ```
@@ -71,4 +71,31 @@ pnpm install --frozen-lockfile
 pnpm run deploy -- --env deskree    # new migrations first, then the Worker
 ```
 
-To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN` and update the Keychain item to match.
+Apply a migration immediately before the deploy that needs it, as the script does: between the two, the running Worker meets a table it doesn't know. Then check the routes, old and new (a call without a token answers `401` on every route that needs one).
+
+To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --env deskree` and update the Keychain item (account `obysphere.deskree.com`) to match. Until 2026-10-23 the script kept it under account `deskree`; Oby no longer looks there, so move that item to the host's account once.
+
+## Rolling back
+
+| Version | Code | Deployed | D1 after it |
+|---|---|---|---|
+| `e4753f15-941b-4107-be86-822a3b12097c` | `63ef6b6`, Google sign-in | 2026-10-23 | `0004` |
+| `e0c87c86-f30e-4dc0-89b5-5c5e797b9b74` | `d997e8d`, open invitations | 2026-10-22 | `0003` |
+| `7c7284b9-5707-4ac0-8f63-0bcd1c13946d` | `c156106`, sharing | 2026-10-22 | `0002` |
+| `4f2c3b94-0c1a-44ef-979c-8738e6530222` | before sharing | 2026-10-20 | `0001` |
+
+A Worker version runs only on the D1 schema it was deployed with, or on an additive change to it. `0004_signin.sql` only adds, so rolling the Worker alone back to `e0c87c86` is safe. `0003_open_invitations.sql` rebuilt the `invitations` table without `used_at`, which `7c7284b9`'s redeem reads and writes, so **rolling back to `7c7284b9` breaks redeem** unless the D1 is restored too, and a restore undoes every write since (members who joined, messages, the audit chain).
+
+Before each migration, take a Time Travel bookmark (`wrangler d1 time-travel info obi-sphere`). The ones taken so far:
+
+| Just before | Bookmark |
+|---|---|
+| `0004` | `0000000a-00000000-0000510d-13b126b7287dd48b25e099cee83a2c84` |
+| `0003` | `00000006-00000000-0000510c-d80adb35a36196f9309aa53d7a08ddca` |
+
+```sh
+wrangler d1 time-travel restore obi-sphere --bookmark=<bookmark> --env deskree
+wrangler rollback <version> --env deskree
+```
+
+Only on the owner's say: a restore loses everything written after the bookmark. Time Travel keeps 30 days of history on Workers Paid, 7 on Free.
