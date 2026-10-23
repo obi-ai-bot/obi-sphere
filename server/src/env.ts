@@ -10,6 +10,8 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string;
   /** The Google Workspaces, comma-separated, whose people may create a Sphere with a sign-in. Empty: only the operator creates. */
   CREATOR_WORKSPACES?: string;
+  /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */
+  SPHERE_CREATE_LIMIT?: string;
 }
 
 /** What the handlers take besides the request and the bindings; tests pass their own clock. */

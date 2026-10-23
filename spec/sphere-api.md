@@ -39,7 +39,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `bad_reply` | 409 | A reply that breaks the exchange rules (protocol.md section 4; section 6.1, check 12). |
 | `conflict` | 409 | The resource exists already, a stale `expected_version` or `card_seq`, or a key id another member uses. |
 | `payload_too_large` | 413 | The body is over 131,072 bytes, or the message's canonical form over 65,536. |
-| `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Sphere (section 6.1, check 13); `Retry-After` says when to try again. Nothing was recorded. v0.1 doesn't fix the Sphere's limits; protocol.md section 11 ("Rate limits") recommends a receiver's. |
+| `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Sphere (section 6.1, check 13); `Retry-After` says when to try again. Or an account that is already the admin of as many Spheres as the server allows (section 3, "How many"), with no `Retry-After`. Nothing was recorded. v0.1 doesn't fix the Sphere's limits; protocol.md section 11 ("Rate limits") recommends a receiver's. |
 | `internal` | 500 | The Sphere failed. Nothing was recorded. |
 
 ## 2. Endpoints
@@ -88,9 +88,11 @@ It binds `owner_key` to the admin owner, sets the policy to version 0 with no ru
 {"sphere": "e2e", "name": "E2E sphere", "protocol": "obi/0.1", "admin_owner": "wellington", "created_at": "2026-10-14T12:00:00Z"}
 ```
 
-`409 conflict` when the id is taken.
+`409 conflict` when the id is taken. Some ids are **reserved** and taken from the start, so nobody creates a Sphere with them, the operator included: `avenga`, `tetrix`, `oby`, `app`, `www`, `admin`, `api`, `help` and `acme`. `GET /v0.1/spheres/{sphere}` for a reserved id that has no Sphere answers as for a Sphere that exists (`401 unauthorized` without a valid token for it), never `404`, so a client asking whether an id is free sees it taken.
 
 **Without the operator token.** The body may carry `signin`, a sign-in (section 3.1), in place of the operator's `Authorization`. The Sphere then checks the sign-in as section 3.1 says, that it was started for `admin.owner_key`, and that its account belongs to a Google Workspace the operator lets create Spheres (`403 forbidden` for each, the same answer for all; a personal Google account belongs to none). The sign-in is used up, and the admin owner is bound to its account (section 3.1, "One owner per account"). A Sphere server whose operator named no such Workspace creates Spheres with the operator token only (`403 forbidden`).
+
+**How many.** An account may be the admin owner of at most `SPHERE_CREATE_LIMIT` Spheres on a Sphere server (the operator's setting, 3 when unset): a Sphere counts when its admin owner is bound to the account, however it was created. Past it, a create with a sign-in is `429 rate_limited`, with no `Retry-After`, since waiting doesn't free one; the sign-in isn't used. The operator's create has no limit.
 
 ### 3.1 Signing in
 

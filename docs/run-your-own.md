@@ -54,7 +54,7 @@ If you build Oby yourself, set `OBY_SPHERE_URL` in `apps/config/Signing.xcconfig
 With Google sign-in, anyone with a Google Workspace account you name can create an Obysphere from Oby without the operator token, and an invite link can be for your Workspace's people only ("Anyone with @acme.com can join"). The server checks Google's ID token itself ([spec/sphere-api.md](../spec/sphere-api.md), section 3.1) and keeps only the account id and its Workspace, never an email.
 
 1. In Google Cloud console, APIs & Services, Credentials: create an OAuth client ID of type **Web application**. Authorized redirect URI: `https://sphere.acme.com/v0.1/signin/google/callback`. For your organization's people only, make the consent screen **Internal**. No client secret is used.
-2. In your block's `vars`: `"GOOGLE_CLIENT_ID": "<the client id>"` and `"CREATOR_WORKSPACES": "acme.com"` (comma-separated for several). The client id is public; it is fine in git.
+2. In your block's `vars`: `"GOOGLE_CLIENT_ID": "<the client id>"` and `"CREATOR_WORKSPACES": "acme.com"` (comma-separated for several). The client id is public; it is fine in git. Each account may be the admin of 3 Spheres; `"SPHERE_CREATE_LIMIT": "10"` changes that.
 3. `pnpm run deploy -- --env acme` again.
 
 ## What stays where
