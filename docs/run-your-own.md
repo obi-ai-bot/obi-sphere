@@ -24,7 +24,7 @@ In the Cloudflare dashboard, your Worker › Settings › Domains & Routes › A
 
 ## The plan
 
-Cloudflare's Free plan holds a small team: up to about 15 people with Oby running. Each Oby, idle, makes about 5,000 Worker requests a day (a long poll every 25 seconds, the directory every minute, its runner status every 10 minutes) of the Free plan's 100,000, and reads about 90,000 D1 rows a day of its 5 million. A waiting long poll sleeps on its Oby's Durable Object ([`src/doorbell.ts`](../server/src/doorbell.ts)), which hibernates and costs no duration, rather than reading D1 every 250 ms: 5 rows for a 25-second wait instead of about 100, and about the CPU of any other call. Those Doorbells make about 3,500 Durable Object requests a day per Oby, about 52,000 at 15 people, of the Free plan's separate 100,000 Durable Object requests a day. Jobs on a teammate's Mac and the phone relay pass their traffic through Durable Objects too, and heavy use counts against those same 100,000. If the Doorbells can't be reached, long polls go back to looking at D1 every 250 ms.
+Cloudflare's Free plan holds a small team: up to about 15 people with Oby running. Each Oby, idle, makes about 5,000 Worker requests a day (a long poll every 25 seconds, the directory every minute, its runner status every 10 minutes) of the Free plan's 100,000, and reads about 90,000 D1 rows a day of its 5 million. A waiting long poll sleeps on its Oby's Durable Object ([`src/doorbell.ts`](../server/src/doorbell.ts)), which hibernates and costs no duration, rather than reading D1 every 250 ms: 5 rows for a 25-second wait instead of about 100, and about the CPU of any other call. Those Doorbells make about 3,500 Durable Object requests a day per Oby, about 52,000 at 15 people, of the Free plan's separate 100,000 Durable Object requests a day. Jobs on a teammate's Mac pass their traffic through Durable Objects too, and heavy use counts against those same 100,000. So does the phone relay ([`src/relay.ts`](../server/src/relay.ts)), which counts against the same 100,000 a day: a Mac on its relay makes about 1,600 Durable Object requests a day (its relay's check every minute, its keepalives, opening again each hour with a new token), and frames count one request per 20 (Cloudflare bills incoming WebSocket messages 20 to 1), a few hundred a day for a phone in use. With every Mac on its relay and the Doorbells, 15 people come to about 80,000 of the 100,000. If the Doorbells can't be reached, long polls go back to looking at D1 every 250 ms.
 
 Free's limit that can't be measured outside Cloudflare is CPU: 10 ms a request. In the Worker's Metrics, `Exceeded CPU Time Limits` (error 1102) or the daily request limit (error 1027) means you have outgrown it. More people than that, or either error: Workers Paid, $5 a month (Workers & Pages › Plans).
 
@@ -59,12 +59,14 @@ In [`server/wrangler.jsonc`](../server/wrangler.jsonc), add your environment und
   "durable_objects": {
     "bindings": [
       { "name": "CHANNELS", "class_name": "ChannelRelay" },
-      { "name": "DOORBELLS", "class_name": "Doorbell" }
+      { "name": "DOORBELLS", "class_name": "Doorbell" },
+      { "name": "RELAYS", "class_name": "PhoneRelay" }
     ]
   },
   "migrations": [
     { "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] },
-    { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] }
+    { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] },
+    { "tag": "v3-relays", "new_sqlite_classes": ["PhoneRelay"] }
   ],
   "d1_databases": [{ "binding": "DB", "database_name": "obi-sphere", "migrations_dir": "migrations" }]
 }
