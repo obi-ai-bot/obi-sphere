@@ -27,8 +27,13 @@ if (!env || !/^[a-z0-9][a-z0-9-]*$/.test(env) || args.length !== 2) {
   process.exit(64);
 }
 
-const wranglerBin = join(dirname(createRequire(import.meta.url).resolve("wrangler/package.json")), "bin", "wrangler.js");
-const childEnv = { ...process.env, WRANGLER_SEND_METRICS: "false", NO_UPDATE_NOTIFIER: "1" };
+const require = createRequire(import.meta.url);
+const wranglerBin = join(dirname(require.resolve("wrangler/package.json")), "bin", "wrangler.js");
+// The environment's account_id, for every command: `wrangler deploy` reads it from the environment,
+// but `wrangler d1 …` doesn't (wrangler 4.150), and with more than one account it stops there.
+const { unstable_readConfig } = await import("wrangler");
+const accountId = unstable_readConfig({ config: join(server, "wrangler.jsonc"), env }).account_id;
+const childEnv = { ...process.env, WRANGLER_SEND_METRICS: "false", NO_UPDATE_NOTIFIER: "1", ...(accountId && !process.env.CLOUDFLARE_ACCOUNT_ID ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}) };
 const wrangler = (list, o = {}) =>
   spawnSync(process.execPath, [wranglerBin, ...list, "--env", env], { cwd: server, env: childEnv, stdio: o.input !== undefined || o.quiet ? ["pipe", "pipe", "pipe"] : "inherit", input: o.input, encoding: "utf8" });
 const must = (list, what) => {
@@ -39,8 +44,14 @@ const must = (list, what) => {
   }
 };
 
-// Whether the database is there yet: listing its migrations fails when it isn't.
-const exists = wrangler(["d1", "migrations", "list", "DB", "--remote"], { quiet: true }).status === 0;
+// Whether the database is there yet: listing its migrations fails with "Couldn't find a D1 DB" when it
+// isn't. Any other failure stops here, before anything is deployed.
+const listed = wrangler(["d1", "migrations", "list", "DB", "--remote"], { quiet: true });
+const exists = listed.status === 0;
+if (!exists && !/Couldn't find a D1 DB/.test(listed.stdout + listed.stderr)) {
+  console.error(`deploy: the D1 database couldn't be read; nothing was deployed.\n${listed.stderr || listed.stdout}`);
+  process.exit(1);
+}
 if (exists) {
   must(["d1", "migrations", "apply", "DB", "--remote"], "applying the migrations");
   must(["deploy"], "the deploy");
