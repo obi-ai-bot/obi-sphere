@@ -28,15 +28,18 @@
   },
   // One ChannelRelay per run_request exchange: the job channel (spec/sphere-api.md section 6.3).
   // One Doorbell per Obi: what wakes its deliveries long poll (src/doorbell.ts).
+  // One PhoneRelay per phone relay: a Mac and its paired phones (spec/sphere-api.md section 9).
   "durable_objects": {
     "bindings": [
       { "name": "CHANNELS", "class_name": "ChannelRelay" },
-      { "name": "DOORBELLS", "class_name": "Doorbell" }
+      { "name": "DOORBELLS", "class_name": "Doorbell" },
+      { "name": "RELAYS", "class_name": "PhoneRelay" }
     ]
   },
   "migrations": [
     { "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] },
-    { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] }
+    { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] },
+    { "tag": "v3-relays", "new_sqlite_classes": ["PhoneRelay"] }
   ],
   // No database_id: `wrangler deploy` makes the database the first time (scripts/deploy.mjs).
   "d1_databases": [{ "binding": "DB", "database_name": "obi-sphere", "migrations_dir": "migrations" }],
@@ -58,12 +61,14 @@
       "durable_objects": {
         "bindings": [
           { "name": "CHANNELS", "class_name": "ChannelRelay" },
-          { "name": "DOORBELLS", "class_name": "Doorbell" }
+          { "name": "DOORBELLS", "class_name": "Doorbell" },
+          { "name": "RELAYS", "class_name": "PhoneRelay" }
         ]
       },
       "migrations": [
         { "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] },
-        { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] }
+        { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] },
+        { "tag": "v3-relays", "new_sqlite_classes": ["PhoneRelay"] }
       ],
       "d1_databases": [
         { "binding": "DB", "database_name": "obi-sphere", "database_id": "ff9bde6f-e277-47c8-b6e6-309bf00f87c7", "migrations_dir": "migrations" }

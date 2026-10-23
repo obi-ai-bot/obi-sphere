@@ -39,4 +39,5 @@ export declare const sendResponse: Validator;
 export declare const deliveriesResponse: Validator;
 export declare const ackResponse: Validator;
 export declare const auditResponse: Validator;
+export declare const relay: Validator;
 export declare const error: Validator;

@@ -130,7 +130,7 @@ export interface Answer {
   headers: Headers;
 }
 
-export function makeCall(clock: Clock) {
+export function makeCall(clock: Clock, workerEnv: Cloudflare.Env = env) {
   return async function call(method: string, path: string, o: CallOptions = {}): Promise<Answer> {
     const headers: Record<string, string> = { ...(o.headers ?? {}) };
     if (o.token) headers.Authorization = `Bearer ${o.token}`;
@@ -140,7 +140,7 @@ export function makeCall(clock: Clock) {
       body = JSON.stringify(o.body);
       headers["Content-Type"] ??= "application/json";
     }
-    const res = await handle(new Request(BASE + path, { method, headers, body }), env, { now: clock.now, google: GOOGLE });
+    const res = await handle(new Request(BASE + path, { method, headers, body }), workerEnv, { now: clock.now, google: GOOGLE });
     const text = await res.text();
     let parsed: unknown = text;
     try {
@@ -308,3 +308,30 @@ export async function team(): Promise<World> {
   expect((await w.putPolicy([TEAM_REVIEWS])).status).toBe(200);
   return w;
 }
+
+/** The test's end of a WebSocket the Worker answered `101` with: what it got, and how it closed. */
+export interface Side {
+  ws: WebSocket;
+  texts: string[];
+  frames: ArrayBuffer[];
+  closed: { code: number } | null;
+}
+
+export function side(res: Response): Side {
+  expect(res.status).toBe(101);
+  const ws = res.webSocket!;
+  const s: Side = { ws, texts: [], frames: [], closed: null };
+  ws.accept();
+  // The test's end of the socket gets binary frames as Blobs.
+  ws.addEventListener("message", async (e) => {
+    if (typeof e.data === "string") s.texts.push(e.data);
+    else s.frames.push(e.data instanceof Blob ? await e.data.arrayBuffer() : (e.data as ArrayBuffer));
+  });
+  ws.addEventListener("close", (e) => (s.closed = { code: e.code }));
+  return s;
+}
+
+export const until = async (check: () => boolean, tries = 200) => {
+  for (let i = 0; i < tries && !check(); i++) await new Promise((r) => setTimeout(r, 5));
+  expect(check()).toBe(true);
+};

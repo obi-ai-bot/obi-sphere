@@ -6,6 +6,8 @@ export interface Env {
   CHANNELS: DurableObjectNamespace<import("./channel.ts").ChannelRelay>;
   /** One Doorbell per Obi in a Sphere: what wakes its deliveries long poll (src/doorbell.ts). */
   DOORBELLS: DurableObjectNamespace<import("./doorbell.ts").Doorbell>;
+  /** One PhoneRelay per phone relay: a Mac and its paired phones (src/relay.ts). */
+  RELAYS: DurableObjectNamespace<import("./relay.ts").PhoneRelay>;
   /** The operator token that creates Spheres: a Worker secret, at least 32 characters. Unset: every operator call is 403. */
   SPHERE_OPERATOR_TOKEN?: string;
   /** The Google OAuth client whose ID tokens sign people in (src/signin.ts). Empty: no sign-in, every sign-in call is 403. */

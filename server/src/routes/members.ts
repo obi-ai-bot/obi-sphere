@@ -282,6 +282,9 @@ export async function revoke(request: Request, env: Env, deps: Deps, sphereId: s
       env.DB.prepare("UPDATE deliveries SET state = 'dropped' WHERE sphere = ?1 AND to_obi = ?2 AND state = 'queued'").bind(sphere.id, obi),
       env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sphere = ?1 AND actor = ?2").bind(sphere.id, obi),
       env.DB.prepare("DELETE FROM runner_status WHERE sphere = ?1 AND obi = ?2").bind(sphere.id, obi),
+      // Its phone relays and their phones' hashes (sphere-api.md section 9.2): each relay's alarm closes its sockets.
+      env.DB.prepare("DELETE FROM relay_devices WHERE relay IN (SELECT id FROM relays WHERE sphere = ?1 AND obi = ?2)").bind(sphere.id, obi),
+      env.DB.prepare("DELETE FROM relays WHERE sphere = ?1 AND obi = ?2").bind(sphere.id, obi),
     ]);
     if (!written) return null;
     return json(200, await loadMemberJson(env.DB, sphere.id, obi));
