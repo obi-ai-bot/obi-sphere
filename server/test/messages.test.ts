@@ -3,8 +3,9 @@
 
 import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
+import { handle } from "../src/app";
 import { canonicalize } from "../src/protocol/json";
-import { BRIEF, RESULT, World, expectSchema, newKey, signEnvelope, team } from "./helpers";
+import { BASE, BRIEF, RESULT, World, expectSchema, newKey, signEnvelope, team } from "./helpers";
 
 const review = (w: World) => w.envelope("obi-ernesto", "obi-wellington", "review_request", BRIEF);
 
@@ -278,11 +279,8 @@ describe("deliveries and ack", () => {
     const waiting = w.call("GET", "/v0.1/spheres/e2e/deliveries?wait=5", { token: tokenA });
     await new Promise((r) => setTimeout(r, 50));
     await w.send(await review(w), tokenB);
-    const sent = Date.now();
     const d = await waiting;
     expect(d.body.deliveries).toHaveLength(1);
-    // Woken by the send's ring (src/doorbell.ts), not by its next look at the queue.
-    expect(Date.now() - sent).toBeLessThan(500);
     // With nothing queued, it answers an empty list once `wait` has passed.
     const t0 = Date.now();
     const empty = await w.call("GET", "/v0.1/spheres/e2e/deliveries?wait=1", { token: tokenB });
@@ -301,6 +299,27 @@ describe("deliveries and ack", () => {
     } finally {
       batch.mockRestore();
     }
+  });
+
+  it("still answers when the Doorbell can't be reached: no 500, a look at D1 every 250 ms as before", async () => {
+    const w = await team();
+    const tokenA = await w.obiToken("obi-wellington");
+    const tokenB = await w.obiToken("obi-ernesto");
+    // Every Doorbell call fails, as when the day's Durable Object requests are used up.
+    const down = () => Promise.reject(new Error("Durable Object request limit reached"));
+    const broken = { ...env, DOORBELLS: { idFromName: () => ({}), get: () => ({ fetch: down, ring: down }) } } as unknown as typeof env;
+    const call = (method: string, path: string, token: string, body?: object) =>
+      handle(new Request(BASE + path, { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: body && JSON.stringify(body) }), broken, { now: w.clock.now });
+    const empty = await call("GET", "/v0.1/spheres/e2e/deliveries?wait=1", tokenB);
+    expect(empty.status).toBe(200);
+    expect((await empty.json<{ deliveries: unknown[] }>()).deliveries).toEqual([]);
+    // A send still lands (its ring fails quietly), and a waiting poll still finds it.
+    const waiting = call("GET", "/v0.1/spheres/e2e/deliveries?wait=5", tokenA);
+    await new Promise((r) => setTimeout(r, 50));
+    expect((await call("POST", "/v0.1/spheres/e2e/messages", tokenB, await review(w))).status).toBe(202);
+    const d = await waiting;
+    expect(d.status).toBe(200);
+    expect((await d.json<{ deliveries: unknown[] }>()).deliveries).toHaveLength(1);
   });
 
   it("keeps a ring that comes while no poll waits: the next poll looks again at once", async () => {

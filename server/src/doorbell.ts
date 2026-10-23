@@ -35,14 +35,24 @@ export class Doorbell extends DurableObject<Env> {
 const doorbell = (env: Env, sphere: string, obi: string) => env.DOORBELLS.get(env.DOORBELLS.idFromName(`${sphere}/${obi}`));
 
 /** Wakes `obi`'s waiting long polls. A ring that fails only makes them wait out their `wait`. */
-export const ring = (env: Env, sphere: string, obi: string): Promise<void> =>
-  doorbell(env, sphere, obi)
-    .ring()
-    .catch(() => {});
+export async function ring(env: Env, sphere: string, obi: string): Promise<void> {
+  try {
+    await doorbell(env, sphere, obi).ring();
+  } catch {}
+}
 
-/** Resolves when `obi`'s Doorbell rings, or after `ms`. */
+/**
+ * Resolves when `obi`'s Doorbell rings, or after `ms`. When the Doorbell can't be reached (say the
+ * Free plan's Durable Object requests for the day are used up), after at most 250 ms instead: the
+ * poll looks at D1 again, as it did before there were Doorbells.
+ */
 export async function rung(env: Env, sphere: string, obi: string, ms: number): Promise<void> {
-  const ws = (await doorbell(env, sphere, obi).fetch("https://doorbell.internal/", { headers: { Upgrade: "websocket" } })).webSocket;
+  let ws: WebSocket | null;
+  try {
+    ws = (await doorbell(env, sphere, obi).fetch("https://doorbell.internal/", { headers: { Upgrade: "websocket" } })).webSocket;
+  } catch {
+    return new Promise((r) => setTimeout(r, Math.min(ms, 250)));
+  }
   if (!ws) return;
   ws.accept();
   await new Promise<void>((resolve) => {
