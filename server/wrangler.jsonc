@@ -1,0 +1,54 @@
+// The Sphere server (spec/sphere-api.md): a Worker with one D1 database. Anyone may run their own;
+// each instance is a named environment below, deployed with `node scripts/deploy.mjs --env <name>`
+// (docs/run-your-own.md). The top level is the template every environment starts from, with
+// nothing instance-specific: deployed as it is, it runs on workers.dev, creates Spheres with the
+// operator token only and signs nobody in.
+// Locally: `node scripts/local.mjs --port <port> --persist-to <dir>` (scripts/local.mjs).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "obi-sphere",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  // No telemetry: no Workers logs or traces kept by Cloudflare, and wrangler sends no metrics.
+  "observability": { "enabled": false },
+  "send_metrics": false,
+  // Plain settings, documented in src/env.ts. SPHERE_OPERATOR_TOKEN (at least 32 characters) is a
+  // secret, never here: `wrangler secret put SPHERE_OPERATOR_TOKEN --env <name>` (scripts/deploy.mjs
+  // makes one), a Worker secret set by scripts/serve-local.mjs locally. Wrangler doesn't inherit
+  // `vars`, `d1_databases` or `durable_objects`: an environment lists them all.
+  "vars": {
+    // The Google OAuth client (a Web client) whose ID tokens sign people in; its authorized
+    // redirect URI is https://<your host>/v0.1/signin/google/callback. Empty: no sign-in.
+    "GOOGLE_CLIENT_ID": "",
+    // The Google Workspaces whose people may create a Sphere by signing in, comma-separated.
+    // Empty: only the operator token creates Spheres.
+    "CREATOR_WORKSPACES": ""
+  },
+  // One ChannelRelay per run_request exchange: the job channel (spec/sphere-api.md section 6.3).
+  "durable_objects": { "bindings": [{ "name": "CHANNELS", "class_name": "ChannelRelay" }] },
+  "migrations": [{ "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] }],
+  // No database_id: `wrangler deploy` makes the database the first time (scripts/deploy.mjs).
+  "d1_databases": [{ "binding": "DB", "database_name": "obi-sphere", "migrations_dir": "migrations" }],
+  "env": {
+    // Deskree's own instance, at obysphere.deskree.com in Deskree's Cloudflare account
+    // (docs/deploy-cloudflare.md). Copy this block, rename it and put your own values in to run yours.
+    "deskree": {
+      "name": "obi-sphere",
+      "account_id": "9784e77e77b9aaff2387596b31f85320",
+      "routes": [{ "pattern": "obysphere.deskree.com", "custom_domain": true }],
+      "vars": {
+        // The "Oby remote access" Web client in Google Cloud project oby-remote-access (deskree.com
+        // organization, consent screen Internal), shared with Oby's control plane. Public: the ID
+        // token flow uses no client secret.
+        "GOOGLE_CLIENT_ID": "578493178552-e166j16pbst6jhrbend0cgtkndmctqr9.apps.googleusercontent.com",
+        // Anyone with a deskree.com Google Workspace account may create an Obysphere.
+        "CREATOR_WORKSPACES": "deskree.com"
+      },
+      "durable_objects": { "bindings": [{ "name": "CHANNELS", "class_name": "ChannelRelay" }] },
+      "migrations": [{ "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] }],
+      "d1_databases": [
+        { "binding": "DB", "database_name": "obi-sphere", "database_id": "ff9bde6f-e277-47c8-b6e6-309bf00f87c7", "migrations_dir": "migrations" }
+      ]
+    }
+  }
+}
