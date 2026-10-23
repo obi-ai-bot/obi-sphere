@@ -30,5 +30,18 @@
     "typescript": "^5.9.0",
     "vitest": "^4.1.0",
     "wrangler": "^4.149.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SPHERE_OPERATOR_TOKEN": {
+        "description": "Paste the token Oby gave you (Settings › Obysphere › Host your own), or any 32+ random characters you keep safe."
+      },
+      "GOOGLE_CLIENT_ID": {
+        "description": "Optional: leave it empty. A Google OAuth Web client ID, so your team can create Obyspheres by signing in with Google instead of with the token ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md#optional-let-your-team-create-obyspheres))."
+      },
+      "CREATOR_WORKSPACES": {
+        "description": "Optional: leave it empty. The Google Workspace domains whose people may create Obyspheres by signing in, comma-separated, like `acme.com`. Needs `GOOGLE_CLIENT_ID`."
+      }
+    }
   }
 }

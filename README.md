@@ -17,6 +17,12 @@ This repository has two parts:
 
 The Sphere is not a chat server. It carries typed actions between Obis. People talk to their own Obi.
 
+## Run your own
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
+
+Click, paste the token Oby gave you, paste the Worker's address into Oby: [docs/run-your-own.md](docs/run-your-own.md), with your own domain and the by-hand path. Cloudflare's Free plan holds a small team, up to about 15 people with Oby running; past that, Workers Paid ($5 a month).
+
 ## Design rules
 
 - **Typed actions only.** Another Obi can only send typed actions (a review request, a question, a handoff and so on). Never free text that is meant to be followed.
@@ -27,7 +33,7 @@ The Sphere is not a chat server. It carries typed actions between Obis. People t
 
 ## Status
 
-Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) implements it: the directory, invitations, tokens, policy, relay and audit chain of [`spec/sphere-api.md`](spec/sphere-api.md), and it passes the conformance suite. Its own README, [`server/README.md`](server/README.md), lists its checks and how to deploy it; [docs/run-your-own.md](docs/run-your-own.md) stands up your own in one config block and one command.
+Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) implements it: the directory, invitations, tokens, policy, relay and audit chain of [`spec/sphere-api.md`](spec/sphere-api.md), and it passes the conformance suite. Its own README, [`server/README.md`](server/README.md), lists its checks and how to deploy it; [docs/run-your-own.md](docs/run-your-own.md) stands up your own from one button.
 
 ## Run a Sphere locally
 

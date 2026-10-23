@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `node scripts/deploy.mjs --env <name>`: deploys the Sphere server as wrangler.jsonc's environment
-// <name> (docs/run-your-own.md), a person's step, never CI's. The first time, it makes everything:
+// <name> (docs/run-your-own.md, "By hand"), a person's step. The first time, it makes everything:
 //
 // 1. The D1 database: `wrangler deploy` makes it when the environment's `d1_databases` has no
 //    `database_id`, then the migrations are applied. Later runs apply new migrations first, just
@@ -11,8 +11,14 @@
 //    environment's route, else its workers.dev name), where Oby finds it to create Obyspheres on
 //    that server, and only there.
 //
-// `--env` is required: the top level is a template (wrangler.jsonc), and deploying it by mistake
-// would replace a Worker of the same name. Wrangler sends no metrics.
+// `--env` is required on a person's machine: the top level is a template (wrangler.jsonc), and
+// deploying it by mistake would replace a Worker of the same name. Without `--env` it deploys the
+// top level only inside Cloudflare's Workers Builds, which sets WORKERS_CI=1 in every build
+// (https://developers.cloudflare.com/workers/ci-cd/builds/configuration/#environment-variables):
+// that is the Deploy to Cloudflare button's build (docs/run-your-own.md), in the deployer's own
+// copy of this folder, whose Worker, D1 database and Durable Objects come from the top level and
+// whose operator token the button asked for (.dev.vars.example). Step 1 alone, then.
+// Wrangler sends no metrics.
 
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -23,10 +29,12 @@ import { fileURLToPath } from "node:url";
 const server = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2).filter((a) => a !== "--");
 const env = args[0] === "--env" ? args[1] : undefined;
-if (!env || !/^[a-z0-9][a-z0-9-]*$/.test(env) || args.length !== 2) {
+const button = args.length === 0 && process.env.WORKERS_CI === "1";
+if (!button && (!env || !/^[a-z0-9][a-z0-9-]*$/.test(env) || args.length !== 2)) {
   console.error("usage: node scripts/deploy.mjs --env <name>   (an environment in wrangler.jsonc; see docs/run-your-own.md)");
   process.exit(64);
 }
+const envArgs = env ? ["--env", env] : [];
 
 const require = createRequire(import.meta.url);
 const wranglerBin = join(dirname(require.resolve("wrangler/package.json")), "bin", "wrangler.js");
@@ -37,12 +45,12 @@ const config = unstable_readConfig({ config: join(server, "wrangler.jsonc"), env
 const accountId = config.account_id;
 const childEnv = { ...process.env, WRANGLER_SEND_METRICS: "false", NO_UPDATE_NOTIFIER: "1", ...(accountId && !process.env.CLOUDFLARE_ACCOUNT_ID ? { CLOUDFLARE_ACCOUNT_ID: accountId } : {}) };
 const wrangler = (list, o = {}) =>
-  spawnSync(process.execPath, [wranglerBin, ...list, "--env", env], { cwd: server, env: childEnv, stdio: o.input !== undefined || o.quiet ? ["pipe", "pipe", "pipe"] : "inherit", input: o.input, encoding: "utf8" });
+  spawnSync(process.execPath, [wranglerBin, ...list, ...envArgs], { cwd: server, env: childEnv, stdio: o.input !== undefined || o.quiet ? ["pipe", "pipe", "pipe"] : "inherit", input: o.input, encoding: "utf8" });
 const must = (list, what, o = {}) => {
   const r = wrangler(list, o);
   if (o.quiet) process.stdout.write(r.stdout + r.stderr);
   if (r.status !== 0) {
-    console.error(`deploy: ${what} failed (wrangler ${list.join(" ")} --env ${env}).`);
+    console.error(`deploy: ${what} failed (wrangler ${[...list, ...envArgs].join(" ")}).`);
     process.exit(1);
   }
   return r;
@@ -61,13 +69,18 @@ if (exists) {
   must(["d1", "migrations", "apply", "DB", "--remote"], "applying the migrations");
   deployed = must(["deploy"], "the deploy", { quiet: true });
 } else {
-  console.log(`deploy: the first deploy of ${env}: the Worker and its D1 database, then the migrations.`);
+  console.log(`deploy: the first deploy of ${env ?? "this Worker"}: the Worker and its D1 database, then the migrations.`);
   deployed = must(["deploy"], "the deploy", { quiet: true });
   must(["d1", "migrations", "apply", "DB", "--remote"], "applying the migrations");
 }
 // The server's host, the operator token's Keychain account: Oby sends the token to that host only.
 const route = config.routes?.[0];
 const host = [(typeof route === "string" ? route : route?.pattern)?.split("/")[0], /https:\/\/([a-z0-9.-]+\.workers\.dev)/.exec(deployed.stdout)?.[1]].find((h) => h && /^[a-z0-9.-]+$/i.test(h));
+
+if (button) {
+  console.log(`deploy: done. Check it: curl https://${host ?? "<your Worker's address>"}/v0.1/health`);
+  process.exit(0);
+}
 
 const secrets = wrangler(["secret", "list", "--format", "json"], { quiet: true });
 let names = [];

@@ -1,8 +1,9 @@
-// The Sphere server (spec/sphere-api.md): a Worker with one D1 database. Anyone may run their own;
-// each instance is a named environment below, deployed with `node scripts/deploy.mjs --env <name>`
-// (docs/run-your-own.md). The top level is the template every environment starts from, with
-// nothing instance-specific: deployed as it is, it runs on workers.dev, creates Spheres with the
-// operator token only and signs nobody in.
+// The Sphere server (spec/sphere-api.md): a Worker with one D1 database. Anyone may run their own
+// (docs/run-your-own.md). The top level has nothing instance-specific: it is what the Deploy to
+// Cloudflare button deploys, into the deployer's own copy of this folder, and the template every
+// environment below starts from. Deployed as it is, it runs on workers.dev, creates Spheres with
+// the operator token only and signs nobody in. By hand, each instance is a named environment,
+// deployed with `node scripts/deploy.mjs --env <name>`.
 // Locally: `node scripts/local.mjs --port <port> --persist-to <dir>` (scripts/local.mjs).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -13,8 +14,9 @@
   "observability": { "enabled": false },
   "send_metrics": false,
   // Plain settings, documented in src/env.ts. SPHERE_OPERATOR_TOKEN (at least 32 characters) is a
-  // secret, never here: `wrangler secret put SPHERE_OPERATOR_TOKEN --env <name>` (scripts/deploy.mjs
-  // makes one), a Worker secret set by scripts/serve-local.mjs locally. Wrangler doesn't inherit
+  // secret, never here: the button asks for it (.dev.vars.example), `wrangler secret put
+  // SPHERE_OPERATOR_TOKEN --env <name>` by hand (scripts/deploy.mjs makes one), a Worker secret set
+  // by scripts/serve-local.mjs locally. Wrangler doesn't inherit
   // `vars`, `d1_databases` or `durable_objects`: an environment lists them all.
   "vars": {
     // The Google OAuth client (a Web client) whose ID tokens sign people in; its authorized
