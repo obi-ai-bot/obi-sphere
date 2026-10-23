@@ -46,4 +46,4 @@ CI runs all of them ([.github/workflows/server.yml](../.github/workflows/server.
 
 ## Deploying
 
-A person's step, never CI's: `wrangler d1 create obi-sphere`, paste its id into `wrangler.jsonc`, `pnpm run migrate:remote`, `wrangler secret put SPHERE_OPERATOR_TOKEN`, then `pnpm run deploy`. Deskree's deployment: [docs/deploy-cloudflare.md](../docs/deploy-cloudflare.md).
+A person's step, never CI's: one environment block in [`wrangler.jsonc`](wrangler.jsonc), then `pnpm run deploy -- --env <name>` ([scripts/deploy.mjs](scripts/deploy.mjs): the D1 database and migrations, the Worker, and an operator token kept in the Keychain). The top level is a neutral template; `--env` is required. Running your own: [docs/run-your-own.md](../docs/run-your-own.md). Deskree's: [docs/deploy-cloudflare.md](../docs/deploy-cloudflare.md).

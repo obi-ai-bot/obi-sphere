@@ -27,7 +27,7 @@ The Sphere is not a chat server. It carries typed actions between Obis. People t
 
 ## Status
 
-Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) implements it: the directory, invitations, tokens, policy, relay and audit chain of [`spec/sphere-api.md`](spec/sphere-api.md), and it passes the conformance suite. Its own README, [`server/README.md`](server/README.md), lists its checks and how to deploy it.
+Pre-alpha. The protocol in [`spec/`](spec/) is at v0.1, with JSON Schemas and a conformance suite (`make spec-check`). The server in [`server/`](server/) implements it: the directory, invitations, tokens, policy, relay and audit chain of [`spec/sphere-api.md`](spec/sphere-api.md), and it passes the conformance suite. Its own README, [`server/README.md`](server/README.md), lists its checks and how to deploy it; [docs/run-your-own.md](docs/run-your-own.md) stands up your own in one config block and one command.
 
 ## Run a Sphere locally
 

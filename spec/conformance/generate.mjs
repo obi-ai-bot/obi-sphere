@@ -566,8 +566,14 @@ export function buildFixtures() {
   wireCase("invalid-invitation-named-max-uses", "A named invitation with max_uses: it is used once.", INV, { owner: "owner-c", obi: "obi-c", expires_in: 3600, max_uses: 2 }, "reject");
   wireCase("invalid-invitation-max-uses-zero", "max_uses 0.", INV, { expires_in: 3600, max_uses: 0 }, "reject");
   wireCase("invalid-invitation-max-uses-too-many", "max_uses over 1,000.", INV, { expires_in: 3600, max_uses: 1001 }, "reject");
-  wireCase("invalid-invitation-email-domain", "A domain limit: not in v0.1, the Sphere can't enforce it without an identity provider.", INV, { expires_in: 3600, max_uses: 50, email_domain: "example.com" }, "reject");
+  wireCase("invalid-invitation-email-domain", "A domain limit under another name: it is `domain`.", INV, { expires_in: 3600, max_uses: 50, email_domain: "example.com" }, "reject");
+  wireCase("valid-invitation-open-domain", "An open invitation for one Google Workspace's people.", INV, { expires_in: 604800, max_uses: 1000, domain: "example.com" }, "accept");
+  wireCase("invalid-invitation-named-domain", "A named invitation with a domain: only an open one takes it.", INV, { owner: "owner-c", obi: "obi-c", expires_in: 3600, domain: "example.com" }, "reject");
+  wireCase("invalid-invitation-domain-upper-case", "A domain in upper case: domains are written lower case.", INV, { expires_in: 3600, domain: "Example.com" }, "reject");
+  wireCase("valid-create-sphere-with-signin", "Creating a Sphere with a sign-in instead of the operator token.", "wire/create-sphere.request", { sphere: SPHERE, name: "Conformance sphere", admin: { owner: "owner-a", owner_key: A.publicKey }, signin: { state: "S".repeat(43), code: "C".repeat(43) } }, "accept");
+  wireCase("invalid-signin-short-code", "A sign-in whose code isn't 43 base64url characters.", "wire/create-sphere.request", { sphere: SPHERE, name: "Conformance sphere", admin: { owner: "owner-a", owner_key: A.publicKey }, signin: { state: "S".repeat(43), code: "C".repeat(42) } }, "reject");
   const secret = "A".repeat(43);
+  wireCase("valid-redeem-with-signin", "A redeem carrying a sign-in, as one for an invitation with a domain must.", "wire/redeem.request", { secret, owner_key: OA.publicKey, card: cardA, signin: { state: "S".repeat(43), code: "C".repeat(43) } }, "accept");
   wireCase("valid-invitation-response-open", "An open invitation as the Sphere answers it.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, max_uses: 50, secret, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-response-owner-without-obi", "An answer naming an owner but no obi.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, owner: "owner-c", max_uses: 1, secret, expires_at: NOW }, "reject");
   wireCase("valid-invitation-preview-request", "The secret, and nothing else.", "wire/invitation-preview.request", { secret }, "accept");

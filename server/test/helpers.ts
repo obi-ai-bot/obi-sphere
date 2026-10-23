@@ -10,9 +10,19 @@ import { canonicalBytes, utf8 } from "../src/protocol/json";
 import { envelopeSigningInput, timestamp } from "../src/protocol/envelope";
 import { cardSigningInput } from "../src/protocol/card";
 import * as validators from "../src/protocol/validators.generated.js";
+import { KeyCache } from "../src/signin";
 
 export const BASE = "http://sphere.test";
 export const OPERATOR = env.SPHERE_OPERATOR_TOKEN;
+
+/** Google, as the tests play it: one RSA key that signs every ID token (test/signin.test.ts). */
+export const GOOGLE_KEY = (await crypto.subtle.generateKey(
+  { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+  true,
+  ["sign", "verify"],
+)) as CryptoKeyPair;
+const googleJwk = { ...((await crypto.subtle.exportKey("jwk", GOOGLE_KEY.publicKey)) as JsonWebKey), kid: "test-google-key" };
+export const GOOGLE = new KeyCache(async () => [googleJwk]);
 
 /** The Sphere's clock in the tests: starts at 2026-10-14T12:00:00Z, moves only when told. */
 export class Clock {
@@ -130,7 +140,7 @@ export function makeCall(clock: Clock) {
       body = JSON.stringify(o.body);
       headers["Content-Type"] ??= "application/json";
     }
-    const res = await handle(new Request(BASE + path, { method, headers, body }), env, { now: clock.now, pollMs: 20 });
+    const res = await handle(new Request(BASE + path, { method, headers, body }), env, { now: clock.now, pollMs: 20, google: GOOGLE });
     const text = await res.text();
     let parsed: unknown = text;
     try {

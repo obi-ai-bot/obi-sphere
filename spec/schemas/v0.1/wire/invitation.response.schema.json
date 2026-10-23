@@ -38,6 +38,9 @@
     },
     "expires_at": {
       "$ref": "../common.schema.json#/$defs/timestamp"
+    },
+    "domain": {
+      "$ref": "../common.schema.json#/$defs/domain"
     }
   },
   "dependentRequired": {

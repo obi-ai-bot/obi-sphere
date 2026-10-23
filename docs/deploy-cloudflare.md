@@ -5,7 +5,7 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 | | |
 |---|---|
 | URL | https://obysphere.deskree.com (`GET /v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`) |
-| Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in [`server/wrangler.jsonc`](../server/wrangler.jsonc). |
+| Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in `env.deskree` of [`server/wrangler.jsonc`](../server/wrangler.jsonc), which holds every Deskree value; the top level is neutral ([run-your-own.md](run-your-own.md)). |
 | Worker | `obi-sphere`, version `2f24b987-c346-4d5e-8c8b-0959d7c98524`, on the custom domain only (its workers.dev address is off) |
 | Code | `dev` at `d2857d5`, plus the account, D1 id and route in `server/wrangler.jsonc` |
 | D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migration `0001_init.sql` applied |
@@ -37,9 +37,13 @@ A team needs Workers Paid ($5 a month) on the Deskree account. The Free plan isn
 
 The owner turned on Workers Paid for the personal account that held the first deploy. Whether the Deskree account has it still needs checking: go to dash.cloudflare.com, then Deskree, Workers & Pages, Plans.
 
+## Signing in with Google
+
+`env.deskree` sets `GOOGLE_CLIENT_ID` to the "Oby remote access" Web client (Google Cloud project `oby-remote-access`, consent screen Internal, the one Oby's control plane uses) and `CREATOR_WORKSPACES` to `deskree.com`: anyone signed in with a deskree.com Google Workspace account creates an Obysphere from Oby, without the operator token, and an invite link can be for deskree.com people only ([spec/sphere-api.md](../spec/sphere-api.md), section 3.1). It needs, once, in that client's Authorized redirect URIs: `https://obysphere.deskree.com/v0.1/signin/google/callback`.
+
 ## Creating Deskree's Sphere
 
-The owner does this once. In the Mac app, go to Settings, then Obysphere (obi PR #800). Or post directly with the operator token. `owner_key` is the admin owner's public key from their Oby:
+The owner does this once (or anyone at Deskree, signed in, from Oby's **+**). In the Mac app, go to Settings, then Obysphere (obi PR #800). Or post directly with the operator token. `owner_key` is the admin owner's public key from their Oby:
 
 ```sh
 curl -sS https://obysphere.deskree.com/v0.1/spheres \
@@ -53,7 +57,7 @@ Then the admin's Oby invites each Obi (`POST /v0.1/spheres/deskree/invitations`,
 ## Moving to deskree.obysphere.com later
 
 1. Add the `obysphere.com` zone to the Deskree Cloudflare account.
-2. Add `{ "pattern": "deskree.obysphere.com", "custom_domain": true }` to `routes` in `server/wrangler.jsonc`, then run `pnpm run deploy`. Cloudflare creates the DNS record and the certificate.
+2. Add `{ "pattern": "deskree.obysphere.com", "custom_domain": true }` to `routes` in `server/wrangler.jsonc`, then run `pnpm run deploy -- --env deskree`. Cloudflare creates the DNS record and the certificate.
 3. Check `GET https://deskree.obysphere.com/v0.1/health`, then rerun the scenario with `OBI_SPHERE_URL` set to the new address.
 4. Members' agent cards hold the Sphere URL (`…/v0.1/spheres/<sphere>/members/<obi>`). The server doesn't check that host, but each card keeps the old address until its Obi signs a new one (`PUT …/members/{obi}/card`). Keep both domains on the Worker until every card has moved.
 
@@ -64,8 +68,7 @@ A person deploys, never CI:
 ```sh
 cd server
 pnpm install --frozen-lockfile
-pnpm run migrate:remote    # only when migrations/ changed
-pnpm run deploy
+pnpm run deploy -- --env deskree    # new migrations first, then the Worker
 ```
 
 To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN` and update the Keychain item to match.

@@ -15,6 +15,14 @@ describe("health", () => {
     expect(r.headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("tells someone who opens an invite link in a browser what to do with it", async () => {
+    const r = await handle(new Request(`${BASE}/join`), env, { now: () => 0 });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("Content-Type")).toContain("text/html");
+    expect(r.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+    expect(await r.text()).toContain("Settings › Obysphere");
+  });
+
   it("answers 404 not_found for anything not in the API", async () => {
     const call = makeCall(new Clock());
     for (const [method, path] of [["GET", "/"], ["GET", "/v0.1/nothing"], ["DELETE", "/v0.1/health"], ["GET", "/v0.1/spheres"], ["POST", "/v0.1/spheres/e2e/audit"]] as const) {
@@ -96,6 +104,22 @@ describe("POST /v0.1/spheres", () => {
     expect(dup.status).toBe(400);
     const notJson = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, raw: "{" });
     expect(notJson.status).toBe(400);
+  });
+
+  it("is 409 conflict for a reserved id, even for the operator, and answers GET for one 401, taken", async () => {
+    const w = new World();
+    const key = await newKey();
+    for (const sphere of ["avenga", "tetrix", "oby", "app", "www", "admin", "api", "help", "acme"]) {
+      const r = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, body: { sphere, name: "Taken", admin: { owner: "wellington", owner_key: key.publicKey } } });
+      expect(r.status, sphere).toBe(409);
+      expect(r.body.error.code).toBe("conflict");
+      const got = await w.call("GET", `/v0.1/spheres/${sphere}`);
+      expect(got.status, sphere).toBe(401);
+      expect(got.body.error.code).toBe("unauthorized");
+    }
+    await w.create();
+    expect((await w.call("GET", "/v0.1/spheres/oby", { token: await w.ownerToken() })).status).toBe(401);
+    expect((await w.call("GET", "/v0.1/spheres/oby-two")).status).toBe(404);
   });
 
   it("is 413 payload_too_large past 131,072 bytes", async () => {

@@ -29,6 +29,8 @@ export interface OwnerRow {
   owner: string;
   owner_key: string;
   owner_key_id: string;
+  /** The account the owner signed in with (`google:<sub>`), once one did (src/signin.ts). */
+  account?: string | null;
 }
 
 export interface MemberRow {

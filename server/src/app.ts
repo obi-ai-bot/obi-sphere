@@ -9,15 +9,19 @@ import { deleteRunner, putRunner } from "./routes/runner.ts";
 import { getMemberRoute, invite, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
-import { createSphere, getSphereRoute, health } from "./routes/spheres.ts";
+import { createSphere, getSphereRoute, health, joinPage } from "./routes/spheres.ts";
+import { finishSignIn, startSignIn } from "./signin.ts";
 
 type Handler = (request: Request, env: Env, deps: Deps, ...params: string[]) => Promise<Response> | Response;
 
 const SEGMENT = "([^/]+)";
 const ROUTES: [string, RegExp, Handler][] = [
   ["GET", /^\/v0\.1\/health$/, health],
+  ["GET", /^\/join$/, joinPage],
   ["POST", /^\/v0\.1\/spheres$/, createSphere],
   ["POST", /^\/v0\.1\/oauth\/token$/, tokenEndpoint],
+  ["POST", /^\/v0\.1\/signin\/google$/, startSignIn],
+  ["POST", /^\/v0\.1\/signin\/google\/callback$/, finishSignIn],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), getSphereRoute],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations$`), invite],
   ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}$`), withdrawInvitation],
