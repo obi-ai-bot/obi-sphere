@@ -12,36 +12,19 @@ import { checkSignIn, creatorWorkspaces, useSignIn, type SignIn } from "../signi
 
 export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL });
 
-/** The join page's one script: the Open in Oby link, built from the page's own address. */
-const JOIN_SCRIPT = `const a=document.getElementById("open");if(location.hash.length>1)a.href="oby://join/"+location.host+location.hash;`;
-
 /**
  * `GET /join`: where an invite link (`https://<sphere server>/join#…`, everything after `#` staying
- * in the browser) lands when someone opens it in a browser. It offers to open the link in Oby,
- * `oby://join/<this server's host>#<the link's fragment, unchanged>` (docs/run-your-own.md), and
- * says how to paste it in Oby instead. Its one script only builds that link: nothing is read or
- * sent, and the part after `#` never reaches the server.
+ * in the browser) lands when someone opens it in a browser. It says what to do with it, and reads
+ * nothing: no script, and the part after `#` never reaches the server.
  */
-export async function joinPage(): Promise<Response> {
-  const hash = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JOIN_SCRIPT)))));
-  return new Response(
+export const joinPage = (): Response =>
+  new Response(
     `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Join an Obysphere</title>
-<style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}#open{display:inline-block;padding:.6rem 1.2rem;border-radius:.5rem;background:#0a66ff;color:#fff;font-weight:600;text-decoration:none}#open:not([href]){display:none}</style>
+<style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}</style>
 <h1>You're invited to an Obysphere</h1>
-<p><a id="open">Open in Oby</a></p>
-<p>Or copy this page's address from the address bar. Then, in Oby on your Mac, open Settings › Obysphere, paste it under Join an Obysphere, and choose Open.</p>
-<script>${JOIN_SCRIPT}</script>`,
-    {
-      status: 200,
-      headers: {
-        "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
-        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'`,
-        "Referrer-Policy": "no-referrer",
-      },
-    },
+<p>Copy this page's address from the address bar. Then, in Oby on your Mac, open Settings › Obysphere, paste it under Join an Obysphere, and choose Open.</p>`,
+    { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'", "Referrer-Policy": "no-referrer" } },
   );
-}
 
 export const sphereJson = (s: SphereRow) => ({ sphere: s.id, name: s.name, protocol: PROTOCOL, admin_owner: s.admin_owner, created_at: s.created_at });
 
