@@ -5,8 +5,14 @@ An Obysphere is where your team's Obys find each other: who is in it, invitation
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
 
 1. **Click the button.** Sign in to Cloudflare (a free account holds a small team: [The plan](#the-plan)) and to GitHub or GitLab, and keep the names it offers. Cloudflare copies [`server/`](../server/) into a new repository of yours, makes the Worker, its D1 database and its Durable Objects, applies the migrations and deploys it.
-2. **Paste the token.** When it asks for `SPHERE_OPERATOR_TOKEN`, paste the token Oby gave you (Settings › Obysphere › Host your own), or any 32+ random characters you keep safe. It is the one secret that creates Obyspheres on your server, and it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty unless you want [Google sign-in](#optional-let-your-team-create-obyspheres).
-3. **Paste the Worker's address into Oby.** It is on the Worker's page in the Cloudflare dashboard, and at the end of the build log, like `https://obi-sphere.<your subdomain>.workers.dev`. In Oby: Settings › Obysphere › Server. Then the **+** under your Obyspheres in the left strip: a name, the people to invite, Create.
+2. **Paste the token.** Make one on your Mac with `openssl rand -base64 32`, and paste what it prints where Cloudflare asks for `SPHERE_OPERATOR_TOKEN`. It is the one secret that creates Obyspheres on your server, and it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty; to add [Google sign-in](#optional-let-your-team-create-obyspheres) later, set them in your repository's `wrangler.jsonc`.
+3. **Point Oby at the Worker's address.** It is on the Worker's page in the Cloudflare dashboard, and at the end of the build log, like `https://obi-sphere.<your subdomain>.workers.dev`. First keep the token where Oby looks for it, in your login Keychain under that host (the address without `https://`):
+
+   ```sh
+   security add-generic-password -U -s obi-sphere-operator-token -a obi-sphere.<your subdomain>.workers.dev -w
+   ```
+
+   It asks for the token, so the token is never in your shell history: paste the same one. Then in Oby: Settings › Obysphere › Server, the address. The **+** under your Obyspheres in the left strip makes your Obysphere: a name, the people to invite, Create. If macOS asks whether Oby may use the token, choose Always Allow.
 
 Check it: `curl https://<your Worker's address>/v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`.
 
@@ -14,23 +20,17 @@ Each push to your repository's `main` deploys again, new migrations first ([`scr
 
 ## Your own domain
 
-In the Cloudflare dashboard, your Worker › Settings › Domains & Routes › Add › Custom domain: `sphere.acme.com`, a domain on the same Cloudflare account. Cloudflare makes the DNS record and the certificate, and later deploys leave it in place. Then put `https://sphere.acme.com` in Oby instead of the workers.dev address.
+In the Cloudflare dashboard, your Worker › Settings › Domains & Routes › Add › Custom domain: `sphere.acme.com`, a domain on the same Cloudflare account. Cloudflare makes the DNS record and the certificate, and later deploys leave it in place. Then put `https://sphere.acme.com` in Oby instead of the workers.dev address, and keep the token under that host too: the `security` command of step 3 with `-a sphere.acme.com`. Oby sends the token only to the host it is kept under.
 
 ## The plan
 
-Cloudflare's Free plan holds a small team: up to about 15 people with Oby running. Each Oby, idle, makes about 5,000 requests a day (a long poll every 25 seconds, the directory every minute, its runner status every 10 minutes) of the Free plan's 100,000, and reads about 90,000 D1 rows a day of its 5 million. A waiting long poll sleeps on its Oby's Durable Object ([`src/doorbell.ts`](../server/src/doorbell.ts)), which hibernates and costs no duration, rather than reading D1 every 250 ms: 5 rows for a 25-second wait instead of about 100, and about the CPU of any other call. Jobs on a teammate's Mac relay their traffic through a Durable Object too; heavy ones count against its 100,000 requests a day.
+Cloudflare's Free plan holds a small team: up to about 15 people with Oby running. Each Oby, idle, makes about 5,000 Worker requests a day (a long poll every 25 seconds, the directory every minute, its runner status every 10 minutes) of the Free plan's 100,000, and reads about 90,000 D1 rows a day of its 5 million. A waiting long poll sleeps on its Oby's Durable Object ([`src/doorbell.ts`](../server/src/doorbell.ts)), which hibernates and costs no duration, rather than reading D1 every 250 ms: 5 rows for a 25-second wait instead of about 100, and about the CPU of any other call. Those Doorbells make about 3,500 Durable Object requests a day per Oby, about 52,000 at 15 people, of the Free plan's separate 100,000 Durable Object requests a day. Jobs on a teammate's Mac and the phone relay pass their traffic through Durable Objects too, and heavy use counts against those same 100,000. If the Doorbells can't be reached, long polls go back to looking at D1 every 250 ms.
 
 Free's limit that can't be measured outside Cloudflare is CPU: 10 ms a request. In the Worker's Metrics, `Exceeded CPU Time Limits` (error 1102) or the daily request limit (error 1027) means you have outgrown it. More people than that, or either error: Workers Paid, $5 a month (Workers & Pages › Plans).
 
-## Invite links, and Open in Oby
+## Invite links
 
-An invite link is `https://<your server>/join#<secret part>`; everything after `#` stays in the browser and never reaches the server. Opened in a browser, the page offers **Open in Oby**, a link it builds from its own address:
-
-```
-oby://join/<your server's host>#<the invite link's part after #, unchanged>
-```
-
-so `https://sphere.acme.com/join#abc` opens `oby://join/sphere.acme.com#abc`, and Oby rebuilds `https://sphere.acme.com/join#abc` from it. The page also says how to paste the link into Oby (Settings › Obysphere › Join an Obysphere) when the button doesn't open it.
+An invite link is `https://<your server>/join#<secret part>`; everything after `#` stays in the browser and never reaches the server. Opened in a browser, the page says how to paste the link into Oby: Settings › Obysphere › Join an Obysphere.
 
 ## Optional: let your team create Obyspheres
 
@@ -86,9 +86,8 @@ If you build Oby yourself, set `OBY_SPHERE_URL` in `apps/config/Signing.xcconfig
 | What | Where |
 |---|---|
 | Your Worker's settings, the Google client id | `wrangler.jsonc`, in git (public values): your repository's, or your environment block by hand |
-| The operator token | a Worker secret, and Oby (by hand: your Mac's Keychain); nowhere else |
+| The operator token | a Worker secret, and your Mac's Keychain under your server's host; nowhere else |
 | Invitation secrets, access tokens, sign-in codes | only as SHA-256, in your D1 |
-| The part of an invite link after `#` | the browser, and Oby; never sent to the server |
 | Telemetry | none: `observability` is off and wrangler sends no metrics |
 
 Message text between Obys is data: the server checks schemas and signatures and relays messages as they were signed, never reading or logging their text ([server/README.md](../server/README.md), "How it is built").
