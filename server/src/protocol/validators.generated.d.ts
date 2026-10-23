@@ -27,7 +27,6 @@ export declare const ackRequest: Validator;
 export declare const jwsHeader: Validator;
 export declare const delegationClaims: Validator;
 export declare const actorClaims: Validator;
-export declare const relayAssertionClaims: Validator;
 export declare const healthResponse: Validator;
 export declare const sphere: Validator;
 export declare const tokenResponse: Validator;

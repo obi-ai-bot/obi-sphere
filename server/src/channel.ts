@@ -102,6 +102,8 @@ export class ChannelRelay extends DurableObject<Env> {
 
   override async alarm(): Promise<void> {
     if (this.ctx.getWebSockets().length === 0) return;
+    // First, so a check that fails (D1 unavailable) doesn't stop the ones after it.
+    await this.ctx.storage.setAlarm(Date.now() + CHECK_EVERY_MS);
     const meta = await this.ctx.storage.get<Meta>("meta");
     if (!meta) return this.closeAll(4001, "the channel has no exchange");
     const now = Math.floor((await this.now()) / 1000);
@@ -133,7 +135,6 @@ export class ChannelRelay extends DurableObject<Env> {
     if (!both && alone !== undefined && at - alone > ALONE_MS) return this.closeAll(4005, "the other side didn't join within 10 minutes");
     const last = await this.ctx.storage.get<number>("last");
     if (both && last !== undefined && at - last > IDLE_MS) return this.closeAll(4006, "no frame for 5 minutes");
-    await this.ctx.storage.setAlarm(Date.now() + CHECK_EVERY_MS);
   }
 
   private announce(what: "joined" | "left"): void {

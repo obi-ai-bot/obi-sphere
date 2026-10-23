@@ -7,10 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { handle } from "../src/app";
 import { b64url, hex, randomBytes, sha256Hex } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
-import { MAX_ENVELOPE_BYTES, MAX_FRAMES_PER_MINUTE, type PhoneRelay } from "../src/relay";
-import { BASE, World, expectSchema, makeCall, newKey, side, signJwt, team, until, type Key } from "./helpers";
-
-const OPEN_ENV = { ...env, RELAY_OWNERS: "owner_keys" };
+import { MAC_FRAMES_PER_MINUTE, MAX_ENVELOPE_BYTES, PHONE_FRAMES_PER_MINUTE, type PhoneRelay } from "../src/relay";
+import { BASE, World, expectSchema, newKey, side, signJwt, team, until } from "./helpers";
 
 /** A phone as the Mac pairs it: its relay token, and the hash the Sphere keeps. */
 async function phone() {
@@ -21,17 +19,21 @@ async function phone() {
 const newRelay = () => b64url(randomBytes(16));
 const path = (relay: string, device?: string) => `/v0.1/relay/${relay}${device ? `/devices/${device}` : ""}`;
 
-function open(w: World, relay: string, token: string, o: { upgrade?: boolean; env?: Cloudflare.Env } = {}): Promise<Response> {
+function open(w: World, relay: string, token: string, upgrade = true): Promise<Response> {
   const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
-  if (o.upgrade !== false) headers.Upgrade = "websocket";
-  return handle(new Request(BASE + path(relay), { headers }), o.env ?? env, { now: w.clock.now });
+  if (upgrade) headers.Upgrade = "websocket";
+  return handle(new Request(BASE + path(relay), { headers }), env, { now: w.clock.now });
 }
 
 const stub = (relay: string) => env.RELAYS.get(env.RELAYS.idFromName(relay));
 
-/** A relay assertion for `relay`, signed by `key` (section 9.2). */
-const assertion = (w: World, key: Key, relay: string, claims: Record<string, unknown> = {}) =>
-  signJwt({ iss: key.publicKey, aud: `obi-sphere:relay:${relay}`, iat: w.clock.s, exp: w.clock.s + 300, jti: crypto.randomUUID(), ...claims }, key);
+/** Sets a socket's count of frames this minute (its tag: `mac`, or the device id) without sending them: each costs the test runner milliseconds. */
+const countFrames = (relay: string, tag: string, frames: number) =>
+  runInDurableObject(stub(relay), (r: PhoneRelay) => void (r as unknown as { minutes: Map<string, object> }).minutes.set(tag, { start: Date.now(), frames, bytes: 0 }));
+
+/** Text that holds every byte of any binary value as `n,n,n`, so a frame's bytes show up in it wherever they are kept. */
+const flat = (v: unknown) =>
+  JSON.stringify(v, (_k, x) => (x instanceof ArrayBuffer ? [...new Uint8Array(x)] : ArrayBuffer.isView(x) ? [...new Uint8Array(x.buffer, x.byteOffset, x.byteLength)] : x));
 
 /** The team, Wellington's Mac's token, a relay with two phones, and what it takes to open each. */
 async function paired() {
@@ -65,8 +67,9 @@ describe("phone relay", () => {
     const pb = side(await open(w, relay, b.token));
     await until(() => m.texts.length === 2);
     expect(m.texts.map((t) => JSON.parse(t))).toEqual([{ device: a.hash, peer: "joined" }, { device: b.hash, peer: "joined" }]);
-    // A canary no frame may leave behind.
+    // Canaries no frame may leave behind, one each way.
     const canary = [0xca, 0x4a, 0x41, 0x52, 0x59, 0x5f, 0x34, 0x32];
+    const macCanary = [0x4d, 0x41, 0x43, 0x5f, 0x43, 0x41, 0x4e, 0x41, 0x52, 0x59];
     pa.ws.send(new Uint8Array(canary));
     pb.ws.send(new Uint8Array(MAX_ENVELOPE_BYTES).fill(7));
     await until(() => m.frames.length === 2);
@@ -75,13 +78,14 @@ describe("phone relay", () => {
     expect(bytes(fromA.slice(32))).toEqual(canary);
     const fromB = m.frames.find((f) => f.byteLength === 32 + MAX_ENVELOPE_BYTES)!;
     expect(hex(new Uint8Array(fromB, 0, 32))).toBe(b.hash);
-    m.ws.send(framed(a.hash, [9, 9]));
+    m.ws.send(framed(a.hash, macCanary));
     m.ws.send(new Uint8Array([...framed(b.hash, []), ...new Uint8Array(MAX_ENVELOPE_BYTES).fill(8)]));
     await until(() => pa.frames.length === 1 && pb.frames.length === 1);
-    expect(bytes(pa.frames[0]!)).toEqual([9, 9]);
+    expect(bytes(pa.frames[0]!)).toEqual(macCanary);
     expect(pb.frames[0]!.byteLength).toBe(MAX_ENVELOPE_BYTES);
-    // A frame for a device that isn't there is dropped.
+    // A frame for a device that isn't there, or shorter than a device id, is dropped.
     m.ws.send(framed("ab".repeat(32), [1]));
+    m.ws.send(new Uint8Array(31));
     pa.ws.send("ping");
     await until(() => pa.texts.includes("pong"));
     pb.ws.close(1000);
@@ -90,11 +94,13 @@ describe("phone relay", () => {
     expect([m.closed, pa.closed]).toEqual([null, null]);
     expect(pa.frames.length).toBe(1);
 
-    const stored = await runInDurableObject(stub(relay), async (_i, state) => [...(await state.storage.list()).values()]);
-    const kept = JSON.stringify(stored) + JSON.stringify(await env.DB.prepare("SELECT * FROM relays, relay_devices").all());
-    expect(kept).not.toContain(canary.join(","));
+    const stored = await runInDurableObject(stub(relay), async (_i, state) => [...(await state.storage.list()).entries()]);
+    const kept = flat(stored) + flat(await env.DB.prepare("SELECT * FROM relays, relay_devices").all());
+    for (const c of [canary, macCanary]) {
+      expect(kept).not.toContain(c.join(","));
+      expect(flat(logged)).not.toContain(c.join(","));
+    }
     expect(kept).not.toContain(a.token);
-    expect(JSON.stringify(logged)).not.toContain(canary.join(","));
   });
 
   it("refuses a wrong token, and closes and refuses a forgotten one", async () => {
@@ -128,24 +134,37 @@ describe("phone relay", () => {
     expect((await w.call("PUT", path(newRelay()), { token: await w.ownerToken() })).body.error.code).toBe("forbidden");
     expect((await w.call("PUT", path(newRelay()), { token: await w.obiToken("obi-wellington", "directory:read") })).body.error.code).toBe("insufficient_scope");
     expect((await w.call("PUT", path(newRelay()), { token: "not-a-token-0123456789abcdefghijklmnop" })).status).toBe(401);
-    // A Mac that isn't a member has only a relay assertion, and this server takes none.
+    // A Mac that isn't a member has no token here: whatever it signs is an unknown token.
     const stranger = await newKey();
-    const refused = await w.call("PUT", path(relay), { token: await assertion(w, stranger, relay) });
-    expect([refused.status, refused.body.error.code]).toEqual([403, "forbidden"]);
-    expect((await open(w, relay, await assertion(w, stranger, relay))).status).toBe(403);
-    // Wellington's Obi revoked: its tokens open nothing, and its phones find no Mac.
-    expect((await w.call("DELETE", "/v0.1/spheres/e2e/members/obi-wellington", { token: await w.ownerToken() })).status).toBe(200);
-    expect((await open(w, relay, mac)).status).toBe(401);
+    const signed = await signJwt({ iss: stranger.publicKey, aud: `obi-sphere:relay:${relay}`, iat: w.clock.s, exp: w.clock.s + 300, jti: crypto.randomUUID() }, stranger);
+    expect((await w.call("PUT", path(newRelay()), { token: signed })).status).toBe(401);
+    expect((await open(w, relay, signed)).status).toBe(401);
+  });
+
+  it("deletes a revoked member's relays: their sockets close within a minute, their tokens open nothing", async () => {
+    const { w, mac, relay, a } = await paired();
+    const m = side(await open(w, relay, mac));
     const pa = side(await open(w, relay, a.token));
-    await until(() => pa.closed !== null);
-    expect(pa.closed!.code).toBe(4008);
+    await until(() => m.texts.length === 1);
+    expect((await w.call("DELETE", "/v0.1/spheres/e2e/members/obi-wellington", { token: await w.ownerToken() })).status).toBe(200);
+    expect((await env.DB.prepare("SELECT (SELECT COUNT(*) FROM relays) + (SELECT COUNT(*) FROM relay_devices) AS n").first<{ n: number }>())!.n).toBe(0);
+    await runDurableObjectAlarm(stub(relay));
+    await until(() => m.closed !== null && pa.closed !== null);
+    expect([m.closed!.code, pa.closed!.code]).toEqual([4001, 4001]);
+    expect((await open(w, relay, a.token)).status).toBe(401);
+    expect((await open(w, relay, mac)).status).toBe(401);
+    // Ernesto's relay stays.
+    const other = newRelay();
+    const ernesto = await w.obiToken("obi-ernesto");
+    expect((await w.call("PUT", path(other), { token: ernesto })).status).toBe(201);
+    expect((await w.call("PUT", path(other), { token: ernesto })).status).toBe(200);
   });
 
   it("checks paths, upgrades and how many relays and devices", async () => {
     const { w, mac, relay } = await paired();
     expect((await w.call("PUT", path("short"), { token: mac })).status).toBe(400);
     expect((await w.call("PUT", path(relay, "A".repeat(64)), { token: mac })).status).toBe(400);
-    expect((await open(w, relay, mac, { upgrade: false })).status).toBe(400);
+    expect((await open(w, relay, mac, false)).status).toBe(400);
     expect((await open(w, newRelay(), mac)).status).toBe(404);
     expect((await w.call("DELETE", path(newRelay()), { token: mac })).status).toBe(404);
     expect((await w.call("PUT", path(relay), { token: mac })).status).toBe(200);
@@ -154,34 +173,6 @@ describe("phone relay", () => {
     expect([fifth.status, fifth.headers.get("Retry-After")]).toEqual([429, null]);
     for (let i = 0; i < 14; i++) expect((await w.call("PUT", path(relay, (await phone()).hash), { token: mac })).status).toBe(201);
     expect((await w.call("PUT", path(relay, (await phone()).hash), { token: mac })).status).toBe(429);
-  });
-
-  it("lets anyone with an owner key own a relay with a fresh assertion, on owner_keys", async () => {
-    const w = new World();
-    const call = makeCall(w.clock, OPEN_ENV);
-    const key = await newKey();
-    const relay = newRelay();
-    const first = await assertion(w, key, relay);
-    expect((await call("PUT", path(relay), { token: first })).status).toBe(201);
-    expect((await call("PUT", path(relay), { token: first })).status).toBe(401);
-    expect((await call("PUT", path(relay), { token: await assertion(w, key, newRelay()) })).status).toBe(401);
-    expect((await call("PUT", path(relay), { token: await assertion(w, key, relay, { exp: w.clock.s + 301 }) })).status).toBe(401);
-    expect((await call("PUT", path(relay), { token: await assertion(w, key, relay, { iat: w.clock.s - 400, exp: w.clock.s - 100 }) })).status).toBe(401);
-    expect((await call("PUT", path(relay), { token: await assertion(w, key, relay, { iss: (await newKey()).publicKey }) })).status).toBe(401);
-    // Another key's relay.
-    expect((await call("PUT", path(relay), { token: await assertion(w, await newKey(), relay) })).status).toBe(409);
-    const p = await phone();
-    expect((await call("PUT", path(relay, p.hash), { token: await assertion(w, key, relay) })).status).toBe(201);
-    const m = side(await open(w, relay, await assertion(w, key, relay), { env: OPEN_ENV }));
-    const ph = side(await open(w, relay, p.token, { env: OPEN_ENV }));
-    await until(() => m.texts.length === 1);
-    ph.ws.send(new Uint8Array([5]));
-    m.ws.send(framed(p.hash, [6]));
-    await until(() => m.frames.length === 1 && ph.frames.length === 1);
-    expect([bytes(m.frames[0]!.slice(32)), bytes(ph.frames[0]!)]).toEqual([[5], [6]]);
-    // A member's Mac still uses its token there.
-    const t = await team();
-    expect((await makeCall(t.clock, OPEN_ENV)("PUT", path(newRelay()), { token: await t.obiToken("obi-wellington") })).status).toBe(201);
   });
 
   it("closes a phone when the Mac isn't there, and every phone when it leaves", async () => {
@@ -230,27 +221,37 @@ describe("phone relay", () => {
     expect(m.closed!.code).toBe(1009);
   });
 
-  it("closes the socket that floods the relay, by frames and by bytes", async () => {
-    const { w, mac, relay, a } = await paired();
+  it("closes only the socket that passes its minute's frames or bytes", async () => {
+    const { w, mac, relay, a, b } = await paired();
     const m = side(await open(w, relay, mac));
     const pa = side(await open(w, relay, a.token));
-    await until(() => m.texts.length === 1);
-    // This minute's first 2,995 frames, counted without sending them (each costs the test runner milliseconds).
-    await runInDurableObject(stub(relay), (relayObject: PhoneRelay) => {
-      (relayObject as unknown as { minute: object }).minute = { start: Date.now(), frames: MAX_FRAMES_PER_MINUTE - 5, bytes: 0 };
-    });
+    const pb = side(await open(w, relay, b.token));
+    await until(() => m.texts.length === 2);
+    await countFrames(relay, a.hash, PHONE_FRAMES_PER_MINUTE - 5);
     for (let i = 0; i < 6; i++) pa.ws.send(new Uint8Array([i]));
     await until(() => pa.closed !== null);
     expect(pa.closed!.code).toBe(4009);
     await until(() => m.frames.length === 5);
-
-    const second = newRelay();
-    expect((await w.call("PUT", path(second), { token: mac })).status).toBe(201);
-    const m2 = side(await open(w, second, mac));
-    // 129 frames of 256 KiB pass 32 MiB.
-    for (let i = 0; i < 129; i++) m2.ws.send(new Uint8Array(32 + MAX_ENVELOPE_BYTES));
-    await until(() => m2.closed !== null, 1000);
-    expect(m2.closed!.code).toBe(4009);
+    // The Mac and the other phone carry on.
+    m.ws.send(framed(b.hash, [7]));
+    await until(() => pb.frames.length === 1);
+    // Phone A back within the minute is still counted.
+    const pa2 = side(await open(w, relay, a.token));
+    await until(() => m.texts.length === 4);
+    pa2.ws.send(new Uint8Array([1]));
+    await until(() => pa2.closed !== null);
+    expect(pa2.closed!.code).toBe(4009);
+    // 65 frames of 256 KiB pass a phone's 16 MiB.
+    for (let i = 0; i < 65; i++) pb.ws.send(new Uint8Array(MAX_ENVELOPE_BYTES));
+    await until(() => pb.closed !== null, 1000);
+    expect(pb.closed!.code).toBe(4009);
+    expect(m.closed).toBeNull();
+    // The Mac's own budget, 4 times a phone's, serves every phone.
+    expect(MAC_FRAMES_PER_MINUTE).toBe(4 * PHONE_FRAMES_PER_MINUTE);
+    await countFrames(relay, "mac", MAC_FRAMES_PER_MINUTE);
+    m.ws.send(new Uint8Array(33));
+    await until(() => m.closed !== null);
+    expect(m.closed!.code).toBe(4009);
   });
 
   it("closes a revoked or expired Mac, a forgotten phone and an idle socket within a minute", async () => {
@@ -260,11 +261,20 @@ describe("phone relay", () => {
     await until(() => m.texts.length === 1);
     await runDurableObjectAlarm(stub(relay));
     expect([m.closed, pa.closed]).toEqual([null, null]);
-    // A card rotation revokes the Obi's tokens.
-    await env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sha256 = ?1").bind(await sha256Hex(utf8(mac))).run();
+    // The member revoked behind the relay's back (the API deletes its relays too: the test before).
+    await env.DB.prepare("UPDATE members SET status = 'revoked' WHERE sphere = 'e2e' AND obi = 'obi-wellington'").run();
     await runDurableObjectAlarm(stub(relay));
     await until(() => m.closed !== null && pa.closed !== null);
     expect([m.closed!.code, pa.closed!.code]).toEqual([4001, 4008]);
+    await env.DB.prepare("UPDATE members SET status = 'active' WHERE sphere = 'e2e' AND obi = 'obi-wellington'").run();
+    // A card rotation revokes the Obi's tokens.
+    const m1 = side(await open(w, relay, mac));
+    const pa1 = side(await open(w, relay, a.token));
+    await until(() => m1.texts.length === 1);
+    await env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sha256 = ?1").bind(await sha256Hex(utf8(mac))).run();
+    await runDurableObjectAlarm(stub(relay));
+    await until(() => m1.closed !== null && pa1.closed !== null);
+    expect([m1.closed!.code, pa1.closed!.code]).toEqual([4001, 4008]);
 
     const fresh = await w.obiToken("obi-wellington");
     const m2 = side(await open(w, relay, fresh));

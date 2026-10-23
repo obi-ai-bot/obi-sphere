@@ -16,8 +16,6 @@ export interface Env {
   CREATOR_WORKSPACES?: string;
   /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */
   SPHERE_CREATE_LIMIT?: string;
-  /** Who may own a phone relay (spec/sphere-api.md section 9.2): `owner_keys`, anyone with an owner key; anything else, members' Macs only. */
-  RELAY_OWNERS?: string;
 }
 
 /** What the handlers take besides the request and the bindings; tests pass their own clock. */

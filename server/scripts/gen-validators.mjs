@@ -39,7 +39,6 @@ const EXPORTS = {
   jwsHeader: "wire/jws-header.schema.json",
   delegationClaims: "wire/delegation.claims.schema.json",
   actorClaims: "wire/actor.claims.schema.json",
-  relayAssertionClaims: "wire/relay-assertion.claims.schema.json",
   // What the server answers: the tests check every answer against its schema.
   healthResponse: "wire/health.response.schema.json",
   sphere: "wire/sphere.schema.json",
