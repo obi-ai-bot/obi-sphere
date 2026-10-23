@@ -6,7 +6,7 @@ import { env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test"
 import { describe, expect, it } from "vitest";
 import { handle } from "../src/app";
 import { runnerSigningInput } from "../src/routes/runner";
-import { BASE, TEAM_REVIEWS, World, expectSchema, type Key } from "./helpers";
+import { BASE, TEAM_REVIEWS, World, expectSchema, side, until, type Key } from "./helpers";
 
 const RUN = {
   title: "Write tests for average()",
@@ -247,32 +247,6 @@ async function connect(w: World, correlationId: string, token: string, upgrade =
   if (upgrade) headers.Upgrade = "websocket";
   return handle(new Request(`${BASE}/v0.1/spheres/${w.sphere}/channels/${correlationId}`, { headers }), env, { now: w.clock.now });
 }
-
-interface Side {
-  ws: WebSocket;
-  texts: string[];
-  frames: ArrayBuffer[];
-  closed: { code: number } | null;
-}
-
-function side(res: Response): Side {
-  expect(res.status).toBe(101);
-  const ws = res.webSocket!;
-  const s: Side = { ws, texts: [], frames: [], closed: null };
-  ws.accept();
-  // The test's end of the socket gets binary frames as Blobs.
-  ws.addEventListener("message", async (e) => {
-    if (typeof e.data === "string") s.texts.push(e.data);
-    else s.frames.push(e.data instanceof Blob ? await e.data.arrayBuffer() : (e.data as ArrayBuffer));
-  });
-  ws.addEventListener("close", (e) => (s.closed = { code: e.code }));
-  return s;
-}
-
-const until = async (check: () => boolean) => {
-  for (let i = 0; i < 200 && !check(); i++) await new Promise((r) => setTimeout(r, 5));
-  expect(check()).toBe(true);
-};
 
 async function accepted(w: World) {
   const guest = await w.obiToken("obi-ernesto");

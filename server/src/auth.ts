@@ -19,6 +19,8 @@ export const canonicalScope = (scopes: Iterable<string>): string => {
 };
 
 export interface Caller {
+  /** The Sphere the token is for. */
+  sphere: string;
   /** The owner the token is for. */
   subject: string;
   /** The Obi acting for the owner, or null for an owner's own token. */
@@ -31,11 +33,12 @@ const BEARER = /^Bearer ([A-Za-z0-9._~-]{1,512})$/;
 export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(token));
 
 /**
- * The caller behind `Authorization: Bearer <access token>`, for `sphere` (which exists). An
+ * The caller behind `Authorization: Bearer <access token>`, for `sphere` (which exists), or for
+ * whichever Sphere the token is for when `sphere` is null (the phone relay's paths name none). An
  * unknown, expired or revoked token, one for another Sphere, or one whose Obi was revoked, is
  * 401 unauthorized.
  */
-export async function bearer(request: Request, env: Env, sphere: SphereRow, nowS: number): Promise<Caller> {
+export async function bearer(request: Request, env: Env, sphere: SphereRow | null, nowS: number): Promise<Caller> {
   const m = BEARER.exec(request.headers.get("Authorization") ?? "");
   if (!m) throw apiError("unauthorized", "an access token is needed: Authorization: Bearer <token>");
   const row = await env.DB.prepare(
@@ -46,9 +49,9 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow, nowS
     .bind(await tokenHash(m[1]!))
     .first<{ subject: string; actor: string | null; scope: string; expires_at_s: number; revoked: number; sphere: string; actor_status: string | null }>();
   if (!row || row.revoked || row.expires_at_s <= nowS) throw apiError("unauthorized", "the access token is unknown, expired or revoked");
-  if (row.sphere !== sphere.id) throw apiError("unauthorized", "the access token is for another Sphere");
+  if (sphere && row.sphere !== sphere.id) throw apiError("unauthorized", "the access token is for another Sphere");
   if (row.actor !== null && row.actor_status !== "active") throw apiError("unauthorized", "the token's Obi is no longer an active member");
-  return { subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
+  return { sphere: row.sphere, subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
 }
 
 export function requireScope(caller: Caller, ...anyOf: Scope[]): void {

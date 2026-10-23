@@ -5,6 +5,7 @@ import type { Env } from "./env.ts";
 
 export { ChannelRelay } from "./channel.ts";
 export { Doorbell } from "./doorbell.ts";
+export { PhoneRelay } from "./relay.ts";
 
 export default {
   fetch(request: Request, env: Env): Promise<Response> {

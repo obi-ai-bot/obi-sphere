@@ -76,7 +76,7 @@ describe("POST /v0.1/spheres", () => {
     for (const configured of [undefined, "short"]) {
       const res = await handle(
         new Request(`${BASE}/v0.1/spheres`, { method: "POST", headers: { Authorization: `Bearer ${configured ?? "x"}` }, body }),
-        { DB: env.DB, CHANNELS: env.CHANNELS, DOORBELLS: env.DOORBELLS, SPHERE_OPERATOR_TOKEN: configured },
+        { DB: env.DB, CHANNELS: env.CHANNELS, DOORBELLS: env.DOORBELLS, RELAYS: env.RELAYS, SPHERE_OPERATOR_TOKEN: configured },
         { now: () => Date.now() },
       );
       expect(res.status).toBe(403);

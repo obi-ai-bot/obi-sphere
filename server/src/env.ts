@@ -6,6 +6,8 @@ export interface Env {
   CHANNELS: DurableObjectNamespace<import("./channel.ts").ChannelRelay>;
   /** One Doorbell per Obi in a Sphere: what wakes its deliveries long poll (src/doorbell.ts). */
   DOORBELLS: DurableObjectNamespace<import("./doorbell.ts").Doorbell>;
+  /** One PhoneRelay per phone relay: a Mac and its paired phones (src/relay.ts). */
+  RELAYS: DurableObjectNamespace<import("./relay.ts").PhoneRelay>;
   /** The operator token that creates Spheres: a Worker secret, at least 32 characters. Unset: every operator call is 403. */
   SPHERE_OPERATOR_TOKEN?: string;
   /** The Google OAuth client whose ID tokens sign people in (src/signin.ts). Empty: no sign-in, every sign-in call is 403. */
@@ -14,6 +16,8 @@ export interface Env {
   CREATOR_WORKSPACES?: string;
   /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */
   SPHERE_CREATE_LIMIT?: string;
+  /** Who may own a phone relay (spec/sphere-api.md section 9.2): `owner_keys`, anyone with an owner key; anything else, members' Macs only. */
+  RELAY_OWNERS?: string;
 }
 
 /** What the handlers take besides the request and the bindings; tests pass their own clock. */
