@@ -1,7 +1,8 @@
 // Send, deliveries, acknowledgements (spec/sphere-api.md section 6): every check, in order, and
 // the relay never changing what it carries.
 
-import { describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
+import { describe, expect, it, vi } from "vitest";
 import { canonicalize } from "../src/protocol/json";
 import { BRIEF, RESULT, World, expectSchema, newKey, signEnvelope, team } from "./helpers";
 
@@ -277,13 +278,43 @@ describe("deliveries and ack", () => {
     const waiting = w.call("GET", "/v0.1/spheres/e2e/deliveries?wait=5", { token: tokenA });
     await new Promise((r) => setTimeout(r, 50));
     await w.send(await review(w), tokenB);
+    const sent = Date.now();
     const d = await waiting;
     expect(d.body.deliveries).toHaveLength(1);
+    // Woken by the send's ring (src/doorbell.ts), not by its next look at the queue.
+    expect(Date.now() - sent).toBeLessThan(500);
     // With nothing queued, it answers an empty list once `wait` has passed.
     const t0 = Date.now();
     const empty = await w.call("GET", "/v0.1/spheres/e2e/deliveries?wait=1", { token: tokenB });
     expect(empty.body.deliveries).toEqual([]);
     expect(Date.now() - t0).toBeGreaterThanOrEqual(900);
+  });
+
+  it("reads D1 twice for a wait with nothing queued: once on arrival, once when the wait ends", async () => {
+    const w = await team();
+    const token = await w.obiToken("obi-ernesto");
+    const batch = vi.spyOn(env.DB, "batch");
+    try {
+      const empty = await w.call("GET", "/v0.1/spheres/e2e/deliveries?wait=1", { token });
+      expect(empty.body.deliveries).toEqual([]);
+      expect(batch).toHaveBeenCalledTimes(2);
+    } finally {
+      batch.mockRestore();
+    }
+  });
+
+  it("keeps a ring that comes while no poll waits: the next poll looks again at once", async () => {
+    // A send landing between a poll's look at the queue and its wait.
+    const bell = env.DOORBELLS.get(env.DOORBELLS.idFromName("e2e/obi-ring"));
+    const open = () => bell.fetch("https://doorbell.internal/", { headers: { Upgrade: "websocket" } });
+    await bell.ring();
+    expect((await open()).status).toBe(204);
+    // Taken by that poll: the next one waits, and a ring closes its socket.
+    const ws = (await open()).webSocket!;
+    ws.accept();
+    const closed = new Promise<number>((r) => ws.addEventListener("close", (e) => r(e.code)));
+    await bell.ring();
+    expect(await closed).toBe(1000);
   });
 
   it("needs an Obi token with receive, and a body that matches ack.request", async () => {

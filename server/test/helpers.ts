@@ -140,7 +140,7 @@ export function makeCall(clock: Clock) {
       body = JSON.stringify(o.body);
       headers["Content-Type"] ??= "application/json";
     }
-    const res = await handle(new Request(BASE + path, { method, headers, body }), env, { now: clock.now, pollMs: 20, google: GOOGLE });
+    const res = await handle(new Request(BASE + path, { method, headers, body }), env, { now: clock.now, google: GOOGLE });
     const text = await res.text();
     let parsed: unknown = text;
     try {

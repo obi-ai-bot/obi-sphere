@@ -59,11 +59,11 @@ function contended(sphere: string, steal: number, rewrite: (sql: string) => stri
 }
 
 async function sendThrough(w: World, db: D1Database, envelope: unknown, token: string, retryBudgetMs?: number) {
-  const workerEnv: Env = { DB: db, CHANNELS: env.CHANNELS, SPHERE_OPERATOR_TOKEN: env.SPHERE_OPERATOR_TOKEN };
+  const workerEnv: Env = { DB: db, CHANNELS: env.CHANNELS, DOORBELLS: env.DOORBELLS, SPHERE_OPERATOR_TOKEN: env.SPHERE_OPERATOR_TOKEN };
   const res = await handle(
     new Request(`${BASE}/v0.1/spheres/${w.sphere}/messages`, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(envelope) }),
     workerEnv,
-    { now: w.clock.now, pollMs: 20, ...(retryBudgetMs === undefined ? {} : { retryBudgetMs }) },
+    { now: w.clock.now, ...(retryBudgetMs === undefined ? {} : { retryBudgetMs }) },
   );
   return { status: res.status, headers: res.headers, body: (await res.json()) as any };
 }

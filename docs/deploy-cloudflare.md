@@ -30,10 +30,9 @@ The first test deploy ran in the owner's personal account at `obi-sphere.well0cp
 
 ## The plan
 
-A team needs Workers Paid ($5 a month) on the Deskree account. The Free plan isn't enough for two reasons:
+Deskree's account should be on Workers Paid ($5 a month): its team can pass the Free plan's 100,000 requests a day, which holds about 15 people with Oby running ([run-your-own.md](run-your-own.md), "The plan").
 
-- Its CPU limit is 10 ms a request, and the smoke run's p99 was 9.3 ms.
-- Long polls (`wait=25`) query D1 every 250 ms. With a handful of Obis online, that would use up the Free plan's 5 million D1 rows read a day.
+Until the Doorbell ([`server/src/doorbell.ts`](../server/src/doorbell.ts)) even a small team didn't fit Free. Long polls (`wait=25`) read D1 every 250 ms, about 100 rows a wait, so Free's 5 million D1 rows read a day ran out at about 11 Obis online, and they were the calls heaviest on CPU (the smoke run's p99 was 9.3 ms against Free's 10 ms). A waiting poll now sleeps on a Durable Object and reads D1 twice.
 
 The owner turned on Workers Paid for the personal account that held the first deploy. Whether the Deskree account has it still needs checking: go to dash.cloudflare.com, then Deskree, Workers & Pages, Plans.
 
@@ -73,6 +72,8 @@ pnpm run deploy -- --env deskree    # new migrations first, then the Worker
 
 Apply a migration immediately before the deploy that needs it, as the script does: between the two, the running Worker meets a table it doesn't know. Then check the routes, old and new (a call without a token answers `401` on every route that needs one).
 
+The first deploy with the Doorbell adds a Durable Object class (`v2-doorbells` in `wrangler.jsonc`). Cloudflare then refuses `wrangler rollback` to any version before it ([Rollbacks, "Bindings"](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/#bindings)): from there on, undo by deploying the older code with the `Doorbell` class still exported.
+
 To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --env deskree` and update the Keychain item (account `obysphere.deskree.com`) to match. Until 2026-10-23 the script kept it under account `deskree`; Oby no longer looks there, so move that item to the host's account once.
 
 ## Rolling back
@@ -84,7 +85,7 @@ To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --e
 | `7c7284b9-5707-4ac0-8f63-0bcd1c13946d` | `c156106`, sharing | 2026-10-22 | `0002` |
 | `4f2c3b94-0c1a-44ef-979c-8738e6530222` | before sharing | 2026-10-20 | `0001` |
 
-A Worker version runs only on the D1 schema it was deployed with, or on an additive change to it. `0004_signin.sql` only adds, so rolling the Worker alone back to `e0c87c86` is safe. `0003_open_invitations.sql` rebuilt the `invitations` table without `used_at`, which `7c7284b9`'s redeem reads and writes, so **rolling back to `7c7284b9` breaks redeem** unless the D1 is restored too, and a restore undoes every write since (members who joined, messages, the audit chain).
+Once the Doorbell is deployed, none of these versions can be rolled back to ("Redeploying"). A Worker version runs only on the D1 schema it was deployed with, or on an additive change to it. `0004_signin.sql` only adds, so rolling the Worker alone back to `e0c87c86` is safe. `0003_open_invitations.sql` rebuilt the `invitations` table without `used_at`, which `7c7284b9`'s redeem reads and writes, so **rolling back to `7c7284b9` breaks redeem** unless the D1 is restored too, and a restore undoes every write since (members who joined, messages, the audit chain).
 
 Before each migration, take a Time Travel bookmark (`wrangler d1 time-travel info obi-sphere`). The ones taken so far:
 

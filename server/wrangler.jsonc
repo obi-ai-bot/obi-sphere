@@ -25,8 +25,17 @@
     "CREATOR_WORKSPACES": ""
   },
   // One ChannelRelay per run_request exchange: the job channel (spec/sphere-api.md section 6.3).
-  "durable_objects": { "bindings": [{ "name": "CHANNELS", "class_name": "ChannelRelay" }] },
-  "migrations": [{ "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] }],
+  // One Doorbell per Obi: what wakes its deliveries long poll (src/doorbell.ts).
+  "durable_objects": {
+    "bindings": [
+      { "name": "CHANNELS", "class_name": "ChannelRelay" },
+      { "name": "DOORBELLS", "class_name": "Doorbell" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] },
+    { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] }
+  ],
   // No database_id: `wrangler deploy` makes the database the first time (scripts/deploy.mjs).
   "d1_databases": [{ "binding": "DB", "database_name": "obi-sphere", "migrations_dir": "migrations" }],
   "env": {
@@ -44,8 +53,16 @@
         // Anyone with a deskree.com Google Workspace account may create an Obysphere.
         "CREATOR_WORKSPACES": "deskree.com"
       },
-      "durable_objects": { "bindings": [{ "name": "CHANNELS", "class_name": "ChannelRelay" }] },
-      "migrations": [{ "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] }],
+      "durable_objects": {
+        "bindings": [
+          { "name": "CHANNELS", "class_name": "ChannelRelay" },
+          { "name": "DOORBELLS", "class_name": "Doorbell" }
+        ]
+      },
+      "migrations": [
+        { "tag": "v1-channels", "new_sqlite_classes": ["ChannelRelay"] },
+        { "tag": "v2-doorbells", "new_sqlite_classes": ["Doorbell"] }
+      ],
       "d1_databases": [
         { "binding": "DB", "database_name": "obi-sphere", "database_id": "ff9bde6f-e277-47c8-b6e6-309bf00f87c7", "migrations_dir": "migrations" }
       ]
