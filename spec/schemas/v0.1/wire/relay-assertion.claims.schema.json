@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/relay-assertion.claims.schema.json",
+  "title": "Relay assertion claims",
+  "description": "The JWT payload a Mac signs with an owner key to own a phone relay, on a Sphere server that lets anyone with an owner key (sphere-api.md section 9.2).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "iss",
+    "aud",
+    "iat",
+    "exp",
+    "jti"
+  ],
+  "properties": {
+    "iss": {
+      "$ref": "../common.schema.json#/$defs/public_key"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 39,
+      "maxLength": 60,
+      "pattern": "^obi-sphere:relay:[A-Za-z0-9_-]{22,43}$"
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "exp": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "jti": {
+      "$ref": "../common.schema.json#/$defs/uuid"
+    }
+  }
+}
