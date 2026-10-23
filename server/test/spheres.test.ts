@@ -106,6 +106,22 @@ describe("POST /v0.1/spheres", () => {
     expect(notJson.status).toBe(400);
   });
 
+  it("is 409 conflict for a reserved id, even for the operator, and answers GET for one 401, taken", async () => {
+    const w = new World();
+    const key = await newKey();
+    for (const sphere of ["avenga", "tetrix", "oby", "app", "www", "admin", "api", "help", "acme"]) {
+      const r = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, body: { sphere, name: "Taken", admin: { owner: "wellington", owner_key: key.publicKey } } });
+      expect(r.status, sphere).toBe(409);
+      expect(r.body.error.code).toBe("conflict");
+      const got = await w.call("GET", `/v0.1/spheres/${sphere}`);
+      expect(got.status, sphere).toBe(401);
+      expect(got.body.error.code).toBe("unauthorized");
+    }
+    await w.create();
+    expect((await w.call("GET", "/v0.1/spheres/oby", { token: await w.ownerToken() })).status).toBe(401);
+    expect((await w.call("GET", "/v0.1/spheres/oby-two")).status).toBe(404);
+  });
+
   it("is 413 payload_too_large past 131,072 bytes", async () => {
     const w = new World();
     const r = await w.call("POST", "/v0.1/spheres", { token: OPERATOR, raw: `{"sphere":"${"a".repeat(131072)}"}` });

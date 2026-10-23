@@ -1,7 +1,7 @@
 // Spheres (spec/sphere-api.md section 3) and health.
 
 import { bearer, requireOperator } from "../auth.ts";
-import { constraintFailure, requireSphere, unforeseen, type SphereRow } from "../db.ts";
+import { constraintFailure, getSphere, unforeseen, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
 import { keyIdOf } from "../protocol/crypto.ts";
@@ -28,6 +28,15 @@ export const joinPage = (): Response =>
 
 export const sphereJson = (s: SphereRow) => ({ sphere: s.id, name: s.name, protocol: PROTOCOL, admin_owner: s.admin_owner, created_at: s.created_at });
 
+/** Sphere ids taken from the start, Sangam's TAKEN list (sphere-api.md section 3): nobody creates them. */
+export const RESERVED_SPHERES = new Set(["avenga", "tetrix", "oby", "app", "www", "admin", "api", "help", "acme"]);
+
+/** How many Spheres one account may be the admin owner of (`SPHERE_CREATE_LIMIT`, section 3, "How many"). */
+const createLimit = (env: Env): number => {
+  const n = Number(env.SPHERE_CREATE_LIMIT ?? "");
+  return env.SPHERE_CREATE_LIMIT && Number.isInteger(n) && n >= 0 ? n : 3;
+};
+
 interface CreateSphere {
   sphere: string;
   name: string;
@@ -53,7 +62,12 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
   if (signedIn) {
     signin = await checkSignIn(env.DB, req.signin!, req.admin.owner_key, Math.floor(deps.now() / 1000));
     if (!signin.workspace || !creatorWorkspaces(env).includes(signin.workspace)) throw apiError("forbidden", "this account's Workspace may not create Spheres here");
+    // ponytail: count, then insert; two creates racing can pass the limit by one each.
+    const admin = await env.DB.prepare("SELECT COUNT(*) AS n FROM spheres s JOIN owners o ON o.sphere = s.id AND o.owner = s.admin_owner WHERE o.account = ?1")
+      .bind(signin.account).first<{ n: number }>();
+    if ((admin?.n ?? 0) >= createLimit(env)) throw apiError("rate_limited", "this account is the admin of as many Spheres as this server allows");
   }
+  if (RESERVED_SPHERES.has(req.sphere)) throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
   let ownerKeyId: string;
   try {
     ownerKeyId = await keyIdOf(req.admin.owner_key);
@@ -78,7 +92,10 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
 }
 
 export async function getSphereRoute(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
-  const sphere = await requireSphere(env.DB, sphereId);
+  // A reserved id with no Sphere answers as a Sphere does to a caller without its token: 401, taken
+  // (section 3). No token is for a Sphere that doesn't exist, so the stand-in never lets one through.
+  const sphere = (await getSphere(env.DB, sphereId)) ?? (RESERVED_SPHERES.has(sphereId) ? ({ id: sphereId } as SphereRow) : null);
+  if (!sphere) throw apiError("not_found", `no Sphere ${sphereId}`);
   await bearer(request, env, sphere, Math.floor(deps.now() / 1000));
   return json(200, sphereJson(sphere));
 }

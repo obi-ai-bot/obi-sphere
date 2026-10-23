@@ -122,6 +122,35 @@ describe("creating a Sphere with a sign-in", () => {
   });
 });
 
+describe("how many Spheres an account creates", () => {
+  const create = async (w: World, sub: string, sphere: string, e = env) => {
+    const key = await newKey();
+    const s = await signIn(w, key, { sub });
+    const body = JSON.stringify(createBody(key, { state: s.state, code: s.code }, sphere));
+    const r = await handle(new Request(`${BASE}/v0.1/spheres`, { method: "POST", body }), e, { now: w.clock.now, google: GOOGLE });
+    return { status: r.status, body: (await r.json()) as any, headers: r.headers, state: s.state };
+  };
+
+  it("is 429 rate_limited past 3 for one account, without using the sign-in, and counts nobody else's", async () => {
+    const w = new World();
+    for (const id of ["one", "two", "three"]) expect((await create(w, "1001", id)).status, id).toBe(201);
+    const fourth = await create(w, "1001", "four");
+    expect(fourth.status).toBe(429);
+    expect(fourth.body.error.code).toBe("rate_limited");
+    expect(fourth.headers.get("Retry-After")).toBeNull();
+    expect(await env.DB.prepare("SELECT used FROM sign_ins WHERE state = ?1").bind(fourth.state).first()).toEqual({ used: 0 });
+    expect((await create(w, "2002", "four")).status).toBe(201);
+    expect((await w.call("POST", "/v0.1/spheres", { token: OPERATOR, body: { sphere: "five", name: "Five", admin: { owner: "doti", owner_key: (await newKey()).publicKey } } })).status).toBe(201);
+  });
+
+  it("takes the limit from SPHERE_CREATE_LIMIT", async () => {
+    const w = new World();
+    const one = { ...env, SPHERE_CREATE_LIMIT: "1" };
+    expect((await create(w, "1001", "one", one)).status).toBe(201);
+    expect((await create(w, "1001", "two", one)).status).toBe(429);
+  });
+});
+
 describe("an invitation for one Workspace", () => {
   async function setup() {
     const w = new World();
