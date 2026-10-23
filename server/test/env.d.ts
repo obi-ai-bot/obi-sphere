@@ -8,6 +8,7 @@ declare global {
     interface Env extends WorkerEnv {
       TEST_MIGRATIONS: D1Migration[];
       SPHERE_OPERATOR_TOKEN: string;
+      GOOGLE_CLIENT_ID: string;
     }
   }
 }

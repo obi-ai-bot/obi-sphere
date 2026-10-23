@@ -15,6 +15,14 @@ describe("health", () => {
     expect(r.headers.get("Content-Type")).toBe("application/json");
   });
 
+  it("tells someone who opens an invite link in a browser what to do with it", async () => {
+    const r = await handle(new Request(`${BASE}/join`), env, { now: () => 0 });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("Content-Type")).toContain("text/html");
+    expect(r.headers.get("Content-Security-Policy")).toContain("default-src 'none'");
+    expect(await r.text()).toContain("Settings › Obysphere");
+  });
+
   it("answers 404 not_found for anything not in the API", async () => {
     const call = makeCall(new Clock());
     for (const [method, path] of [["GET", "/"], ["GET", "/v0.1/nothing"], ["DELETE", "/v0.1/health"], ["GET", "/v0.1/spheres"], ["POST", "/v0.1/spheres/e2e/audit"]] as const) {

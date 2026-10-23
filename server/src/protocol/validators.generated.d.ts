@@ -16,6 +16,8 @@ export declare const runnerStatus: Validator;
 export declare const agentCard: Validator;
 export declare const auditEntry: Validator;
 export declare const createSphereRequest: Validator;
+export declare const signinRequest: Validator;
+export declare const signinResponse: Validator;
 export declare const invitationRequest: Validator;
 export declare const invitationPreviewRequest: Validator;
 export declare const redeemRequest: Validator;

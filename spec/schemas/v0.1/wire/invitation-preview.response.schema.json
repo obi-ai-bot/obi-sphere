@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/wire/invitation-preview.response.schema.json",
   "title": "POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/preview answer",
-  "description": "What a Join screen shows before joining: the Sphere's name, how many members are active in it, and when the invitation expires.",
+  "description": "What a Join screen shows before joining: the Sphere's name, how many members are active in it, when the invitation expires, and the Workspace whose people alone may use it, if any.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -27,6 +27,9 @@
     },
     "expires_at": {
       "$ref": "../common.schema.json#/$defs/timestamp"
+    },
+    "domain": {
+      "$ref": "../common.schema.json#/$defs/domain"
     }
   }
 }

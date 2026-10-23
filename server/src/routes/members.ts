@@ -12,6 +12,7 @@ import { constantTimeEqual, keyIdOf, randomToken, sha256, sha256Hex, uuid } from
 import { timestamp } from "../protocol/envelope.ts";
 import { canonicalize, utf8 } from "../protocol/json.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
+import { checkSignIn, type SignIn } from "../signin.ts";
 import { visibleRunners } from "./runner.ts";
 
 const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
@@ -33,17 +34,20 @@ export async function invite(request: Request, env: Env, deps: Deps, sphereId: s
   const errors = schemaErrors("invitationRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match invitation.request", errors);
   // A named invitation (owner and obi) is used once; an open one by up to max_uses Obis.
-  const req = body as unknown as { owner?: string; obi?: string; expires_in: number; max_uses?: number };
+  const req = body as unknown as { owner?: string; obi?: string; expires_in: number; max_uses?: number; domain?: string };
+  // Only a Sphere server that signs people in can tell who is at a domain (section 3.1).
+  if (req.domain !== undefined && !env.GOOGLE_CLIENT_ID?.trim()) throw apiError("forbidden", "this Sphere server has no sign-in, so it can't limit an invitation to a domain");
   if (req.obi !== undefined && (await obiTaken(env.DB, sphere.id, req.obi))) throw apiError("conflict", `${req.obi} is or was a member: Obi ids are never reused`);
   const id = uuid();
   const secret = randomToken(32);
   const expiresAt = nowS(deps) + req.expires_in;
   const maxUses = req.max_uses ?? 1;
-  await env.DB.prepare("INSERT INTO invitations (id, sphere, owner, obi, secret_sha256, expires_at_s, max_uses) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)")
-    .bind(id, sphere.id, req.owner ?? null, req.obi ?? null, await sha256Hex(utf8(secret)), expiresAt, maxUses)
+  await env.DB.prepare("INSERT INTO invitations (id, sphere, owner, obi, secret_sha256, expires_at_s, max_uses, domain) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
+    .bind(id, sphere.id, req.owner ?? null, req.obi ?? null, await sha256Hex(utf8(secret)), expiresAt, maxUses, req.domain ?? null)
     .run();
   const named = req.owner !== undefined ? { owner: req.owner, obi: req.obi } : {};
-  return json(201, { invitation_id: id, sphere: sphere.id, ...named, max_uses: maxUses, secret, expires_at: timestamp(expiresAt) });
+  const domain = req.domain !== undefined ? { domain: req.domain } : {};
+  return json(201, { invitation_id: id, sphere: sphere.id, ...named, max_uses: maxUses, ...domain, secret, expires_at: timestamp(expiresAt) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -79,6 +83,7 @@ interface InvitationRow {
   expires_at_s: number;
   max_uses: number;
   uses: number;
+  domain: string | null;
 }
 
 const DUMMY_HASH = "0".repeat(64);
@@ -102,7 +107,7 @@ export async function previewInvitation(request: Request, env: Env, deps: Deps, 
   if (errors.length) throw apiError("bad_request", "the body doesn't match invitation-preview.request", errors);
   const inv = await usableInvitation(env.DB, sphere.id, invitationId, (body as unknown as { secret: string }).secret, nowS(deps));
   const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM members WHERE sphere = ?1 AND status = 'active'").bind(sphere.id).first<{ n: number }>();
-  return json(200, { sphere: sphere.id, name: sphere.name, member_count: count?.n ?? 0, expires_at: timestamp(inv.expires_at_s) });
+  return json(200, { sphere: sphere.id, name: sphere.name, member_count: count?.n ?? 0, expires_at: timestamp(inv.expires_at_s), ...(inv.domain ? { domain: inv.domain } : {}) });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -114,13 +119,20 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
   const body = await readJson(request);
   const errors = schemaErrors("redeemRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match redeem.request", errors);
-  const req = body as unknown as { secret: string; owner_key: string; card: AgentCard };
+  const req = body as unknown as { secret: string; owner_key: string; card: AgentCard; signin?: { state: string; code: string } };
 
   return withRetries(async () => {
     const sphere = await requireSphere(env.DB, sphere0.id);
     const now = nowS(deps);
     // 2. The invitation.
     const inv = await usableInvitation(env.DB, sphere.id, invitationId, req.secret, now);
+    // An invitation for one Workspace: a sign-in from it, for this owner key (section 3.1).
+    let signin: SignIn | null = null;
+    if (inv.domain !== null) {
+      if (!req.signin) throw apiError("forbidden", `this invitation is for ${inv.domain} accounts: sign in first`);
+      signin = await checkSignIn(env.DB, req.signin, req.owner_key, now);
+      if (signin.workspace !== inv.domain) throw apiError("forbidden", `this invitation is for ${inv.domain} accounts`);
+    }
     // 3 and 4. The card, and that it is the invitation's. An open invitation's card names its own Obi and owner.
     const verdict = await verifyCard(req.card, { now });
     if (!verdict.ok) throw apiError("card_invalid", verdict.message);
@@ -131,6 +143,12 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
     // 5. The owner's bound key.
     const bound = await getOwner(env.DB, sphere.id, p.owner);
     if (bound && bound.owner_key !== req.owner_key) throw apiError("forbidden", "the owner already has another bound key");
+    // One owner per account.
+    if (signin) {
+      if (bound?.account && bound.account !== signin.account) throw apiError("forbidden", "the owner is bound to another account");
+      const other = await env.DB.prepare("SELECT owner FROM owners WHERE sphere = ?1 AND account = ?2").bind(sphere.id, signin.account).first<{ owner: string }>();
+      if (other && other.owner !== p.owner) throw apiError("conflict", "this account joined as another owner");
+    }
     // 6 and 7. Ids are never reused.
     if (await keyTaken(env.DB, sphere.id, p.key_id)) throw apiError("conflict", "another member uses this key_id");
     if (await obiTaken(env.DB, sphere.id, p.obi_id)) throw apiError("conflict", `${p.obi_id} is or was a member: Obi ids are never reused`);
@@ -143,6 +161,12 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
       // Past max_uses, the table's check aborts the whole batch.
       env.DB.prepare("UPDATE invitations SET uses = uses + 1 WHERE id = ?1").bind(inv.id),
       env.DB.prepare("INSERT OR IGNORE INTO owners (sphere, owner, owner_key, owner_key_id) VALUES (?1, ?2, ?3, ?4)").bind(owner.sphere, owner.owner, owner.owner_key, owner.owner_key_id),
+      ...(signin
+        ? [
+            env.DB.prepare("UPDATE owners SET account = ?3 WHERE sphere = ?1 AND owner = ?2 AND account IS NULL").bind(owner.sphere, owner.owner, signin.account),
+            env.DB.prepare("UPDATE sign_ins SET used = used + 1 WHERE state = ?1").bind(signin.state),
+          ]
+        : []),
       env.DB.prepare("INSERT INTO members (sphere, obi, owner, status, joined_at, card, card_seq) VALUES (?1, ?2, ?3, 'active', ?4, ?5, ?6)").bind(
         member.sphere, member.obi, member.owner, member.joined_at, member.card, member.card_seq,
       ),

@@ -1,7 +1,7 @@
 {
   "case": "wire",
   "name": "invalid-invitation-email-domain",
-  "description": "A domain limit: not in v0.1, the Sphere can't enforce it without an identity provider.",
+  "description": "A domain limit under another name: it is `domain`.",
   "expect": "reject",
   "reason": "bad_request",
   "context": {

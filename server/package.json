@@ -21,8 +21,7 @@
     "check:fixtures": "node scripts/check-fixtures.mjs",
     "gen:validators": "node scripts/gen-validators.mjs",
     "check:validators": "node scripts/gen-validators.mjs --check",
-    "migrate:remote": "wrangler d1 migrations apply obi-sphere --remote",
-    "deploy": "wrangler deploy"
+    "deploy": "node scripts/deploy.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.0",
