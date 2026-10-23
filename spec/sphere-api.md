@@ -12,7 +12,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
   - **none**: `GET /v0.1/health`, the token endpoint, signing in (section 3.1), and previewing or redeeming an invitation (its secret is the credential);
   - **operator**: `Authorization: Bearer <operator token>`, only for creating Spheres; a Sphere can be created with a **sign-in** instead (section 3.1). The operator token is the Worker secret `SPHERE_OPERATOR_TOKEN` (at least 32 characters). A Sphere server without one refuses every operator call (`403 forbidden`). It is compared in constant time and never logged;
   - **bearer**: `Authorization: Bearer <access token>` from the token endpoint (identity.md, "Delegation"). A token is for one Sphere; it carries a subject (the owner), maybe an actor (the Obi) and scopes. "Obi token" below means a token with an actor; "owner token" one without.
-  - **relay**: the phone relay's own (section 9): a phone's relay token, or a Mac's access token or relay assertion.
+  - **relay**: the phone relay's own (section 9): a phone's relay token, or the Mac's access token.
   - An **owner token on an endpoint that needs an Obi token** (section 2: changing a card, fetching and acknowledging deliveries) is `403 forbidden`. Sending is the one exception: section 6.1, check 1, answers it `401 unauthorized`, before the body is read.
   - The other way round, an **Obi token on an endpoint that needs an owner token** (section 2) is refused too: those are the owner's own steps, never an Obi's. Revoking a member, which needs no scope, answers it `403 forbidden`, even when the member is that Obi itself. Creating an invitation and replacing the policy check their scope first, and an Obi's token never holds `admin` (identity.md 4.2), so there it is `403 insufficient_scope`.
 - **Errors.** Every non-2xx answer except the token endpoint's is [error.schema.json](schemas/v0.1/wire/error.schema.json): `{"error": {"code": "<code>", "message": "<one line>", "details": ["…"]}}`. `message` and `details` are for people and are data. The token endpoint answers OAuth errors (RFC 6749 section 5.2): `{"error": "invalid_grant", "error_description": "…"}`.
@@ -70,8 +70,8 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `GET /v0.1/spheres/{sphere}/channels/{correlation_id}` (WebSocket) | Obi token of a party | `receive` | | `101`, then frames (section 6.3) |
 | `PUT /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | [runner-status](schemas/v0.1/runner-status.schema.json) | `200` member |
 | `DELETE /v0.1/spheres/{sphere}/members/{obi}/runner` | Obi token of `{obi}` | `receive` | | `200` member |
-| `PUT`, `DELETE /v0.1/relay/{relay}`, `PUT`, `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` | relay: the Mac | | | section 9.2 |
-| `GET /v0.1/relay/{relay}` (WebSocket) | relay: the Mac, or a phone | | | `101`, then frames (section 9.3) |
+| `PUT`, `DELETE /v0.1/relay/{relay}`, `PUT`, `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` | Obi token: the Mac | `receive` | | section 9.2 |
+| `GET /v0.1/relay/{relay}` (WebSocket) | Obi token: the Mac; or a phone's relay token | `receive` (the Mac) | | `101`, then frames (section 9.3) |
 
 A path for a Sphere that doesn't exist is `404 not_found`; a token for another Sphere on it is `401 unauthorized`.
 
@@ -357,7 +357,9 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
 
 A Mac's Obi lets its owner's phones reach it through the Sphere, so the Mac opens no port and needs no tunnel. The Mac keeps one WebSocket on its **relay**; each paired phone opens its own on the same relay; the Sphere passes binary frames between the Mac and each phone. It is not part of the Obi-to-Obi protocol: no message, scope or audit entry changes.
 
-**What the Sphere sees.** Every frame is an envelope the Mac and the phone seal end to end: Oby's own phone protocol, versioned, with the Mac's key pinned from the pairing QR and protection against replay and downgrade, which this spec doesn't define. The Sphere reads none of it. It sees each frame's size and time, and which phone it comes from or goes to; never a body, a credential the phone holds for the Mac, or a login. It keeps nothing of a frame and logs none. What it stores is each relay's id and owner and the SHA-256 of each phone's relay token.
+**What the Sphere sees.** Every frame is an envelope the Mac and the phone seal end to end: Oby's own phone protocol, versioned, with the Mac's key pinned from the pairing QR and protection against replay and downgrade, which this spec doesn't define. The Sphere reads none of it. It sees each frame's size and time, and which phone it comes from or goes to; never a body, a credential the phone holds for the Mac, or a login. It keeps nothing of a frame and logs none. What it stores: each relay's id and its Mac (the member's Sphere and Obi id); the SHA-256 of each phone's relay token; for a connected Mac, the SHA-256 of the access token its socket opened with; and when each socket opened in the last 10 minutes (section 9.3, "Limits").
+
+**Which phone sent a frame.** The device id the Sphere puts on a phone's frames (section 9.3) is only its routing: the Sphere's claim, which the Mac can't check. The sealed envelope itself must prove which paired phone sealed it, and the Mac trusts a frame's sender only from that.
 
 ### 9.1 Pairing (informative)
 
@@ -367,12 +369,7 @@ When the Mac pairs a phone it makes a **relay token** for it, 32 random bytes in
 
 ### 9.2 Owning a relay
 
-Who may own a relay is the Sphere operator's choice, the Worker setting `RELAY_OWNERS`:
-
-- **`members`** (the default, and what any other value means): **a member's Mac**. Its Obi authenticates as it does everywhere else, with its own access token (`Authorization: Bearer <access token>`, an Obi token with `receive`; identity.md section 4), from any Sphere on this server. The relay belongs to that Obi in that Sphere, whatever key it holds later.
-- **`owner_keys`**: **anyone with an owner key**, member or not. A member's Mac may still use its access token; any Mac may instead send a **relay assertion**, `Authorization: Bearer <relay assertion>`: a JWT with identity.md 4.1's header (`kid` the key id of `iss`), signed by an Ed25519 key, whose claims are [relay-assertion.claims](schemas/v0.1/wire/relay-assertion.claims.schema.json): `iss` the public key (base64url), `aud` `obi-sphere:relay:<relay id>`, `iat`, `exp` at most 300 seconds after `iat`, and `jti`, a UUID. The Sphere accepts it when it matches the schema and names this relay, `iat` is at most 300 seconds ahead of its clock, `exp` is after it, the signature verifies with `iss`, and its `jti` wasn't used before by that key (it remembers each until `exp`); `401 unauthorized` otherwise. The relay belongs to that key. Nothing stops one person making many keys: on `owner_keys` the limits bound each relay and each key, not each person.
-
-On `members`, a relay assertion is `403 forbidden`. An owner's own token (no actor) is `403 forbidden`, an Obi token without `receive` `403 insufficient_scope`, and a token that is unknown, expired or revoked, or whose Obi was revoked, `401 unauthorized`. The **Mac** below is the relay's owner, with a valid credential as above.
+A relay belongs to **a member's Mac**: its Obi authenticates as it does everywhere else, with its own access token (`Authorization: Bearer <access token>`, an Obi token with `receive`; identity.md section 4). Any member of any Sphere on this server may own relays: a Sphere server relays for every member of every Sphere it holds, and for nobody else. The relay belongs to that Obi in that Sphere, whatever key it holds later. An owner's own token (no actor) is `403 forbidden`, an Obi token without `receive` `403 insufficient_scope`, and a token that is unknown, expired or revoked, or whose Obi was revoked, `401 unauthorized`. The **Mac** below is the relay's Obi, with a valid token.
 
 | Method and path | Who | Answer |
 |---|---|---|
@@ -382,29 +379,29 @@ On `members`, a relay assertion is `403 forbidden`. An owner's own token (no act
 | `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` | the Mac | `204` |
 | `GET /v0.1/relay/{relay}` (WebSocket) | the Mac, or a phone with its relay token | `101`, then frames (section 9.3) |
 
-- **Register.** `PUT /relay/{relay}` makes the relay the caller's, and answers it: `{"relay": "<relay id>", "devices": ["<token_sha256>", …]}`, its devices in lower-case hex order. A relay id another owner has is `409 conflict`. A Mac (an Obi, or a key) owns at most 4 relays: a fifth is `429 rate_limited`, with no `Retry-After`, since waiting doesn't free one; deleting one does.
+- **Register.** `PUT /relay/{relay}` makes the relay the caller's, and answers it: `{"relay": "<relay id>", "devices": ["<token_sha256>", …]}`, its devices in lower-case hex order. A relay id another Mac has is `409 conflict`. A Mac owns at most 4 relays: a fifth is `429 rate_limited`, with no `Retry-After`, since waiting doesn't free one; deleting one does.
 - **Add a phone.** `PUT /devices/{token_sha256}`: `token_sha256` is the lower-case hex SHA-256 of the UTF-8 bytes of the phone's relay token (64 characters; anything else is `400 bad_request`). It is also the device's id on the relay. A relay has at most 16 devices: a 17th is `429 rate_limited`, with no `Retry-After`.
 - **Forget a phone.** `DELETE /devices/{token_sha256}` deletes the hash and closes that phone's socket at once with `4001`. A hash the relay doesn't have is `404 not_found`.
 - **Delete the relay.** `DELETE /relay/{relay}` deletes it with its devices' hashes and closes every socket on it with `4001`.
-- A relay that doesn't exist is `404 not_found`, and one another owner has `403 forbidden` (except for `PUT /relay/{relay}`, above). These requests take no body.
+- A relay that doesn't exist is `404 not_found`, and one another Mac has `403 forbidden` (except for `PUT /relay/{relay}`, above). These requests take no body.
 
-A member who is revoked can't authenticate any more: its relays stop working, and their phones are closed with `4008` (section 9.3). A card rotation revokes the Obi's tokens, not its relays: the Mac opens its socket again with a new token.
+**When the member goes.** Revoking a member (section 4, "Rotate and revoke") deletes its relays and their devices' hashes in the same transaction: within a minute every socket on them is closed with `4001`, and its phones' tokens open nothing. A card rotation revokes the Obi's tokens, not its relays: the Mac opens its socket again with a new token.
 
 ### 9.3 The relay socket
 
 `GET /v0.1/relay/{relay}` with `Upgrade: websocket`; without it, `400 bad_request`. The caller sends `Authorization: Bearer <value>`:
 
 1. When the value's SHA-256 is one of the relay's devices, the caller is that **phone**.
-2. Otherwise it must be the relay's Mac, as section 9.2 says. A value that is neither (a wrong or forgotten relay token, a token or an assertion that doesn't pass) is `401 unauthorized`, whether or not the relay exists.
+2. Otherwise it must be the relay's Mac, as section 9.2 says. A value that is neither (a wrong or forgotten relay token, an access token that doesn't pass) is `401 unauthorized`, whether or not the relay exists.
 
 Then:
 
-- **One socket each.** The Mac has one socket on its relay and each device has one: a new one replaces the earlier one, which is closed with `4003`. A Mac whose socket is replaced hasn't left, and its phones see nothing: a Mac renews its access token before it expires by opening a new socket with the new token.
-- **When the Mac isn't there.** A phone that opens while the relay has no Mac socket is closed right after the upgrade with `4008`, and when the Mac's socket closes, other than by being replaced, every phone is closed with `4008`. The phone tells its person that their Mac isn't reachable, and opens again later.
-- **Frames.** Binary only, relayed in order. A phone sends an envelope, at most 262,144 bytes; the Mac gets it as the phone's device id, the 32 raw bytes of its `token_sha256`, followed by the frame unchanged. The Mac sends a device id's 32 bytes followed by an envelope of at most 262,144 bytes (262,176 bytes in all); that device gets the envelope, without the 32 bytes. A frame for a device that isn't connected is dropped. A frame over its size closes its socket with `1009`.
+- **One socket each.** The Mac has one socket on its relay and each device has one: a new one replaces the earlier one, which is closed with `4003`. A Mac whose socket is replaced hasn't left, and its phones see nothing: a Mac renews its access token before it expires by opening a new socket with the new token. A phone closed with `4003` never opens again by itself: another socket of its own took over.
+- **When the Mac isn't there.** A phone that opens while the relay has no Mac socket is closed right after the upgrade with `4008`, and when the Mac's socket closes, other than by being replaced, every phone is closed with `4008`. The phone tells its person that their Mac isn't reachable, and opens again no sooner than 30 seconds later, doubling the wait after each `4008` up to 5 minutes, and at once when its person asks.
+- **Frames.** Binary only, relayed in order. A phone sends an envelope, at most 262,144 bytes; the Mac gets it as the phone's device id, the 32 raw bytes of its `token_sha256`, followed by the frame unchanged. The Mac sends a device id's 32 bytes followed by an envelope of at most 262,144 bytes (262,176 bytes in all); that device gets the envelope, without the 32 bytes. A frame from the Mac for a device that isn't connected, or shorter than 32 bytes, is dropped. A frame over its size closes its socket with `1009`.
 - **Text frames.** A socket may send the text frame `ping`, which the Sphere answers `pong`; any other text frame closes it with `4004`. The Sphere sends the Mac `{"device": "<token_sha256>", "peer": "joined"}` when a phone's socket opens, and for each phone already there when the Mac's own socket opens, and `{"device": "<token_sha256>", "peer": "left"}` when a phone's socket closes other than by being replaced. A `joined` for a device that is there already means its phone started over on a new socket. Phones get no text frames but `pong`.
-- **Limits.** A relay carries at most 3,000 frames and 32 MiB (33,554,432 bytes) a minute, across all its sockets, each minute counted from the first frame in it. The frame that passes either is dropped and its socket closed with `4009`. A socket that sent no frame and no `ping` for 2 minutes is closed with `4006`: each side sends `ping` every 30 seconds while it has nothing else to send. The Mac, and each device, opens its socket at most 30 times in 10 minutes; past that, `429 rate_limited` with `Retry-After`.
-- **Closing.** Within a minute, the Sphere closes the Mac's socket with `4001` once its Obi or its token is revoked, and with `4007` once its token has expired (it opens again with a new one); a socket opened with a relay assertion is checked only when it opens. A device's socket is closed with `4001` once its hash is deleted, and every socket once the relay is deleted, both at once.
+- **Limits.** Each socket sends at most so much a minute, each minute counted from its first frame in it: a phone 1,200 frames and 16 MiB (16,777,216 bytes); the Mac, which serves every phone, 4,800 frames and 64 MiB. The frame that passes either is dropped and its socket closed with `4009`; the other sockets carry on, and a socket that opens again within the minute finds it still counted. A socket that sent no frame and no `ping` for 2 minutes is closed with `4006`: each side sends `ping` every 30 seconds while it has nothing else to send. The Mac, and each device, opens its socket at most 30 times in 10 minutes; past that, `429 rate_limited` with `Retry-After`.
+- **Closing.** Within a minute, the Sphere closes the Mac's socket with `4001` once its Obi or its token is revoked, and with `4007` once its token has expired (it opens again with a new one). A device's socket is closed with `4001` once its hash is deleted, and every socket once the relay is deleted, both at once.
 
 | Close code | Why |
 |---|---|
@@ -415,4 +412,4 @@ Then:
 | `4006` | No frame and no `ping` for 2 minutes. |
 | `4007` | The Mac's access token expired: it opens again with a new one. |
 | `4008` | The Mac isn't connected. |
-| `4009` | The relay passed its frames or bytes a minute. |
+| `4009` | The socket passed its frames or bytes a minute. |
