@@ -383,6 +383,8 @@ export function buildFixtures() {
   ok("result-review-host-asked", "An approved review whose receiver asked its owner before approving on the code host.", signed(unsigned("result", { ...clone(bodies.result), host_review: "asked" })));
   bad("result-review-host-approved-with-changes-requested", "A host approval on a review that asks for changes.", signed(unsigned("result", { ...clone(blocked), host_review: "approved" })), "invalid_envelope");
   bad("result-review-host-review-unknown", "A host_review the protocol doesn't name.", signed(unsigned("result", { ...clone(bodies.result), host_review: "merged" })), "invalid_envelope");
+  ok("result-review-host-unable", "An approved review whose receiver couldn't approve on the code host: the pull request moved on, or its owner's login can't approve there.", signed(unsigned("result", { ...clone(bodies.result), host_review: "unable" })));
+  bad("result-handoff-host-review", "A handoff's result with host_review: only a review_request's result says what happened on the code host.", signed(unsigned("result", { ...clone(handoffResult), host_review: "approved" })), "invalid_envelope");
 
   // Questions and answers that aren't (protocol.md sections 5.2, 5.8 and 5.9). Words can't be
   // judged by a schema and aren't (valid-question-injection-is-data); fields, kinds and bytes are.
