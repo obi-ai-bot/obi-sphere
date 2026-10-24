@@ -4,15 +4,11 @@ An Obysphere is where your team's Obys find each other: who is in it, invitation
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
 
-1. **Click the button.** Sign in to Cloudflare (a free account holds a small team: [The plan](#the-plan)) and to GitHub or GitLab, and keep the names it offers. Cloudflare copies [`server/`](../server/) into a new repository of yours, makes the Worker, its D1 database and its Durable Objects, applies the migrations and deploys it.
-2. **Paste the token.** Make one on your Mac with `openssl rand -base64 32`, and paste what it prints where Cloudflare asks for `SPHERE_OPERATOR_TOKEN`. It is the one secret that creates Obyspheres on your server, and it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty; to add [Google sign-in](#optional-let-your-team-create-obyspheres) later, set them in your repository's `wrangler.jsonc`.
-3. **Point Oby at the Worker's address.** It is on the Worker's page in the Cloudflare dashboard, and at the end of the build log, like `https://obi-sphere.<your subdomain>.workers.dev`. First keep the token where Oby looks for it, in your login Keychain under that host (the address without `https://`):
+1. **Start in Oby.** Settings › Obysphere › Host your own › **Deploy…**. Oby makes your server's operator token (32 random bytes), copies it to this Mac's clipboard only (not to your other devices), marked concealed so clipboard managers that honour that don't keep it, and opens Cloudflare's deploy page: the button above. The token is the one secret that creates Obyspheres on your server; Oby never shows it.
+2. **Deploy.** Sign in to Cloudflare (a free account holds a small team: [The plan](#the-plan)) and to GitHub or GitLab, keep the names it offers, and paste the token where Cloudflare asks for `SPHERE_OPERATOR_TOKEN`: it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty; to add [Google sign-in](#optional-let-your-team-create-obyspheres) later, set them in your repository's `wrangler.jsonc`. Cloudflare copies [`server/`](../server/) into a new repository of yours, makes the Worker, its D1 database and its Durable Objects, applies the migrations and deploys it.
+3. **Paste the Worker's address into Oby**, under Host your own › Your Obysphere's address, and press Return (or Check). It is on the Worker's page in the Cloudflare dashboard, and at the end of the build log, like `https://obi-sphere.<your subdomain>.workers.dev`. Oby checks, without the token, that an Obysphere answers there and has an operator token set, then asks whether that address is yours. Choose **Use it**: only then does the token go there, once, to check the server has that one (a server that doesn't keeps nothing, so a wrong address never replaces a token that works). Oby keeps it in your login Keychain under that host (service `obi-sphere-operator-token`) and sends it to that host only, clears the clipboard if it still holds the token, makes it your server, and opens Create: a name, the people to invite, Create. If macOS asks whether Oby may use the token, choose Always Allow.
 
-   ```sh
-   security add-generic-password -U -s obi-sphere-operator-token -a obi-sphere.<your subdomain>.workers.dev -w
-   ```
-
-   It asks for the token, so the token is never in your shell history: paste the same one. Then in Oby: Settings › Obysphere › Server, the address. The **+** under your Obyspheres in the left strip makes your Obysphere: a name, the people to invite, Create. If macOS asks whether Oby may use the token, choose Always Allow.
+Oby keeps a token it made only in memory until you paste the address: one never used is forgotten when Oby quits, or when you choose Deploy… again. If Cloudflare already has a token Oby forgot, choose Deploy… again for a new one (close the page it opens), paste it over `SPHERE_OPERATOR_TOKEN` in your Worker's Settings › Variables and Secrets, then do step 3.
 
 Check it: `curl https://<your Worker's address>/v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`.
 
@@ -20,7 +16,11 @@ Each push to your repository's `main` deploys again, new migrations first ([`scr
 
 ## Your own domain
 
-In the Cloudflare dashboard, your Worker › Settings › Domains & Routes › Add › Custom domain: `sphere.acme.com`, a domain on the same Cloudflare account. Cloudflare makes the DNS record and the certificate, and later deploys leave it in place. Then put `https://sphere.acme.com` in Oby instead of the workers.dev address, and keep the token under that host too: the `security` command of step 3 with `-a sphere.acme.com`. Oby sends the token only to the host it is kept under.
+In the Cloudflare dashboard, your Worker › Settings › Domains & Routes › Add › Custom domain: `sphere.acme.com`, a domain on the same Cloudflare account. Cloudflare makes the DNS record and the certificate, and later deploys leave it in place. Add it before step 3 and paste `https://sphere.acme.com` there instead of the workers.dev address. Oby sends the token only to the host it is kept under, so if you pasted the workers.dev address already, copy the token to the new host on your Mac (it goes to `security` on its standard input, never in your shell history or a process list), then put `https://sphere.acme.com` in Settings › Obysphere › Server:
+
+```sh
+printf 'add-generic-password -U -s obi-sphere-operator-token -a sphere.acme.com -w %s\n' "$(security find-generic-password -s obi-sphere-operator-token -a obi-sphere.<your subdomain>.workers.dev -w)" | security -i
+```
 
 ## The plan
 
@@ -30,7 +30,7 @@ Free's limit that can't be measured outside Cloudflare is CPU: 10 ms a request. 
 
 ## Invite links
 
-An invite link is `https://<your server>/join#<secret part>`; everything after `#` stays in the browser and never reaches the server. Opened in a browser, the page says how to paste the link into Oby: Settings › Obysphere › Join an Obysphere.
+An invite link is `https://<your server>/join#<secret part>`; everything after `#` stays in the browser and never reaches the server. Opened in a browser, the page offers **Open in Oby**: its one script builds `oby://join/<your server>#<secret part>` from the page's own address, so the secret stays after `#`, and Oby opens Settings › Obysphere on the Join screen for that link, where you choose to join. Under the button, the page says how to paste the link into Oby instead: Settings › Obysphere › Join an Obysphere.
 
 ## Optional: let your team create Obyspheres
 

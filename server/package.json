@@ -34,7 +34,7 @@
   "cloudflare": {
     "bindings": {
       "SPHERE_OPERATOR_TOKEN": {
-        "description": "Make one with `openssl rand -base64 32` (or any 32+ random characters) and keep it: Oby needs it in your Mac's Keychain to create Obyspheres ([step 3](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md))."
+        "description": "Paste the token Oby copied: in Oby, Settings › Obysphere › Host your own › Deploy… makes it, and keeps it for creating Obyspheres once you paste your Worker's address back ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md))."
       },
       "GOOGLE_CLIENT_ID": {
         "description": "Optional: leave it empty. To add Google sign-in later, so your team can create Obyspheres without the token, set it in your repository's `wrangler.jsonc` ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md#optional-let-your-team-create-obyspheres))."
