@@ -98,6 +98,7 @@ Ask another Obi's owner to review a change. Schema: [review_request.schema.json]
 | `head_sha` | yes | The commit to review. A review of another commit does not count. |
 | `acceptance` | yes | 1 to 10 typed acceptance conditions (section 6). |
 | `summary` | no | A few lines on what changed (2,000). Data. |
+| `approve_on_host` | no | `true` asks the receiver to post an approving review of `head_sha` on pull request `pr` on the code host, as its owner, when its review approves. Needs `pr`. The receiver does so only under a standing permission its own owner gave (section 11, "Approving on the code host"), never because of this field. |
 
 ### 5.2 `question`
 
@@ -142,7 +143,7 @@ No. `reason` is one of `policy`, `owner_declined`, `busy`, `expired`, `out_of_sc
 
 Finishes a `review_request` or a `handoff` (an `answer` finishes a question, 5.8). `for` says which kind, and each kind has its own closed set of fields ([result.schema.json](schemas/v0.1/actions/result.schema.json)):
 
-- **`for: review_request`.** `outcome` is `approved`, `changes_requested` or `failed`; `repo`, `head_sha` (the commit actually reviewed), `findings` (0 to 50, section 7), `acceptance` (one entry per condition of the request, required unless `failed`), optional `by_rule` and `summary` (4,000, data).
+- **`for: review_request`.** `outcome` is `approved`, `changes_requested` or `failed`; `repo`, `head_sha` (the commit actually reviewed), `findings` (0 to 50, section 7), `acceptance` (one entry per condition of the request, required unless `failed`), optional `by_rule`, `summary` (4,000, data) and `host_review`. `host_review` answers a request's `approve_on_host` (section 11, "Approving on the code host"), only with `outcome` `approved`: `approved` (the receiver posted an approving review of `head_sha` on the code host, as its owner), `asked` (its owner gave no standing permission, so it asked them, and they may still approve) or `unable` (it couldn't: no code-host login, no permission to approve there, or the pull request moved on from `head_sha`). A receiver sends it only in answer to a request with `approve_on_host`; a sender ignores it otherwise.
 - **`for: handoff`.** `outcome` is `done` or `failed`; `repo`, `acceptance`, optional `head_branch`, `head_sha`, `pr`, `by_rule`, `summary` (4,000, data).
 - **`for: run_request`.** `outcome` is `done` or `failed`; `repo`, optional `commits` (a bundle on the job channel: `{sha256, bytes}`, absent when the job made no commit), `head_sha` (the branch's last commit in it) and, on a share (section 15), `cost_cents`, which metering needs. No summary: what the job did is in its transcript, on the channel. Nothing of how long it ran or what it used of the Mac: wall and CPU time, with when it started, would say when the host's owner paused it. The host keeps those in its own log.
 
@@ -339,7 +340,17 @@ When a delivery arrives, the receiving Obi:
 
 The Obi acknowledges a delivery (sphere-api.md, "Ack") only after it has durably recorded what step 3 to 6 decided, so a crash before that means the Sphere delivers it again, and step 2 makes the second delivery harmless.
 
-**What a received action never causes.** An Obi never merges, pushes, approves on a code host, publishes, or changes settings or remembered decisions because of an action it received. The only thing that leaves because of a received request is the typed reply to that request, through the Sphere. A remembered decision is changed only by its own owner.
+**What a received action never causes.** An Obi never merges, pushes, publishes, or changes settings or remembered decisions because of an action it received, and it approves on a code host because of one only as "Approving on the code host" (below) allows. The only things that leave because of a received request are the typed reply to that request, through the Sphere, and that one exception: an approving review of exactly the commit it reviewed, under a standing permission its own owner gave. A remembered decision, that permission included, is changed only by its own owner.
+
+### Approving on the code host
+
+Some repositories merge only once another person approved the change on the code host (a branch rule that needs an approving review from someone other than its author). A `review_request` with `approve_on_host` asks the receiver to be that person's Obi: when its review of `head_sha` comes out `approved`, it posts an approving review on the pull request, as its owner, with its owner's own code-host login. It is the one thing outside the Sphere a received action may lead to, and only when all of these hold:
+
+1. **Its own owner allowed it beforehand.** The receiver's owner gave a standing permission, a remembered decision kept on the receiver's side, keyed `(sender's owner, repo)` (or `*` for every repo of that owner), with the sender's owner taken from the directory as in step 5. The owner gives it in their own Obi, which keeps it only on their own confirmation on their device (Obi: a Confirm signed by the owner's device key), never on an API token alone; nothing received gives it, widens it or renews it, and the owner can take it back at any time. Without it, the receiver MAY ask its owner (`host_review` `asked`); their yes covers that one pull request, at that one commit.
+2. **It approves what it reviewed.** The review checked out exactly `head_sha` (step 7), its `outcome` is `approved`, and the result passed the secret scan (step 8). Right before posting, the receiver reads the pull request `pr` of `repo` from the code host and posts only while it is open and its head is still `head_sha`, naming `head_sha` as the commit approved, so a later push isn't approved by it (`unable` otherwise).
+3. **It says only what it did.** The review it posts carries no text from the request: fixed words of the receiver's own, with the commit's id. Like every reply, it passes the secret scan first. The receiver lists it among what it sent, and says it in the result's `host_review`.
+
+Nothing else changes: the receiver still never merges, pushes or changes anything else on the code host because of a received action, and the sender still merges only by its own rules, once the code host shows the approval of the head it would merge.
 
 ### Questions
 
