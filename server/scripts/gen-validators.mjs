@@ -53,6 +53,7 @@ const EXPORTS = {
   deliveriesResponse: "wire/deliveries.response.schema.json",
   ackResponse: "wire/ack.response.schema.json",
   auditResponse: "wire/audit.response.schema.json",
+  relay: "wire/relay.schema.json",
   error: "wire/error.schema.json",
 };
 

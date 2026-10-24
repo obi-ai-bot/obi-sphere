@@ -5,6 +5,7 @@ import { ApiError, INTERNAL_MESSAGE, apiError, errorResponse } from "./http.ts";
 import { tokenEndpoint } from "./oauth.ts";
 import { audit } from "./routes/audit.ts";
 import { openChannel } from "./routes/channels.ts";
+import { deleteDevice, deleteRelay, openRelay, putDevice, putRelay } from "./routes/relays.ts";
 import { deleteRunner, putRunner } from "./routes/runner.ts";
 import { getMemberRoute, invite, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
@@ -40,6 +41,11 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/channels/${SEGMENT}$`), openChannel],
   ["PUT", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), putRunner],
   ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), deleteRunner],
+  ["PUT", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), putRelay],
+  ["DELETE", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), deleteRelay],
+  ["GET", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), openRelay],
+  ["PUT", new RegExp(`^/v0\\.1/relay/${SEGMENT}/devices/${SEGMENT}$`), putDevice],
+  ["DELETE", new RegExp(`^/v0\\.1/relay/${SEGMENT}/devices/${SEGMENT}$`), deleteDevice],
 ];
 
 export async function handle(request: Request, env: Env, deps: Deps): Promise<Response> {

@@ -30,5 +30,18 @@
     "typescript": "^5.9.0",
     "vitest": "^4.1.0",
     "wrangler": "^4.149.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "SPHERE_OPERATOR_TOKEN": {
+        "description": "Make one with `openssl rand -base64 32` (or any 32+ random characters) and keep it: Oby needs it in your Mac's Keychain to create Obyspheres ([step 3](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md))."
+      },
+      "GOOGLE_CLIENT_ID": {
+        "description": "Optional: leave it empty. To add Google sign-in later, so your team can create Obyspheres without the token, set it in your repository's `wrangler.jsonc` ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md#optional-let-your-team-create-obyspheres))."
+      },
+      "CREATOR_WORKSPACES": {
+        "description": "Optional: leave it empty. With Google sign-in, the Google Workspace domains whose people may create Obyspheres, comma-separated, like `acme.com`; set it in your repository's `wrangler.jsonc` with `GOOGLE_CLIENT_ID`."
+      }
+    }
   }
 }

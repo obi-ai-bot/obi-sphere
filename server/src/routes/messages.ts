@@ -5,6 +5,7 @@
 import { bearer, requireActor, requireScope } from "../auth.ts";
 import { guardedWrite, requireSphere, withRetries, type KeyRow, type MemberRow, type PolicyRule, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
+import { ring, rung } from "../doorbell.ts";
 import { apiError, json, parseBody, readBody } from "../http.ts";
 import { cardParams, type AgentCard } from "../protocol/card.ts";
 import { entryHash } from "../protocol/chain.ts";
@@ -130,6 +131,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
       ),
     ]);
     if (!written) return null;
+    await ring(env, sphere.id, env_.to);
     return json(202, sendAnswer({ msg_id: env_.id, seq, hash, recorded_at: recordedAt }));
   }, deps.retryBudgetMs);
 }
@@ -175,7 +177,8 @@ export async function deliveries(request: Request, env: Env, deps: Deps, sphereI
       envelope: JSON.parse(r.envelope) as Envelope,
     }));
     if (list.length || Date.now() >= deadline) return json(200, { deliveries: list });
-    await new Promise((r) => setTimeout(r, Math.min(deps.pollMs ?? 250, Math.max(0, deadline - Date.now()))));
+    // Nothing queued: wait for a send to this Obi to ring (src/doorbell.ts), then look again.
+    await rung(env, sphere.id, obi, deadline - Date.now());
   }
 }
 

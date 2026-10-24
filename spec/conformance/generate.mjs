@@ -580,6 +580,14 @@ export function buildFixtures() {
   wireCase("invalid-invitation-preview-request-short-secret", "A secret that isn't 43 base64url characters.", "wire/invitation-preview.request", { secret: "A".repeat(42) }, "reject");
   wireCase("valid-invitation-preview-response", "The Sphere's name, its active members and the invitation's expiry.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 2, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-preview-response-members", "A preview that lists members: it gives only their count.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 1, expires_at: NOW, members: ["obi-a"] }, "reject");
+  // A phone relay as its Mac sees it (sphere-api.md section 9.2).
+  const RELAY = "wire/relay", relayId = b64url(sha256(Buffer.from("obi-conformance-relay", "utf8")).subarray(0, 16));
+  const deviceIds = (n) => Array.from({ length: n }, (_, i) => sha256(Buffer.from(`obi-conformance-relay-token-${i}`, "utf8")).toString("hex")).sort();
+  wireCase("valid-relay", "A relay and its two phones' token hashes, in hex order.", RELAY, { relay: relayId, devices: deviceIds(2) }, "accept");
+  wireCase("valid-relay-no-devices", "A relay no phone is paired with yet.", RELAY, { relay: relayId, devices: [] }, "accept");
+  wireCase("invalid-relay-seventeen-devices", "17 devices: a relay has at most 16.", RELAY, { relay: relayId, devices: deviceIds(17) }, "reject");
+  wireCase("invalid-relay-upper-case-device", "A token hash in upper-case hex: hashes are lower case.", RELAY, { relay: relayId, devices: [deviceIds(1)[0].toUpperCase()] }, "reject");
+  wireCase("invalid-relay-short-id", "A relay id of 21 characters: fewer than 128 random bits.", RELAY, { relay: relayId.slice(0, 21), devices: [] }, "reject");
 
   // ---- Public key material ------------------------------------------------------------------
   const publicKeys = Object.fromEntries(Object.entries(keys).map(([label, k]) => [label, { seed_string: k.seed, public_key: k.publicKey, key_id: k.keyId }]));
