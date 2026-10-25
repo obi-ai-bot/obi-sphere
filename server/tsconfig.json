@@ -16,6 +16,6 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true
   },
-  // worker.vitest.ts, conformance/, scripts/ and e2e/ are Node code: vitest and Node run them as they are.
+  // worker.vitest.ts, conformance/, scripts/, e2e/ and node/ are Node code: vitest and Node run them as they are.
   "include": ["src", "test"]
 }

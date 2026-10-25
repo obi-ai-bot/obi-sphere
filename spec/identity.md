@@ -186,7 +186,7 @@ The access token is opaque, 32 to 512 characters of `[A-Za-z0-9._~-]`, and the S
 
 Required: the token endpoint and both assertions as above; scopes per action type; opaque bearer tokens; actor proof by the Obi's own key on every exchange.
 
-Deferred: an identity provider for owners (OIDC) in front of the token endpoint; refresh tokens (an Obi simply exchanges again); sender-constrained tokens (DPoP, RFC 9449); delegation to a code host on the owner's behalf (an Obi in v0.1 never acts on GitHub because of a received action, so it needs no such token).
+Deferred: an identity provider for owners (OIDC) in front of the token endpoint; refresh tokens (an Obi simply exchanges again); sender-constrained tokens (DPoP, RFC 9449); delegation to a code host on the owner's behalf (an Obi in v0.1 acts on a code host only with its own owner's login, and because of a received action only as [protocol.md](protocol.md) section 11, "Approving on the code host", allows, so it needs no such token).
 
 ### 4.5 In a local Sphere (the e2e test)
 

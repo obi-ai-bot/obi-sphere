@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      ws:
+        specifier: 8.21.0
+        version: 8.21.0
     devDependencies:
       '@cloudflare/vitest-plugin':
         specifier: ^1.4.0

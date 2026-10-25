@@ -4,7 +4,7 @@
 import { apiError } from "./http.ts";
 import type { Env } from "./env.ts";
 import type { SphereRow } from "./db.ts";
-import { constantTimeEqual, sha256, sha256Hex } from "./protocol/crypto.ts";
+import { constantTimeEqual, sha256Hex } from "./protocol/crypto.ts";
 import { utf8 } from "./protocol/json.ts";
 
 /** Every scope, in the canonical order the Sphere writes them in (identity.md 4.2). */
@@ -71,12 +71,14 @@ export function requireOwnerToken(caller: Caller): void {
 
 /**
  * The operator: `Authorization: Bearer <SPHERE_OPERATOR_TOKEN>`, compared in constant time and
- * never logged. With no operator token configured (or one under 32 characters), 403 forbidden.
+ * never logged; or, on a self-hosted Sphere that keeps only its hash, the token whose SHA-256 is
+ * SPHERE_OPERATOR_TOKEN_SHA256. With neither configured (or a token under 32 characters), 403 forbidden.
  */
 export async function requireOperator(request: Request, env: Env): Promise<void> {
   const configured = env.SPHERE_OPERATOR_TOKEN;
-  if (typeof configured !== "string" || configured.length < 32) throw apiError("forbidden", "this Sphere server has no operator token configured");
+  const want = typeof configured === "string" && configured.length >= 32 ? await sha256Hex(utf8(configured)) : env.SPHERE_OPERATOR_TOKEN_SHA256;
+  if (!want) throw apiError("forbidden", "this Sphere server has no operator token configured");
   const m = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "");
   const given = m ? m[1]! : "";
-  if (!constantTimeEqual(await sha256(utf8(given)), await sha256(utf8(configured)))) throw apiError("unauthorized", "the operator token is missing or wrong");
+  if (!constantTimeEqual(utf8(await sha256Hex(utf8(given))), utf8(want))) throw apiError("unauthorized", "the operator token is missing or wrong");
 }
