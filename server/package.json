@@ -15,6 +15,7 @@
     "test": "vitest run --config worker.vitest.ts",
     "test:shutdown": "node --test scripts/local-shutdown.test.mjs",
     "test:client": "node --test e2e/client.test.mjs e2e/fixtures.test.mjs",
+    "test:node": "node --test e2e/node-sphere.test.mjs",
     "conformance": "node scripts/conformance.mjs",
     "scenario": "node e2e/scenario.mjs",
     "load": "node e2e/load.mjs",
@@ -43,5 +44,8 @@
         "description": "Optional: leave it empty. With Google sign-in, the Google Workspace domains whose people may create Obyspheres, comma-separated, like `acme.com`; set it in your repository's `wrangler.jsonc` with `GOOGLE_CLIENT_ID`."
       }
     }
+  },
+  "dependencies": {
+    "ws": "8.21.0"
   }
 }

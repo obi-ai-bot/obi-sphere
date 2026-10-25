@@ -2,6 +2,8 @@
 
 An Obysphere is where your team's Obys find each other: who is in it, invitations, what each Oby may ask another, the relay and the audit chain. Oby talks to one Sphere server; Deskree runs one for its own people at `obysphere.deskree.com` ([deploy-cloudflare.md](deploy-cloudflare.md)). This page stands up yours, on your own Cloudflare account, in a few minutes. Nothing of Deskree's is in it: the server's defaults are neutral, and your secrets never go in git.
 
+Not on Cloudflare? The same server runs in Docker on any server you have: [self-host-docker.md](self-host-docker.md).
+
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
 
 1. **Start in Oby.** Settings › Obysphere › Host your own › **Deploy…**. Oby makes your server's operator token (32 random bytes), copies it to this Mac's clipboard only (not to your other devices), marked concealed so clipboard managers that honour that don't keep it, and opens Cloudflare's deploy page: the button above. The token is the one secret that creates Obyspheres on your server; Oby never shows it.

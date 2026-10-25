@@ -3,6 +3,8 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handle } from "../src/app";
+import { sha256Hex } from "../src/protocol/crypto";
+import { utf8 } from "../src/protocol/json";
 import { BASE, Clock, OPERATOR, World, expectSchema, makeCall, newKey } from "./helpers";
 
 describe("health", () => {
@@ -89,6 +91,16 @@ describe("POST /v0.1/spheres", () => {
       expect(res.status).toBe(403);
       expect(((await res.json()) as { error: { code: string } }).error.code).toBe("forbidden");
     }
+  });
+
+  it("takes the token whose SHA-256 a self-hosted Sphere kept from its claim, and only that token", async () => {
+    const key = await newKey();
+    const body = JSON.stringify({ sphere: "claimed", name: "Claimed sphere", admin: { owner: "wellington", owner_key: key.publicKey } });
+    const kept = { DB: env.DB, CHANNELS: env.CHANNELS, DOORBELLS: env.DOORBELLS, RELAYS: env.RELAYS, SPHERE_OPERATOR_TOKEN_SHA256: await sha256Hex(utf8(OPERATOR)) };
+    const create = (token: string) =>
+      handle(new Request(`${BASE}/v0.1/spheres`, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body }), kept, { now: () => Date.now() });
+    expect((await create(OPERATOR + "x")).status).toBe(401);
+    expect((await create(OPERATOR)).status).toBe(201);
   });
 
   it("is 400 bad_request for a body that doesn't match the schema", async () => {

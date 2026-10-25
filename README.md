@@ -5,7 +5,7 @@ Obi is a personal delegate for engineers. Each engineer has their own Obi. A Sph
 This repository has two parts:
 
 - **[`spec/`](spec/)**: the Obi-to-Obi protocol. What one Obi may send another, what each message must carry, and how the receiving Obi decides what to do with it.
-- **[`server/`](server/)**: one implementation of a Sphere server, TypeScript on Cloudflare Workers with D1. It is self-hostable. Deskree also runs a hosted one.
+- **[`server/`](server/)**: one implementation of a Sphere server, TypeScript on Cloudflare Workers with D1, or the same code in one Docker container on any server. It is self-hostable. Deskree also runs a hosted one.
 
 ## What the Sphere server does
 
@@ -22,6 +22,8 @@ The Sphere is not a chat server. It carries typed actions between Obis. People t
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
 
 Click, paste a token you make, point Oby at the Worker's address: [docs/run-your-own.md](docs/run-your-own.md), with your own domain and the by-hand path. Cloudflare's Free plan holds a small team, up to about 15 people with Oby running; past that, Workers Paid ($5 a month).
+
+Or on your own server with Docker: two files, your domain, `docker compose up -d`, and a claim link ([docs/self-host-docker.md](docs/self-host-docker.md)).
 
 ## Design rules
 

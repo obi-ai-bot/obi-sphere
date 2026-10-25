@@ -10,6 +10,8 @@ export interface Env {
   RELAYS: DurableObjectNamespace<import("./relay.ts").PhoneRelay>;
   /** The operator token that creates Spheres: a Worker secret, at least 32 characters. Unset: every operator call is 403. */
   SPHERE_OPERATOR_TOKEN?: string;
+  /** Only the operator token's SHA-256, lower-case hex: a self-hosted Sphere's, kept from its claim (node/main.ts). SPHERE_OPERATOR_TOKEN wins when both are set. */
+  SPHERE_OPERATOR_TOKEN_SHA256?: string;
   /** The Google OAuth client whose ID tokens sign people in (src/signin.ts). Empty: no sign-in, every sign-in call is 403. */
   GOOGLE_CLIENT_ID?: string;
   /** The Google Workspaces, comma-separated, whose people may create a Sphere with a sign-in. Empty: only the operator creates. */

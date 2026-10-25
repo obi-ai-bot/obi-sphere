@@ -5,6 +5,7 @@
 //
 //   pnpm run load                       (node e2e/load.mjs, 200 concurrent sends)
 //   pnpm run load -- --sends 400
+//   pnpm run load -- --node             against the Sphere as one Node process (node/main.ts, the container's)
 //
 // Exit 0 only when every send was answered 202 and the chain holds every one of them, each seq
 // once, and verifies (spec/conformance/lib verifyChain).
@@ -20,9 +21,10 @@ import { Obi, Owner, SphereClient, directoryKeys, spec } from "./client.mjs";
 
 const SERVER_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2).filter((a) => a !== "--");
+const NODE = args.includes("--node");
 const sendsArg = args.indexOf("--sends") === -1 ? "200" : args[args.indexOf("--sends") + 1];
 if (!/^[0-9]{1,5}$/.test(sendsArg ?? "") || Number(sendsArg) < 1) {
-  console.error("usage: pnpm run load -- [--sends <n>]");
+  console.error("usage: pnpm run load -- [--sends <n>] [--node]");
   process.exit(64);
 }
 const SENDS = Number(sendsArg);
@@ -46,9 +48,9 @@ const freePort = () =>
 const port = await freePort();
 const operatorToken = randomBytes(32).toString("base64url");
 const log = createWriteStream(logPath, { flags: "a" });
-const child = spawn(process.execPath, ["scripts/local.mjs", "--port", String(port), "--persist-to", join(run, "state")], {
+const child = spawn(process.execPath, NODE ? ["node/main.ts"] : ["scripts/local.mjs", "--port", String(port), "--persist-to", join(run, "state")], {
   cwd: SERVER_DIR,
-  env: { SPHERE_OPERATOR_TOKEN: operatorToken, HOME: join(run, "home"), TMPDIR: join(run, "tmp"), WRANGLER_SEND_METRICS: "false", PATH: process.env.PATH },
+  env: { SPHERE_OPERATOR_TOKEN: operatorToken, PORT: String(port), SPHERE_DATA: join(run, "state"), HOME: join(run, "home"), TMPDIR: join(run, "tmp"), WRANGLER_SEND_METRICS: "false", PATH: process.env.PATH },
   detached: true,
   stdio: ["ignore", "pipe", "pipe"],
 });
