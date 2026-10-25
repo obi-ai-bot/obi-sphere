@@ -2,13 +2,13 @@
 
 The owner's ask of 2026-10-25: anyone hosts their team's Obysphere with the easiest setup in the world, on the platform they already use: Cloudflare (the button Deskree uses, kept and polished), Railway, Coolify, Docker on any VPS, and Vercel if it can work. This is the plan. Nothing here is built yet; one spike was run on a Mac, and it is marked as such.
 
-**In short:** keep the Worker and its Deploy to Cloudflare button as the main path. Add **one Docker image** of the same server (Bun, SQLite on one volume, a thin layer standing in for D1 and the Durable Objects), which serves Railway, Coolify, a plain VPS, Fly.io and Render. Skip Vercel for now.
+**In short:** keep the Worker and its Deploy to Cloudflare button as the main path. Add **one Docker image** of the same server (Node, SQLite on one volume, a thin layer standing in for D1 and the Durable Objects), which serves Railway, Coolify, a plain VPS, Fly.io and Render. Skip Vercel for now.
 
 ## What the Sphere needs (from the code, `dev` at 3554f8c)
 
 | Part | Where | What it takes from Cloudflare | Off Cloudflare |
 |---|---|---|---|
-| The HTTP API | `server/src/app.ts`, `routes/`, `protocol/` | A `fetch(request, env)` handler | Runs as it is on Bun or Node |
+| The HTTP API | `server/src/app.ts`, `routes/`, `protocol/` | A `fetch(request, env)` handler | Runs as it is on Node |
 | The database | `server/src/db.ts` and 13 other files; `server/migrations/` (5) | 104 queries through D1's API: `prepare`, `bind`, `first`, `all`, `run`, and `batch` as one transaction | A D1-shaped adapter over SQLite keeps every call and migration as it is |
 | The Doorbell | `server/src/doorbell.ts` | A Durable Object per Obi holding hibernating WebSockets that wake its long poll | In-process: one wake-up per Obi. If it can't be reached, polls already fall back to reading the database every 250 ms |
 | The phone relay | `server/src/relay.ts` | A Durable Object per Mac: tagged WebSockets, ping/pong auto-response, alarms, its own storage | In-process registry, one WebSocket server, `setTimeout` for alarms, a SQLite table for storage |
@@ -21,16 +21,17 @@ No crons. About 3,100 lines of TypeScript in `server/src`.
 ## Two shapes, one codebase
 
 1. **The Worker**, as today, from the Deploy to Cloudflare button: free for a small team, and the only button that makes D1, the Durable Objects and the secret together.
-2. **One container**: the same app on Bun, with a platform layer of three small files:
-   - `d1.ts`: D1's shape over `bun:sqlite`, so `db.ts` and the routes don't change, and the same migrations apply at start, recorded as D1 records them.
-   - `objects.ts`: one in-process instance per Doorbell and per phone relay, `Bun.serve`'s WebSockets with tags, alarms on `setTimeout`, storage in a SQLite table.
+2. **One container**: the same app on Node, with a small platform layer:
+   - `sqlite.ts`: the only file that names the runtime's SQLite (`node:sqlite`, built into Node). Bun can't load `node:sqlite` (tried on Bun 1.3.14), so Bun support later is a second copy of this one file over `bun:sqlite`.
+   - `d1.ts`: D1's shape over it, so `db.ts` and the routes don't change, and the same migrations apply at start, recorded as D1 records them.
+   - `objects.ts`: one in-process instance per Doorbell and per phone relay, WebSockets with tags, alarms on `setTimeout`, storage in a SQLite table.
    - `main.ts`: reads the settings from the environment, keeps everything in `/data`, refuses plain HTTP except from localhost, and sends no telemetry.
 
    Images go to `ghcr.io/obi-ai-bot/obi-sphere`, with a version tag and `latest`. The acceptance test is the conformance suite (`pnpm conformance`, `server/conformance`) passing against the Worker and the container alike.
 
 **Why not run the Worker unchanged in a container?** The repository already runs it outside Cloudflare (`scripts/local.mjs`, wrangler's own dev server on workerd), and Oby's end-to-end suite does exactly that. But:
 
-- **Spike (2026-10-25, this Mac):** a local Sphere on `scripts/local.mjs` used about **410 MB idle and 440 MB after 300 requests** (wrangler's Node process 240 MB, two workerd processes about 80 MB each). That's a 1 GB VPS at least, for tooling not built for production. The native Bun container isn't measured yet; similar Bun servers usually sit near 60 to 100 MB.
+- **Spike (2026-10-25, this Mac):** a local Sphere on `scripts/local.mjs` used about **410 MB idle and 440 MB after 300 requests** (wrangler's Node process 240 MB, two workerd processes about 80 MB each). That's a 1 GB VPS at least, for tooling not built for production. The native Node container isn't measured yet; a plain Node server usually sits under 100 MB.
 - **workerd itself:** its Durable Objects are single-instance and "not production-ready" (Cloudflare, 2026-10-09).
 - **celld** (the Deno team's runtime for Workers apps): it needs an object-storage bucket even on one node.
 - **Later:** Cloudflare is merging the two into a first-class self-hosted workerd, with no dates. When it ships, the container could become the Worker itself and the platform layer could go.
@@ -68,14 +69,14 @@ Every path starts in Oby, which already makes the operator token and copies it t
 |---|---|---|
 | Cloudflare today | Deploy…, sign in to Cloudflare and GitHub, paste the token, Deploy, find the address in the dashboard, paste it into Oby, Use it | 2 |
 | **Cloudflare, polished** | Deploy…, sign in, paste the token, Deploy, **Visit** (the button at the end of Cloudflare's deploy), **Open in Oby** on the Sphere's first page (it hands Oby its own address) | 1 |
-| Railway | Deploy…, sign in, paste the token, Deploy, open the address Railway gives, Open in Oby | 1 |
-| Coolify | New resource, Docker Compose, the repository's URL, paste the token, set a domain, Deploy, open it, Open in Oby | 1 |
-| Your own server | Point a domain at it, run the two download lines, put the domain and the token in `.env`, `docker compose up -d`, open the address, Open in Oby | 1 |
+| Railway | Deploy…, sign in, Deploy, open the claim link in the deploy's log, Open in Oby | 0 |
+| Coolify | New resource, Docker Compose, the repository's URL, set a domain, Deploy, open the claim link in its log, Open in Oby | 0 |
+| Your own server | Point a domain at it, run the two download lines, put the domain in `.env`, `docker compose up -d`, open the claim link it prints, Open in Oby | 0 |
 
 Two things make this the easiest:
 
 - **The Sphere's first page hands Oby its address.** An unclaimed Sphere's root page shows **Open in Oby**, which opens `oby://` with the server's own origin. Oby already holds the token it made, so nobody copies an address again. Clicked first by someone else, it gives away nothing: the token never leaves the person's Mac until Oby checks the server.
-- **The token paste can go too, on containers (a decision below).** Started with no `SPHERE_OPERATOR_TOKEN`, the container writes a one-time claim link to its own log (as PocketBase does), never on a page, and Oby claims the server with it. That's no pastes at all, at the cost of reading one line of log. On Cloudflare and Railway the platform's secret field stays the simplest.
+- **On containers the token paste goes too (decided).** Started with no `SPHERE_OPERATOR_TOKEN`, the container writes a one-time claim link to its own log (as PocketBase does), never on a page. The link carries a claim code, never the operator token: Oby makes the token, the server keeps only its hash, and the code works once. A restart before anyone claims prints a new code, and until it's claimed the Sphere refuses everything else. Setting `SPHERE_OPERATOR_TOKEN` still works and skips the claim. On Cloudflare the button keeps asking for the token: a Worker's logs are harder to reach than the field.
 
 ## The rules hold on every target
 
@@ -101,13 +102,13 @@ Two things make this the easiest:
 6. **Oby:** where to host in Host your own, the `oby://` hand-off, the "your Sphere is behind" line.
 7. **Later:** Render's button, a Fly page, Vercel if asked again, and the self-hosted workerd once Cloudflare ships it.
 
-## Decisions for the owner
+## Decided (the owner, 2026-10-25)
 
-1. **Bun or Node** for the container? Bun: one binary, built-in SQLite and WebSockets, the smallest image. Node 26 now has `node:sqlite` too. Recommended: Bun.
-2. **Leave the job channel out** of the container (compute sharing is being cut in Oby), and later out of the Worker?
-3. **Claim link or token paste** on containers? The paste works today on every target; the claim link removes it everywhere but Cloudflare's button.
-4. **Skip Vercel** for now?
-5. **Publish images** as `ghcr.io/obi-ai-bot/obi-sphere`?
+1. **Node only** for the container, with the SQLite code in one small file (`sqlite.ts`) so Bun can be added later. One runtime means one set of checks, run on the Mac (Actions is off here).
+2. **The job channel stays out** of the container.
+3. **A one-time claim link** on containers, as above; the token paste stays on Cloudflare.
+4. **Vercel is skipped** for now.
+5. **Images are published** as `ghcr.io/obi-ai-bot/obi-sphere`, built for amd64 and arm64 on the Mac and pushed from there. The first push needs a GitHub login allowed to write packages (`gh auth refresh -s write:packages`, the owner's step), and the package is made public by hand after it. Railway builds from the repository, so it doesn't wait on the image.
 
 ## Sources
 
