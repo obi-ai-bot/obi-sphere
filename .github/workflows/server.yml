@@ -32,8 +32,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          # Deskree's DigitalOcean runners for Oby: one fresh Ubuntu droplet per job, destroyed
+          # after it. A fork PR's run waits for a maintainer's approval before it gets one.
+          - os: linux
+            runner: '["self-hosted", "linux", "do-oby"]'
+          # DigitalOcean has no macOS, so this leg stays on GitHub's macOS runner (free for a
+          # public repository).
+          - os: macos
+            runner: '"macos-latest"'
+    runs-on: ${{ fromJSON(matrix.runner) }}
     timeout-minutes: 15
     env:
       WRANGLER_SEND_METRICS: "false"

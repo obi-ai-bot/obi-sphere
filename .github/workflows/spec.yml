@@ -27,7 +27,8 @@ jobs:
   check:
     name: Spec self-check
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft || contains(github.event.pull_request.labels.*.name, 'full-ci')
-    runs-on: ubuntu-latest
+    # Deskree's DigitalOcean runners for Oby (one fresh droplet per job).
+    runs-on: [self-hosted, linux, do-oby]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
