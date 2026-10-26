@@ -6,8 +6,8 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 |---|---|
 | URL | https://obysphere.deskree.com (`GET /v0.1/health` answers `{"ok":true,"protocol":"obi/0.1","seal":true}`) |
 | Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in `env.deskree` of [`server/wrangler.jsonc`](../server/wrangler.jsonc), which holds every Deskree value; the top level is neutral ([run-your-own.md](run-your-own.md)). |
-| Worker | `obi-sphere`, version `4eac49a0-39c9-4586-a1e7-d13a9df9b0f4` (2026-10-26), on the custom domain only (its workers.dev address is off), with the Durable Objects `ChannelRelay` (job channels), `Doorbell` (long polls) and `PhoneRelay` (paired phones) |
-| Code | `dev` at `41d5a27` (#29: Obi-to-Obi words sealed end to end, so the Sphere relays them without reading them), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
+| Worker | `obi-sphere`, version `950df0ce-111d-4596-9f7a-cd14baaf1dce` (2026-10-26), on the custom domain only (its workers.dev address is off), with the Durable Objects `ChannelRelay` (job channels), `Doorbell` (long polls) and `PhoneRelay` (paired phones) |
+| Code | `dev` at `5faa423` (#31: the join page says where to get Oby, after #29's sealed Obi-to-Obi words), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
 | D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0006_sphere_edits.sql` applied |
 | Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `obysphere.deskree.com` (the server's host: Oby sends it to that host only). Nothing else holds it. |
 | Telemetry | Off, as `wrangler.jsonc` sets it: Cloudflare keeps no Workers logs or traces |
@@ -80,6 +80,7 @@ To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --e
 
 | Version | Code | Deployed | D1 after it |
 |---|---|---|---|
+| `950df0ce-111d-4596-9f7a-cd14baaf1dce` | `5faa423`, the join page says where to get Oby (#31) | 2026-10-26 | `0006` |
 | `4eac49a0-39c9-4586-a1e7-d13a9df9b0f4` | `41d5a27`, sealed Obi-to-Obi words (#29) | 2026-10-26 | `0006` |
 | `0bb487e3-3311-4b4b-9785-bfc571dae708` | `829e1d4`, an Obysphere's admin edits (#27) | 2026-10-26 | `0006` |
 | `67a4ed81-8318-4701-8d1a-3bff55ba0316` | `fb62208`, the Doorbell and the phone relay | 2026-10-23 | `0005` |
@@ -94,6 +95,7 @@ Before each migration, take a Time Travel bookmark (`wrangler d1 time-travel inf
 
 | Just before | Bookmark |
 |---|---|
+| `5faa423` (no migration) | `00000020-00000002-00005110-ae17faf2965a1e17c52b2f74fbf791ea` |
 | `41d5a27` (no migration) | `0000001d-00000010-00005110-01eb1d3fb983aa460f537a09176dc7ee` |
 | `0005` | `0000000b-00000000-0000510d-0f64a7599f457852f2ffab55f956e91a` |
 | `0004` | `0000000a-00000000-0000510d-13b126b7287dd48b25e099cee83a2c84` |
