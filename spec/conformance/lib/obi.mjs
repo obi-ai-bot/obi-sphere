@@ -663,8 +663,8 @@ export function verifyWire(input, context) {
 export const CONFIRMATION_FRESH = 120;
 export const CONFIRMATION_AHEAD = 30;
 
-// What every review an Obi posts on the code host carries, matched without regard to case: a
-// review whose body has it is an Obi's, whoever's account posted it.
+// What every review an Oby posts on the code host carries, matched without regard to case: a
+// review whose body has it is an Oby's, whoever's account posted it.
 export const OBI_REVIEW_MARKER = "by oby:";
 
 // The code host's access levels that let an approval count: write or more.
@@ -720,7 +720,7 @@ export function ownersOf(rules, path) {
   return owners;
 }
 
-// Whether a review is a person's: not an account the code host marks as a bot, and no Obi's marker.
+// Whether a review is a person's: not an account the code host marks as a bot, and no Oby's marker.
 export const byAPerson = (review) =>
   review?.account_type !== "Bot" && !String(review?.body ?? "").toLowerCase().includes(OBI_REVIEW_MARKER);
 

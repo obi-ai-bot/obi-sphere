@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // `pnpm run conformance`: the spec's conformance runner, in implementation mode, against the
 // server's checker (conformance/check.ts), for the case kinds a Sphere judges: envelopes, cards,
-// chains and wire bodies (not host_approval, a receiving Obi's own decision). Extra arguments go to the runner
+// chains and wire bodies (not host_approval, a receiving Oby's own decision). Extra arguments go to the runner
 // (like --verbose). Needs ../spec's packages installed (`pnpm install --frozen-lockfile` in spec/).
 
 import { spawnSync } from "node:child_process";
