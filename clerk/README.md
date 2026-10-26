@@ -12,7 +12,7 @@ Status: Draft. The input and output below may still change; the vectors' `versio
 |---|---|---|
 | `majority` | `approve`, `reject`, `abstain` | `approve` when approvals are more than rejections, `reject` when fewer, `tie` when equal. |
 | `supermajority` (`num`, `den`) | `approve`, `reject`, `abstain` | `approve` when approvals × `den` ≥ `num` × (approvals + rejections), otherwise `reject`. 1 ≤ `num` ≤ `den`. |
-| `unanimity` | `approve`, `reject`, `abstain` | `approve` when there is no rejection, otherwise `reject`. |
+| `unanimity` | `approve`, `reject`, `abstain` | `approve` when no ballot cast is a rejection, otherwise `reject`. Absent seats and abstentions don't stop it. |
 | `schulze` | a complete ranking of the options, or `abstain` | The Schulze winners: the Condorcet winner when there is one. |
 | `borda` | a complete ranking of the options, or `abstain` | The options with the highest Borda score. |
 | `median` | a non-negative integer, or `abstain` | The lower median of the values. |

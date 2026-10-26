@@ -755,6 +755,480 @@
    }
   },
   {
+   "name": "unanimity: every seat approves",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "approve"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 3,
+    "present": 3,
+    "tally": {
+     "approve": 3,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: a lone rejection rejects",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 1,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "reject"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "reject",
+    "seats": 3,
+    "present": 1,
+    "tally": {
+     "approve": 0,
+     "reject": 1,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: one approval among abstentions approves",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "abstain"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "abstain"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 3,
+    "present": 3,
+    "tally": {
+     "approve": 1,
+     "reject": 0,
+     "abstain": 2
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: a rejection among abstentions rejects",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "abstain"
+     },
+     {
+      "seat": "s2",
+      "vote": "reject"
+     },
+     {
+      "seat": "s3",
+      "vote": "abstain"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "reject",
+    "seats": 3,
+    "present": 3,
+    "tally": {
+     "approve": 0,
+     "reject": 1,
+     "abstain": 2
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: every present seat abstains",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 2,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "abstain"
+     },
+     {
+      "seat": "s2",
+      "vote": "abstain"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "no_votes",
+    "seats": 3,
+    "present": 2,
+    "tally": {
+     "approve": 0,
+     "reject": 0,
+     "abstain": 2
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: absent seats don't stop it",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3",
+     "s4",
+     "s5"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "approve"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 5,
+    "present": 3,
+    "tally": {
+     "approve": 3,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: present exactly at quorum counts",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 2,
+    "seats": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 4,
+    "present": 2,
+    "tally": {
+     "approve": 2,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: one short of quorum is no quorum, even when all approve",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "no_quorum",
+    "seats": 4,
+    "present": 2,
+    "tally": {
+     "approve": 2,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: one short of quorum is no quorum, even with a rejection",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "seats": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "reject"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "no_quorum",
+    "seats": 4,
+    "present": 2,
+    "tally": {
+     "approve": 1,
+     "reject": 1,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity: quorum of every seat, all approve",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 4,
+    "seats": [
+     "s1",
+     "s2",
+     "s3",
+     "s4"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "approve"
+     },
+     {
+      "seat": "s4",
+      "vote": "approve"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 4,
+    "present": 4,
+    "tally": {
+     "approve": 4,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
+   "name": "unanimity with veto: a standing blocker rejects a unanimous approval",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "veto": true,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "f1",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "stands"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "reject",
+    "seats": 3,
+    "present": 3,
+    "tally": {
+     "approve": 3,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": [
+     "f1"
+    ]
+   }
+  },
+  {
+   "name": "unanimity with veto: a refuted blocker leaves it unanimous",
+   "input": {
+    "rule": {
+     "kind": "unanimity"
+    },
+    "quorum": 3,
+    "veto": true,
+    "seats": [
+     "s1",
+     "s2",
+     "s3"
+    ],
+    "ballots": [
+     {
+      "seat": "s1",
+      "vote": "approve"
+     },
+     {
+      "seat": "s2",
+      "vote": "approve"
+     },
+     {
+      "seat": "s3",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "f1",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "refuted"
+     }
+    ]
+   },
+   "output": {
+    "outcome": "approve",
+    "seats": 3,
+    "present": 3,
+    "tally": {
+     "approve": 3,
+     "reject": 0,
+     "abstain": 0
+    },
+    "blocked_by": []
+   }
+  },
+  {
    "name": "veto: an unchallenged blocking finding with evidence rejects",
    "input": {
     "rule": {
