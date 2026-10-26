@@ -13,6 +13,9 @@ import { checkSignIn, creatorWorkspaces, useSignIn, type SignIn } from "../signi
 
 export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
 
+/** Where someone without Oby gets it: its README, whose first lines link the latest download. */
+const OBY_DOWNLOAD = "https://github.com/obi-ai-bot/oby#readme";
+
 /** The join page's one script: the Open in Oby link, built from the page's own address. */
 const JOIN_SCRIPT = `const a=document.getElementById("open");if(location.hash.length>1)a.href="oby://join/"+location.host+location.hash;`;
 
@@ -31,6 +34,7 @@ export async function joinPage(): Promise<Response> {
 <h1>You're invited to an Obysphere</h1>
 <p><a id="open">Open in Oby</a></p>
 <p>Or copy this page's address from the address bar. Then, in Oby on your Mac, open Settings › Obysphere, paste it under Join an Obysphere, and choose Open.</p>
+<p>Don't have Oby yet? <a href="${OBY_DOWNLOAD}">Get Oby for your Mac</a>, open it once, then open this link again.</p>
 <script>${JOIN_SCRIPT}</script>`,
     {
       status: 200,
