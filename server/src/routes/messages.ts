@@ -3,7 +3,7 @@
 // sender signed. Text fields are data: nothing here reads them beyond the schema.
 
 import { bearer, requireActor, requireScope } from "../auth.ts";
-import { guardedWrite, requireSphere, withRetries, type KeyRow, type MemberRow, type PolicyRule, type SphereRow } from "../db.ts";
+import { SPHERE_COLUMNS, guardedWrite, requireSphere, withRetries, type KeyRow, type MemberRow, type PolicyRule, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { ring, rung } from "../doorbell.ts";
 import { apiError, json, parseBody, readBody } from "../http.ts";
@@ -68,7 +68,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
   return withRetries(async () => {
     // Everything the checks read, in one transaction: one consistent snapshot, one round trip.
     const reads = await env.DB.batch([
-      env.DB.prepare("SELECT * FROM spheres WHERE id = ?1").bind(sphere0.id),
+      env.DB.prepare(`SELECT ${SPHERE_COLUMNS} FROM spheres WHERE id = ?1`).bind(sphere0.id),
       env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere0.id, env_.id),
       env.DB.prepare("SELECT * FROM member_keys WHERE sphere = ?1 AND obi = ?2 ORDER BY valid_from_seq, rowid").bind(sphere0.id, env_.from),
       env.DB.prepare("SELECT * FROM members WHERE sphere = ?1 AND obi = ?2").bind(sphere0.id, env_.to),

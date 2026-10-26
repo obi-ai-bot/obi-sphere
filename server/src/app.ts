@@ -7,10 +7,10 @@ import { audit } from "./routes/audit.ts";
 import { openChannel } from "./routes/channels.ts";
 import { deleteDevice, deleteRelay, openRelay, putDevice, putRelay } from "./routes/relays.ts";
 import { deleteRunner, putRunner } from "./routes/runner.ts";
-import { getMemberRoute, invite, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
+import { getMemberRoute, invite, listInvitations, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
-import { createSphere, getSphereRoute, health, joinPage } from "./routes/spheres.ts";
+import { createSphere, deleteAdmin, deleteImage, deleteSphere, getImage, getSphereRoute, health, joinPage, putAdmin, putImage, updateSphere } from "./routes/spheres.ts";
 import { finishSignIn, startSignIn } from "./signin.ts";
 
 type Handler = (request: Request, env: Env, deps: Deps, ...params: string[]) => Promise<Response> | Response;
@@ -24,6 +24,14 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["POST", /^\/v0\.1\/signin\/google$/, startSignIn],
   ["POST", /^\/v0\.1\/signin\/google\/callback$/, finishSignIn],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), getSphereRoute],
+  ["PATCH", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), updateSphere],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), deleteSphere],
+  ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/image$`), getImage],
+  ["PUT", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/image$`), putImage],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/image$`), deleteImage],
+  ["PUT", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/admins/${SEGMENT}$`), putAdmin],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/admins/${SEGMENT}$`), deleteAdmin],
+  ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations$`), listInvitations],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations$`), invite],
   ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}$`), withdrawInvitation],
   ["POST", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/invitations/${SEGMENT}/preview$`), previewInvitation],

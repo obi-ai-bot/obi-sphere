@@ -34,7 +34,7 @@ export async function invite(request: Request, env: Env, deps: Deps, sphereId: s
   const errors = schemaErrors("invitationRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match invitation.request", errors);
   // A named invitation (owner and obi) is used once; an open one by up to max_uses Obis.
-  const req = body as unknown as { owner?: string; obi?: string; expires_in: number; max_uses?: number; domain?: string };
+  const req = body as unknown as { owner?: string; obi?: string; expires_in: number; max_uses?: number; domain?: string; label?: string };
   // Only a Sphere server that signs people in can tell who is at a domain (section 3.1).
   if (req.domain !== undefined && !env.GOOGLE_CLIENT_ID?.trim()) throw apiError("forbidden", "this Sphere server has no sign-in, so it can't limit an invitation to a domain");
   if (req.obi !== undefined && (await obiTaken(env.DB, sphere.id, req.obi))) throw apiError("conflict", `${req.obi} is or was a member: Obi ids are never reused`);
@@ -42,12 +42,46 @@ export async function invite(request: Request, env: Env, deps: Deps, sphereId: s
   const secret = randomToken(32);
   const expiresAt = nowS(deps) + req.expires_in;
   const maxUses = req.max_uses ?? 1;
-  await env.DB.prepare("INSERT INTO invitations (id, sphere, owner, obi, secret_sha256, expires_at_s, max_uses, domain) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)")
-    .bind(id, sphere.id, req.owner ?? null, req.obi ?? null, await sha256Hex(utf8(secret)), expiresAt, maxUses, req.domain ?? null)
+  await env.DB.prepare(
+    "INSERT INTO invitations (id, sphere, owner, obi, secret_sha256, expires_at_s, max_uses, domain, label, created_at_s) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+  )
+    .bind(id, sphere.id, req.owner ?? null, req.obi ?? null, await sha256Hex(utf8(secret)), expiresAt, maxUses, req.domain ?? null, req.label ?? null, nowS(deps))
     .run();
   const named = req.owner !== undefined ? { owner: req.owner, obi: req.obi } : {};
   const domain = req.domain !== undefined ? { domain: req.domain } : {};
-  return json(201, { invitation_id: id, sphere: sphere.id, ...named, max_uses: maxUses, ...domain, secret, expires_at: timestamp(expiresAt) });
+  const label = req.label !== undefined ? { label: req.label } : {};
+  return json(201, { invitation_id: id, sphere: sphere.id, ...named, max_uses: maxUses, ...domain, ...label, secret, expires_at: timestamp(expiresAt) });
+}
+
+// ---------------------------------------------------------------------------------------------
+// GET /v0.1/spheres/{sphere}/invitations: for its admins, those that can still be used, the
+// newest first, with what each was for. Never a secret: only its hash is kept.
+
+export async function listInvitations(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const sphere = await requireSphere(env.DB, sphereId);
+  const caller = await bearer(request, env, sphere, nowS(deps));
+  requireScope(caller, "admin");
+  requireOwnerToken(caller);
+  const { results } = await env.DB.prepare(
+    `SELECT id, owner, obi, label, max_uses, uses, domain, created_at_s, expires_at_s FROM invitations
+      WHERE sphere = ?1 AND uses < max_uses AND expires_at_s > ?2 ORDER BY created_at_s DESC, rowid DESC LIMIT 1000`,
+  ).bind(sphere.id, nowS(deps)).all<{
+    id: string; owner: string | null; obi: string | null; label: string | null; max_uses: number; uses: number; domain: string | null;
+    created_at_s: number | null; expires_at_s: number;
+  }>();
+  return json(200, {
+    sphere: sphere.id,
+    invitations: results.map((r) => ({
+      invitation_id: r.id,
+      ...(r.owner !== null ? { owner: r.owner, obi: r.obi } : {}),
+      ...(r.label !== null ? { label: r.label } : {}),
+      max_uses: r.max_uses,
+      uses: r.uses,
+      ...(r.domain !== null ? { domain: r.domain } : {}),
+      ...(r.created_at_s !== null ? { created_at: timestamp(r.created_at_s) } : {}),
+      expires_at: timestamp(r.expires_at_s),
+    })),
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
