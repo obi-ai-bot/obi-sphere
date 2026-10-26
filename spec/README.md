@@ -1,26 +1,40 @@
-# Obi-to-Obi protocol
+# The Obysphere standards
 
-> **v0.1.** The first version meant to be implemented: Obi's `obid` and the Sphere server in [`../server/`](../server/) are built against it, and its conformance suite says whether they agree. It will still change; every change is listed below.
->
-> **Changelog.** v0.1: replaces the first draft. Pins the envelope, signing (Ed25519 over RFC 8785 canonical JSON), the A2A agent-card profile, delegation (OAuth token exchange, RFC 8693), the receiving Obi's decision rule, the Sphere's HTTP binding and audit chain, JSON Schemas for all of it, and a conformance suite.
->
-> v0.1, clarified (no message, schema or fixture changes): a send that loses to concurrent writes is `429 rate_limited`, nothing recorded (sphere-api.md 6.1, check 13). What the first Sphere server chose where the text was silent: an owner token on an endpoint that needs an Obi token is `403 forbidden` (sphere-api.md section 1; sending stays `401`), and so is an Obi token revoking a member (creating invitations and replacing the policy need `admin`, which an Obi's token never holds: `403 insufficient_scope`); a token request body over 131,072 bytes is `400 invalid_request` (identity.md 4.3); single-use `jti`s are kept per Sphere (identity.md 4.1); `pnpm run local` starts the Worker through wrangler's programmatic API with the operator token as a secret binding (sphere-api.md section 8).
->
-> v0.1, amended on 2026-10-16 (messages, schemas and fixtures change; [obi-ai-bot/obi#494](https://github.com/obi-ai-bot/obi/issues/494)): Obis ask each other questions. `question` is now `{text, about?, choices?}`: `about` takes typed references to repositories, pull requests, issues and jobs (protocol.md 5.9), and `goal`, `question`, `repo` and `pr` are gone. A new reply, `answer` `{by, text, refs?, choice?, by_rule?}`, answers a question and ends its exchange; `result` no longer has `for: question`. So there are eight action types. The receiver answers a question by itself only from what a sharing rule of its owner allows, and otherwise asks its owner (protocol.md section 11, "Questions"), and it limits each sender ("Rate limits"). A question's repository for policy comes from its `about` (sphere-api.md section 5). A `question` or a `result` for a question made to the earlier text is no longer valid, and neither is an audit chain recorded under it that holds one: its entries no longer match the schemas, so the chain fails to verify (sphere-api.md section 7.1). No Sphere is known to hold such a chain: obid's card accepts only `review_request`, so no member could be sent a question.
->
-> v0.1, amended on 2026-10-20 (wire schemas and fixtures change; no message changes): **open invitations**, one link for a team as Sangam's invite design shows. An invitation may leave `owner` and `obi` out and say `max_uses` (1 to 1,000); each redeem's card names its own `obi_id` and owner, ids are still never reused, and an owner's key is still bound on its first redeem (sphere-api.md section 4, identity.md section 3). Every invitation answer now carries `max_uses`. A new read, `POST …/invitations/{invitation_id}/preview`, authenticated by the invitation's secret, answers the Sphere's name and how many members are active, for a Join screen. The admin can withdraw an invitation at once (`DELETE …/invitations/{invitation_id}`), and a policy rule or a runner status's `for` names only owners who have joined (or `*`), so a link's first redeemer under an owner id inherits nothing. Limiting a link to an email domain is not in v0.1: the Sphere can't enforce it without an identity provider (sphere-api.md section 4 says what it would take). The conformance suite gets a `wire` case kind, judged by one wire schema.
+The standards say how the instruments of an Obysphere work: what one agent may send another, how a message is signed, sealed and checked, how the receiver decides, how the record is kept, and how an Obysphere is run over HTTP. They are written so that an agent that is not Oby can implement them, and each comes with JSON Schemas and conformance cases that check an implementation.
 
-> v0.1, amended on 2026-10-21 (messages, schemas and fixtures change, additions only; [obi-ai-bot/obi#797](https://github.com/obi-ai-bot/obi/issues/797)): an Obi can run another Obi's owner's job on its owner's Mac. A new request, `run_request` (protocol.md 5.10), and three new replies: `run_progress`, `run_return` (the job came back before it finished; ends the exchange) and `run_cancel`, the one reply a request's own sender sends (ends the exchange). `result` gains `for: run_request`, `decline` the reason `not_free`, and tokens the scope `send:run_request`. So there are twelve action types, and a card accepts up to four request types. A run_request's exchange has an end-to-end encrypted job channel the Sphere relays (protocol.md section 13, sphere-api.md 6.3), and an Obi publishes a signed runner status in the directory, shown only to the owners it is offered to (protocol.md section 14, sphere-api.md 6.4). Nothing earlier changes meaning: every message, card and chain valid before is valid still.
->
-> v0.1, amended again on 2026-10-21 (additions only; [obi-ai-bot/obi#809](https://github.com/obi-ai-bot/obi/issues/809)): an owner can give a teammate a share of a company-paid API account (protocol.md section 15). A new request, `share_offer` (5.14), and two replies its own sender sends: `share_status` (5.15) and `share_revoke` (5.16, ends the exchange). `run_request` gains an optional `account: {grant}`, `decline` and `run_return` the reason `share_used`, and tokens the scope `send:share_offer`. Exchange rule 8 keeps the share replies to share_offer exchanges. Fifteen action types; a card accepts up to five request types.
->
-> v0.1, amended a third time on 2026-10-21 ([obi-ai-bot/obi#810](https://github.com/obi-ai-bot/obi/issues/810)), before any of the above was deployed: a `run_request` no longer carries the job's words (`request`): they go on the job channel (protocol.md section 13), so the audit chain keeps only what a guest job is. A run_request's `result` loses `summary` and, with `run_return`, gains `cost_cents` for a job on a share. `run_progress` loses `paused` and `resumed`, and a receiver doesn't send it; a `run_request`'s exchange takes no `status`; `run_return`'s `reason` is `host_unavailable`, `time_limit` or `share_used`, without `minutes`; a runner status's `free` is worked out only at moments a random 15 to 20 minutes apart, and `free_at` is gone; a `run_request`'s `result` and `run_return` lose `host` (wall and CPU time); a receiver takes one `run_request` per sender's owner every 15 minutes; and a `run_request`'s `decline` says `unavailable` whatever the host's reason (only `expired`, `out_of_scope` and `share_used` stay, the guest's own doing), with no `by_rule`, and `not_free` is gone. Each would otherwise say when the host's owner is at their Mac.
->
-> v0.1, amended on 2026-10-23 (a wire schema is added; no message changes): a **phone relay** (sphere-api.md section 9). A member's Mac keeps one WebSocket on a relay it registers with the Sphere, and the phones it paired join it with relay tokens it made, whose hashes it registers and can delete; the Sphere passes the end-to-end sealed frames between them, reading and keeping none, within limits per socket. A Sphere server relays for the members of its Spheres only, and revoking a member deletes its relays. New wire schema: [relay](schemas/v0.1/wire/relay.schema.json).
+> **Names.** These texts were written when Oby was called Obi: they say *Obi* for Oby and *Sphere* for an Obysphere. The protocol constant is `obi/0.1`.
 
-> v0.1, amended on 2026-10-26 (additions only; [obi-ai-bot/obi#1232](https://github.com/obi-ai-bot/obi/issues/1232)): **sealed words** (protocol.md section 9.1). A card may publish an X25519 seal key (`seal_key_id`, `seal_public_key`; identity.md section 2), and every message to an Obi whose card has one is sealed for it: each text value of the body is encrypted for that key (X25519, HKDF-SHA256, ChaCha20-Poly1305), and the envelope gains `seal`. The Sphere checks a sealed envelope against the sealed schemas ([schemas/v0.1/sealed/](schemas/v0.1/sealed/), derived from the plain ones), refuses one in the clear between two Obis that both seal (`400 not_sealed`) or sealed for another key, and keeps it in the chain as sent: it, and a member reading the chain, read none of the words. A receiver opens them after the signature (protocol.md section 10, check 11: `seal_invalid`, `not_sealed`). A Sphere that takes them says `seal: true` in `GET /v0.1/health`, and an Obi publishes its seal key only once that Sphere and every member can read it (identity.md section 2). Known answers: [conformance/seal-vectors.json](conformance/seal-vectors.json). Nothing earlier changes meaning: a card without a seal key, and the messages to its Obi, are valid as before.
+## The standards, by instrument
 
-This is how one Obi asks another Obi for something, and how the other Obi answers. It is written so that an agent that is not Obi can implement it.
+| Instrument | Standard | Status | Where | What it covers |
+|---|---|---|---|---|
+| Messages | **Core** | **v0.1** | this folder: [protocol.md](protocol.md), [identity.md](identity.md), [sphere-api.md](sphere-api.md), [schemas/v0.1/](schemas/v0.1/), [conformance/](conformance/) | Who is who (owner-signed agent cards, delegation), what can be said (15 typed actions, text as data), how the receiver decides, the Sphere's HTTP binding and the audit chain. Implemented by the server in [`../server/`](../server/) and by Oby, and checked by the conformance suite. |
+| Rooms | Rooms | Planned | `rooms/` | One Oby in several Obyspheres with one identity; groups and announcement channels inside an Obysphere. Today an Oby belongs to one Sphere at a time and every message has one recipient. |
+| Files | Artifacts | Planned | `artifacts/` | Files and folders handed over sealed to the recipient, with an expiry, a receipt and a revoke. Today files travel only inside a running job's channel (protocol.md section 13). |
+| Secrets | Exchange | Experimental | `exchange/` | How things travel (the relay, sealed bodies, bindings) and lending the use of a secret without handing it over. Parts are in Core v0.1 today: sealed words (protocol.md 9.1), the job channel (section 13) and shares of an API account (section 15). |
+| Decisions | Council | Draft | `council/` (`process.md`) | How several agents and people decide together: the motion, seats drawn by lot, independent assessment, challenge, ballots and a counted verdict, with a record that keeps the dissent. Code review is its first application. In v0.1 today: `review_request` and `result` between two Obis. |
+
+**Statuses.**
+
+- **Planned**: the standard is intended; no text yet.
+- **Draft**: a text exists and may change in any way. Nothing should depend on it.
+- **Experimental**: implemented and tested, in whole or in part, and still changing under the version rule below.
+- **Stable**: changes only by additions or under a new protocol constant, and has had an external review and an implementation outside Deskree. No standard is Stable yet.
+
+Today's documents stay where they are and are Core. A new standard's texts go in its own folder (`rooms/`, `artifacts/`, `exchange/`, `council/`), with schemas and conformance cases of its own when it has messages. The rules every standard keeps are the house rules in the [repository README](../README.md#the-house-rules).
+
+## Versions
+
+A version of a standard is named by its **protocol constant**. Core's is `obi/0.1`: it is every envelope's `protocol`, it begins every signing input (`obi/0.1 envelope`, `obi/0.1 channel`, `obi/0.1 runner_status`), the audit hash and the seal's info, and it names the schemas folder (`schemas/v0.1/`) and the card's extension (`urn:obi-sphere:ext:obi:0.1`).
+
+1. **An addition keeps the constant.** A change after which every message, card, chain and wire body that was valid before is still valid, and means the same, is an addition. It ships behind a named feature: an implementation that has it says so in its card's `features`, and a sender uses it only with a receiver whose card lists it. An Obysphere that takes it says so in `GET /v0.1/health`.
+2. **A breaking change gets a new constant.** A change after which a message, card or chain that was valid before is no longer valid, or means something else, gets a new protocol constant (`obi/0.2`, with `schemas/v0.2/`), and the documents of the old one stay as they were. An implementation says in its card which constants it speaks.
+3. **No more amendments in place.** Until its baseline, `obi/0.1` was amended in place, and one amendment (questions and answers) made earlier messages invalid. From the baseline on, an `obi/0.1` text changes only by additions under rule 1, by clarifications that change no message, schema or fixture, or to make the reference code do what the text says.
+4. **Every change is in the changelog.** A pull request that changes anything under `spec/` adds an entry to [CHANGELOG.md](../CHANGELOG.md) saying what changed and its kind: addition, breaking or clarification.
+
+**Where a card lists its features.** v0.1 cards have no `features` list yet, and v0.1 implementations close the card's `params`, so a card that carried one would be refused by them. Until it exists, an addition is announced the way sealed words were (protocol.md 9.1): the Sphere says it takes it in `GET /v0.1/health`, an Obi announces with a card's implementation `version` that it reads it, and a sender uses it only once the receiver's card says so. Adding `features` is itself an addition, made that way.
+
+**The baseline.** `obi/0.1`'s baseline is the spec at commit `41d5a272` (#29, sealed words), the last commit that changed `spec/` before this rule. Every earlier amendment is in [CHANGELOG.md](../CHANGELOG.md).
 
 ## Principles
 
@@ -33,7 +47,9 @@ This is how one Obi asks another Obi for something, and how the other Obi answer
 
 ## The actions
 
-| Type | Starts or continues | What for |
+Fifteen types: five requests start an exchange, and ten replies continue or end it ([protocol.md](protocol.md) sections 4 and 5). Their schemas are in [schemas/v0.1/actions/](schemas/v0.1/actions/).
+
+| Type | Starts, continues or ends | What for |
 |---|---|---|
 | `review_request` | starts | Ask another Obi's owner to review a change at one commit, with typed acceptance conditions. |
 | `question` | starts | Ask something the other owner knows, decided, or lets their Obi tell. |
@@ -47,6 +63,9 @@ This is how one Obi asks another Obi for something, and how the other Obi answer
 | `run_progress` | continues | Where that job is: queued, starting, running. A receiver shouldn't send it: the job channel says where the job is. |
 | `run_return` | ends | The job stopped before it finished and comes back with its commits: the host was unavailable, its time was up, or its share was used. |
 | `run_cancel` | ends | The request's own sender calls the job off. |
+| `share_offer` | starts | Give the receiver's owner a share of a company-paid API account: their jobs run on the key holder's Mac, which adds the key; the key itself never travels. |
+| `share_status` | continues | From the key holder's Obi: how much of the share was used this period. |
+| `share_revoke` | ends | The key holder takes the share back. |
 
 ## The documents
 
