@@ -39,6 +39,8 @@ export interface Envelope {
   expires_at: string;
   key_id: string;
   body: JsonObject;
+  /** How the words in `body` are sealed for the receiver (protocol.md section 9.1). */
+  seal?: { suite: string; key_id: string; enc: string };
   signature: string;
 }
 
@@ -153,7 +155,9 @@ export function checkEnvelopeShape(value: unknown): { ok: true; envelope: Envelo
     return { ok: false, code: "invalid_envelope", message: e instanceof JsonError ? e.message : "not canonical JSON" };
   }
   if (size > MAX_ENVELOPE_BYTES) return { ok: false, code: "payload_too_large", message: `${size} bytes canonical, the most is ${MAX_ENVELOPE_BYTES}` };
-  const errors = schemaErrors("envelope", value);
+  // A sealed envelope's words are sealed_text: the sealed schema checks their size, never what they say.
+  const sealed = typeof value === "object" && value !== null && Object.hasOwn(value, "seal");
+  const errors = schemaErrors(sealed ? "sealedEnvelope" : "envelope", value);
   if (errors.length) return { ok: false, code: "invalid_envelope", message: errors.join("; ") };
   const env = value as Envelope;
   const problems = semanticProblems(env);

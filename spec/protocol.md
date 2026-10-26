@@ -46,6 +46,7 @@ Every message is one envelope that carries exactly one typed action in `body`. S
 | `expires_at` | yes | After this time the receiver MUST NOT act on it. Later than `created_at`, at most 2,592,000 seconds after it. |
 | `key_id` | yes | The sender's signing key, as its agent card publishes it (`ed25519:` + base64url of SHA-256 of the raw public key). |
 | `body` | yes | The action's fields: one of the schemas in [schemas/v0.1/actions/](schemas/v0.1/actions/), chosen by `type`. |
+| `seal` | when sealed | How the words in `body` are sealed for the receiver (section 9.1). |
 | `signature` | yes | Ed25519 signature over everything else (section 9). |
 
 A whole envelope, in its canonical form (section 9), is at most 65,536 bytes.
@@ -293,14 +294,48 @@ Canonical JSON is RFC 8785: members sorted by the UTF-16 code units of their nam
 
 The prefix keeps an envelope signature from ever being valid as any other kind of signature an Obi key makes.
 
+### 9.1 Sealing the words
+
+An Obi whose card has a seal key ([identity.md](identity.md) section 2) gets its messages sealed: each text value of the body (section 8) is encrypted for that key alone, so the Sphere relays and checks the message, and every member can check the audit chain, without reading what anyone wrote. Everything else stays as it is, so the Sphere's checks, the policy, the exchange rules (section 4) and the chain work unchanged.
+
+**The seal key.** Each Obi makes an X25519 key (RFC 7748) for sealing, apart from its Ed25519 key, and its card publishes it: `seal_public_key`, its 32 raw bytes, and `seal_key_id`, `x25519:` followed by base64url (no padding) of SHA-256 over those bytes. The owner signs it with the rest of the card, so pinning ([identity.md](identity.md) section 3) keeps a Sphere from swapping it, stripping it or serving an older card without it. A new seal key comes with a new card. An Obi SHOULD keep an old seal key until every message sealed for it has expired (2,592,000 seconds at most).
+
+**Which values.** [sealed/text-paths.json](schemas/v0.1/sealed/text-paths.json) gives, for each type, where its text values are: JSON Pointers (RFC 6901) into the body, `*` standing for every item of an array (`/findings/*/title`). It is derived from the schemas' `x-obi-text: "data"` annotations. Every string at one of its type's paths is sealed, and nothing else.
+
+**Sealing.** For a receiver whose trusted card has the seal key `R`, a sender:
+
+1. Makes a new X25519 key for this envelope only, and never uses it again. `enc` is its public key's 32 raw bytes.
+2. Computes `shared`, X25519 of that new key and `R`. An all-zero `shared` is refused.
+3. Derives `key`, 32 bytes: HKDF-SHA256 (RFC 5869) of `shared`, with `enc` followed by `R` (64 bytes) as the salt, and as the info the UTF-8 bytes of `"obi/0.1 seal\n"` followed by the canonical JSON of the envelope's `{sphere, id, from, to, type}`.
+4. Replaces each text value by base64url (no padding) of its ChaCha20-Poly1305 (RFC 8439) ciphertext and tag under `key`, over its UTF-8 bytes. The value's pointer `P` (`/goal`, `/findings/0/title`, as RFC 6901 writes it) is the associated data, and the first 12 bytes of SHA-256 over `P` are the nonce.
+5. Adds `seal`: `{"suite": "x25519-hkdf-sha256-chacha20poly1305", "key_id": "<R's seal_key_id>", "enc": "<base64url of enc>"}`.
+6. Signs (above): the signature covers the sealed body and `seal`.
+
+`key` is new for every envelope and each pointer appears once in a body, so no key and nonce are ever used twice. The info ties `key` to its envelope, so sealed values copied into another envelope don't open, and the pointer ties each value to its place, so a value moved or swapped doesn't open. The receiver checks the signature before it opens anything.
+
+**Schemas.** An envelope with `seal` matches [sealed/envelope.schema.json](schemas/v0.1/sealed/envelope.schema.json) instead of envelope.schema.json. The sealed schemas are the plain ones with each text field a `sealed_text`, whose bounds come from the plain field's: a value's UTF-8 is at most 4 bytes a character, sealing adds 16, and base64url takes 4 characters for every 3 bytes. [conformance/generate.mjs](conformance/generate.mjs) derives them; nobody edits them by hand. The 65,536-byte limit (section 3) is the sealed envelope's: a sender whose message would be over it once sealed shortens its words, and never sends them in the clear instead.
+
+**When.** A sender MUST seal every envelope for a receiver whose trusted card has a seal key, whatever its type: one with no text values carries `seal` all the same. It seals for nobody else. Words in the clear are valid only from or to an Obi whose card has no seal key yet, which can't seal or be sealed for: so a team keeps working while its Obis update, and an Obi's words go sealed both ways once its owner signs it a card with a seal key. Between two Obis whose cards both have one, the Sphere refuses an envelope without `seal` ([sphere-api.md](sphere-api.md) section 6.1, check 11, `not_sealed`), and so does the receiver (check 11, below).
+
+**Receiving** (section 10, check 11). After checks 1 to 10:
+
+- An envelope with `seal` is for a seal key the receiver holds (its `key_id`); every text value opens; and the opened envelope, without `seal`, matches envelope.schema.json and passes check 3. Otherwise it is `seal_invalid`: a value that doesn't open or isn't UTF-8, or opened words that break the schema. Section 8 applies to the opened words unchanged: they are data.
+- An envelope without `seal` is `not_sealed` when the receiver's own card and the sender's trusted card both have a seal key.
+
+A sender scans the plain words for secrets before it seals them (section 11, step 8): sealing never takes text past the scan.
+
+**What the Sphere still sees.** These are known limits, not hidden. It sees who sends to whom and when; each message's type and size, and about how long each text value is; ids, repositories, branches, commits, paths, line numbers, severities, outcomes, reasons, rules, costs and every other value that isn't text; and everything in the cards. It can't read what people wrote, or change it without the receiver seeing. The audit chain keeps the sealed values: checking it ([sphere-api.md](sphere-api.md) section 7.1) needs no key and shows a member none of the words. There is no forward secrecy against the receiver's seal key: whoever gets that key later can open, from the chain, what was sealed for it. A new seal key, with a new card, limits that to what was sealed before it.
+
+**Known answers.** [conformance/seal-vectors.json](conformance/seal-vectors.json) seals one review request from fixed keys: `enc`, the X25519 secret, the info, the HKDF output, the values' nonces and ciphertexts, and the signed sealed envelope. The fixtures named `*-sealed*`, `*-seal-*` and `invalid-not-sealed` pin the rest. Their `context` carries the receiver's own seal keys (`seal_keys`, by `seal_key_id`) and whether the sender's trusted card has one (`sender_seals`).
+
 ## 10. Verifying a message
 
-The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.md), "Send"), and the receiving Obi checks it again: it MUST NOT trust the relay. A message is valid only when all of these hold, checked in this order (the error code is the one the Sphere answers with, and the one the conformance fixtures name; `wrong_recipient` is the receiver's alone, below):
+The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.md), "Send"), and the receiving Obi checks it again: it MUST NOT trust the relay. A message is valid only when all of these hold, checked in this order (the error code is the one the Sphere answers with, and the one the conformance fixtures name; `wrong_recipient` and `seal_invalid` are the receiver's alone, and so is `not_sealed` as check 11 says it):
 
 | # | Check | Code |
 |---|---|---|
 | 1 | Its canonical form is at most 65,536 bytes. | `payload_too_large` |
-| 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type`. | `invalid_envelope` |
+| 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type` ([sealed/envelope.schema.json](schemas/v0.1/sealed/envelope.schema.json) when it has `seal`, section 9.1). | `invalid_envelope` |
 | 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7); the references in an `about` or a `refs` are distinct, repositories compared ignoring ASCII case (section 5.9). | `invalid_envelope` |
 | 4 | `sphere` is the receiver's Sphere. | `wrong_sphere` |
 | 5 | `to` is the receiver's own `obi_id`. | `wrong_recipient` |
@@ -309,6 +344,7 @@ The Sphere checks every message before relaying it ([sphere-api.md](sphere-api.m
 | 8 | `expires_at` is after now. | `expired` |
 | 9 | `created_at` is at most 300 seconds after now (clock skew). | `clock_skew` |
 | 10 | The receiver hasn't seen this `id` before. | `duplicate` |
+| 11 | Its words open (section 9.1): with `seal`, for a seal key of the receiver's, to a body that passes checks 2 and 3; without, not from an Obi whose card has a seal key to one whose card has one too. | `seal_invalid`, `not_sealed` |
 
 **The receiver (check 5).** A message is for the one Obi its `to` names. An Obi that receives a message addressed to another Obi MUST reject it, however well it is signed: otherwise a Sphere that misroutes a delivery, or relays a message it captured to a member it wasn't for, could make that member act on a request meant for someone else. The Sphere never answers `wrong_recipient` over HTTP: it queues a message only for its `to` ([sphere-api.md](sphere-api.md) section 6.1, check 11), so a send has no other receiver to be wrong about. The conformance fixtures `invalid-wrong-recipient` and `invalid-wrong-recipient-reply` pin it; every envelope fixture's `context` names its `receiver`.
 
@@ -336,7 +372,7 @@ When a delivery arrives, the receiving Obi:
    - **Decline, and remember for this repo**: decline, and keep a decline decision for that key.
    The answer that keeps a decision is applied to later requests at step 5 without asking again. For a question the owner answers in words instead of accepting ("Questions", below), so there is no accept to remember; **Decline, and remember** keeps a decline for each repository the question is about, which covers a later question only when each repository that one is about has a decline (its own, or one for `*`). For a question about no repository it keeps one for every repo (`*`), which declines every later question from that owner: the Obi says so when it offers that answer.
 7. **Accepting.** It sends `accept`. It MAY send `status` while working. It does the work for its own owner, in a fresh, isolated workspace (Obi: a new git worktree per job), giving the request's data fields to its agent only as quoted data (section 8). For a review it checks out exactly `head_sha`; for `tests_pass` it runs its own check for the repository.
-8. **Publishing the answer.** Before anything leaves, every text field of the reply passes the receiver's secret scan. If the scan finds a possible secret, or cannot run, the text does not go out: the Obi sends a `result` with outcome `failed` (for a review or a handoff) or a `decline` with reason `other`, with no text fields. Otherwise it sends the `result` or the `answer`.
+8. **Publishing the answer.** Before anything leaves, every text field of the reply passes the receiver's secret scan. If the scan finds a possible secret, or cannot run, the text does not go out: the Obi sends a `result` with outcome `failed` (for a review or a handoff) or a `decline` with reason `other`, with no text fields. Otherwise it sends the `result` or the `answer`, sealed for the asker when its card has a seal key (section 9.1): the scan runs on the plain words, before they are sealed.
 
 The Obi acknowledges a delivery (sphere-api.md, "Ack") only after it has durably recorded what step 3 to 6 decided, so a crash before that means the Sphere delivers it again, and step 2 makes the second delivery harmless.
 
@@ -452,6 +488,7 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 - How agent cards are rotated and revoked: a new card with a higher `card_seq`; revocation through the Sphere ([identity.md](identity.md)).
 - Whether `status` is pushed or polled: pushed by the receiver, as a reply.
 - How policy is written: a fixed table of allow rules per Sphere ([sphere-api.md](sphere-api.md), "Policy").
+- Encrypting bodies end to end so the Sphere relays without reading them: each text value is sealed for the receiver's seal key (section 9.1, added on 2026-10-26).
 
 **Still open:**
 
@@ -461,7 +498,6 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 - Direct Obi-to-Obi transport over A2A without the Sphere, and federation between Spheres.
 - Auditing membership and policy changes in the chain (v0.1 records relayed messages only).
 - Cross-checking a result's `acceptance` against the request's conditions on the Sphere (today each Obi checks its own exchanges).
-- Encrypting bodies end to end so the Sphere relays without reading them.
 - Quotas the Sphere enforces: the error code exists (`rate_limited`) and a receiver's limits are recommended (section 11, "Rate limits"), but a Sphere's numbers aren't fixed.
 - Following up in a conversation: no field links a question to an earlier exchange, so each question stands on its own.
 - A `cancel` action for the sender of a request other than `run_request`.

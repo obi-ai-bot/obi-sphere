@@ -12,6 +12,7 @@ export interface Validator {
 }
 
 export declare const envelope: Validator;
+export declare const sealedEnvelope: Validator;
 export declare const runnerStatus: Validator;
 export declare const agentCard: Validator;
 export declare const auditEntry: Validator;

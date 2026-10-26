@@ -3,7 +3,7 @@
 // It is what the conformance runner judges fixtures with, and it is meant to be read next to
 // spec/protocol.md, spec/identity.md and spec/sphere-api.md. Node >= 22, node:crypto only, plus ajv.
 
-import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, sign, verify } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, randomBytes, sign, verify } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -138,6 +138,156 @@ export function openFrame(key, counter, wire) {
   return { stream: plain.readUInt32BE(0), kind: plain[4], payload: plain.subarray(5) };
 }
 
+// ---------------------------------------------------------------------------------------------
+// Sealing the words (protocol.md section 9.1): every text value of a body, sealed for its
+// recipient's seal key with a new X25519 key of the sender's, HKDF-SHA256 and ChaCha20-Poly1305.
+// The known answers in seal-vectors.json come from these.
+
+export const SEAL_SUITE = "x25519-hkdf-sha256-chacha20poly1305";
+export const SEAL_INFO_PREFIX = "obi/0.1 seal\n";
+
+/** `x25519:` + base64url of SHA-256 of the raw seal key. */
+export const sealKeyIdOf = (publicRaw) => "x25519:" + b64url(sha256(publicRaw));
+
+/** The envelope's key: HKDF-SHA256 of the X25519 secret, salted with enc ‖ the recipient's key. */
+export function sealKey(shared, encRaw, recipientRaw, env) {
+  const info = Buffer.concat([Buffer.from(SEAL_INFO_PREFIX, "utf8"), canonicalBytes({ sphere: env.sphere, id: env.id, from: env.from, to: env.to, type: env.type })]);
+  return Buffer.from(hkdfSync("sha256", shared, Buffer.concat([encRaw, recipientRaw]), info, 32));
+}
+
+/** A value's nonce: the first 12 bytes of SHA-256 of its JSON Pointer, unique in its envelope. */
+export const sealNonce = (pointer) => sha256(Buffer.from(pointer, "utf8")).subarray(0, 12);
+
+export function sealValue(key, pointer, text) {
+  const cipher = createCipheriv("chacha20-poly1305", key, sealNonce(pointer), { authTagLength: 16 });
+  cipher.setAAD(Buffer.from(pointer, "utf8"));
+  return Buffer.concat([cipher.update(Buffer.from(text, "utf8")), cipher.final(), cipher.getAuthTag()]);
+}
+
+/** The text, or an exception when it doesn't open (changed, moved, another key) or isn't UTF-8. */
+export function openValue(key, pointer, sealed) {
+  if (sealed.length < 16) throw new Error("shorter than its tag");
+  const decipher = createDecipheriv("chacha20-poly1305", key, sealNonce(pointer), { authTagLength: 16 });
+  decipher.setAAD(Buffer.from(pointer, "utf8"));
+  decipher.setAuthTag(sealed.subarray(sealed.length - 16));
+  const plain = Buffer.concat([decipher.update(sealed.subarray(0, sealed.length - 16)), decipher.final()]);
+  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(plain);
+}
+
+const unescapeToken = (t) => t.replaceAll("~1", "/").replaceAll("~0", "~");
+const escapeToken = (t) => t.replaceAll("~", "~0").replaceAll("/", "~1");
+
+/** The plain schemas as JSON, by name: what the sealed ones and the text paths derive from. */
+export function plainSchemaDocs() {
+  return Object.fromEntries(schemaFiles()
+    .map((path) => [relative(SCHEMA_DIR, path).replace(/\.schema\.json$/, ""), path])
+    .filter(([name]) => !name.startsWith("sealed/"))
+    .map(([name, path]) => [name, JSON.parse(readFileSync(path, "utf8"))]));
+}
+
+/**
+ * Each action type's text paths: where its schema says `x-obi-text: "data"`, as JSON Pointers into
+ * its body with `*` for every item of an array. schemas/v0.1/sealed/text-paths.json is this.
+ */
+export function deriveTextPaths(docs = plainSchemaDocs()) {
+  const byId = Object.fromEntries(Object.values(docs).map((d) => [d.$id, d]));
+  const resolve = (base, ref) => {
+    const [file, fragment = ""] = ref.split("#");
+    const doc = byId[new URL(file || base, base).href];
+    let node = doc;
+    for (const t of fragment.split("/").slice(1)) node = node[unescapeToken(t)];
+    return [node, doc.$id];
+  };
+  const out = {};
+  for (const type of ACTION_TYPES) {
+    const paths = new Set();
+    const walk = (node, base, path) => {
+      if (!node || typeof node !== "object") return;
+      if (node["x-obi-text"] === "data") return void paths.add("/" + path.map(escapeToken).join("/"));
+      if (typeof node.$ref === "string") walk(...resolve(base, node.$ref), path);
+      for (const k of ["allOf", "anyOf", "oneOf"]) for (const n of node[k] ?? []) walk(n, base, path);
+      for (const k of ["if", "then", "else"]) walk(node[k], base, path);
+      for (const [name, n] of Object.entries(node.properties ?? {})) walk(n, base, [...path, name]);
+      walk(node.items, base, [...path, "*"]);
+    };
+    const schema = docs[`actions/${type}`];
+    walk(schema, schema.$id, []);
+    out[type] = [...paths].sort();
+  }
+  return out;
+}
+
+let textPathsLoaded;
+export const textPaths = () => (textPathsLoaded ??= deriveTextPaths());
+
+/** Every text value in an action's body: its pointer and where it is, in the body's own order. */
+export function textValues(type, body) {
+  const patterns = (textPaths()[type] ?? []).map((p) => p.split("/").slice(1).map(unescapeToken));
+  const out = [];
+  const walk = (value, tokens, parent, key) => {
+    if (typeof value === "string") {
+      const hit = patterns.some((p) => p.length === tokens.length && p.every((t, i) => t === tokens[i] || (t === "*" && /^(0|[1-9][0-9]*)$/.test(tokens[i]))));
+      if (hit) out.push({ pointer: "/" + tokens.map(escapeToken).join("/"), parent, key });
+    } else if (Array.isArray(value)) value.forEach((v, i) => walk(v, [...tokens, String(i)], value, i));
+    else if (value && typeof value === "object") for (const [k, v] of Object.entries(value)) walk(v, [...tokens, k], value, k);
+  };
+  walk(body, [], null, null);
+  return out;
+}
+
+/** The unsigned envelope with its words sealed for `recipientRaw` (32 bytes), and its `seal`. */
+export function sealEnvelope(unsigned, recipientRaw, ephemeralRaw = randomBytes(32)) {
+  const e = x25519FromPrivate(ephemeralRaw);
+  const key = sealKey(x25519Shared(e.privateKey, recipientRaw), e.publicRaw, recipientRaw, unsigned);
+  const body = structuredClone(unsigned.body);
+  for (const { pointer, parent, key: k } of textValues(unsigned.type, body)) parent[k] = b64url(sealValue(key, pointer, parent[k]));
+  return { ...unsigned, body, seal: { suite: SEAL_SUITE, key_id: sealKeyIdOf(recipientRaw), enc: b64url(e.publicRaw) } };
+}
+
+/** A sealed envelope's body with its words opened, for the holder of `privateRaw`; throws when one doesn't open. */
+export function openBody(env, privateRaw) {
+  const own = x25519FromPrivate(privateRaw);
+  const shared = x25519Shared(own.privateKey, fromB64url(env.seal.enc));
+  if (shared.every((b) => b === 0)) throw new Error("an all-zero X25519 secret");
+  const key = sealKey(shared, fromB64url(env.seal.enc), own.publicRaw, env);
+  const body = structuredClone(env.body);
+  for (const { pointer, parent, key: k } of textValues(env.type, body)) parent[k] = openValue(key, pointer, fromB64url(parent[k]));
+  return body;
+}
+
+/** The sealed schemas: every envelope and body schema, its text fields sealed_text (protocol.md section 9.1). */
+export function deriveSealedSchemas(docs = plainSchemaDocs()) {
+  // A text value's bytes are at most 4 per character; sealed, 16 more; base64url, 4 per 3.
+  const minSealed = (n) => Math.ceil(((n ?? 0) + 16) * 4 / 3);
+  const maxSealed = (n) => Math.ceil((4 * n + 16) * 4 / 3);
+  const seal = (node) => {
+    if (Array.isArray(node)) return node.map(seal);
+    if (!node || typeof node !== "object") return node;
+    if (node["x-obi-text"] === "data") {
+      return {
+        $ref: node.$ref.replace(/(line|block)_text$/, "sealed_text"), "x-obi-text": "sealed",
+        minLength: minSealed(node.minLength), maxLength: maxSealed(node.maxLength),
+        ...(node.description ? { description: node.description } : {}),
+      };
+    }
+    return Object.fromEntries(Object.entries(node).map(([k, v]) => [k, k === "enum" || k === "const" ? v : seal(v)]));
+  };
+  const out = {};
+  for (const [name, doc] of Object.entries(docs)) {
+    if (!(name === "common" || name === "envelope" || name.startsWith("actions/"))) continue;
+    const sealed = seal(doc);
+    sealed.$id = doc.$id.replace("/schemas/v0.1/", "/schemas/v0.1/sealed/");
+    sealed.title = `${doc.title ?? name} (sealed)`;
+    sealed.description = `${doc.description ? doc.description + " " : ""}Sealed: derived from ${name}.schema.json by spec/conformance/generate.mjs, every x-obi-text field a sealed_text (spec/protocol.md section 9.1). Don't edit it by hand.`;
+    if (name === "envelope") {
+      sealed.required = [...sealed.required, "seal"];
+      sealed.properties = { ...sealed.properties, seal: { $ref: "common.schema.json#/$defs/seal", description: "How the words are sealed: for the recipient's seal key." } };
+    }
+    out[name] = sealed;
+  }
+  return out;
+}
+
 export function keyIdOf(publicKeyB64url) {
   const raw = fromB64url(publicKeyB64url);
   if (raw.length !== 32) throw new Error("Ed25519 public key must be 32 bytes");
@@ -217,7 +367,7 @@ function schemaFiles(dir = SCHEMA_DIR) {
 export function loadSchemas() {
   const ajv = new Ajv2020({ strict: true, strictTypes: false, strictRequired: false, allErrors: true, validateFormats: false });
   // The annotation keyword the spec defines: the string is data written by someone else.
-  ajv.addKeyword({ keyword: "x-obi-text", metaSchema: { enum: ["data"] } });
+  ajv.addKeyword({ keyword: "x-obi-text", metaSchema: { enum: ["data", "sealed"] } });
   const schemas = {};
   for (const path of schemaFiles()) {
     const schema = JSON.parse(readFileSync(path, "utf8"));
@@ -310,7 +460,7 @@ export function resultProblems(body) {
 }
 
 // ctx: { now, sphere, receiver, keys: { [key_id]: { obi, public_key, valid_from_seq?, valid_until_seq? } },
-//        seq?, seen_ids?: [] }
+//        seq?, seen_ids?: [], seal_keys?: { [seal_key_id]: <base64url X25519 private key> }, sender_seals? }
 // receiver is the obi_id of the Obi judging the message: a message addressed to another Obi is
 // rejected, however well it is signed (a Sphere that misroutes, or relays a captured message).
 // seq is the message's audit seq (a delivery's `seq`). A key with a validity range must be valid at
@@ -329,7 +479,7 @@ export function verifyEnvelope(env, ctx) {
     return fail("invalid_envelope", e.message);
   }
   if (size > MAX_ENVELOPE_BYTES) return fail("payload_too_large", `${size} bytes canonical, the most is ${MAX_ENVELOPE_BYTES}`);
-  const errors = schemaErrors("envelope", env);
+  const errors = schemaErrors(env?.seal === undefined ? "envelope" : "sealed/envelope", env);
   if (errors.length) return fail("invalid_envelope", errors.slice(0, 5).join("; "));
   const problems = semanticProblems(env);
   if (problems.length) return fail("invalid_envelope", problems.join("; "));
@@ -345,7 +495,31 @@ export function verifyEnvelope(env, ctx) {
   if (!(seconds(env.expires_at) > now)) return fail("expired", `expired at ${env.expires_at}`);
   if (seconds(env.created_at) > now + CLOCK_SKEW_SECONDS) return fail("clock_skew", `created_at is more than ${CLOCK_SKEW_SECONDS} seconds ahead`);
   if ((ctx.seen_ids ?? []).includes(env.id)) return fail("duplicate", `${env.id} was seen before`);
-  return OK;
+  return openedProblem(env, ctx) ?? OK;
+}
+
+// Check 11 (protocol.md section 9.1), after the signature: a sealed message opens with one of the
+// receiver's own seal keys (ctx.seal_keys: {key_id: base64url of the 32 private bytes}) to a body
+// that passes the plain schema and check 3; one in the clear is refused when both seal
+// (ctx.sender_seals: the sender's trusted card has a seal key).
+export function openedProblem(env, ctx) {
+  const own = ctx.seal_keys ?? {};
+  if (env.seal === undefined) {
+    return Object.keys(own).length && ctx.sender_seals ? fail("not_sealed", `${env.from} and ${ctx.receiver} both seal: its words must be sealed`) : null;
+  }
+  const mine = own[env.seal.key_id];
+  if (!mine) return fail("seal_invalid", `sealed for ${env.seal.key_id}, not a seal key of ${ctx.receiver}`);
+  let body;
+  try {
+    body = openBody(env, fromB64url(mine));
+  } catch {
+    return fail("seal_invalid", "a sealed value doesn't open");
+  }
+  const { seal: _seal, ...opened } = { ...env, body };
+  const errors = schemaErrors("envelope", opened);
+  if (errors.length) return fail("seal_invalid", `opened, it doesn't match the schema: ${errors.slice(0, 5).join("; ")}`);
+  const problems = semanticProblems(opened);
+  return problems.length ? fail("seal_invalid", `opened: ${problems.join("; ")}`) : null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -357,6 +531,7 @@ export function verifyCard(card, ctx) {
   if (errors.length) return fail("card_invalid", errors.slice(0, 5).join("; "));
   const params = card.capabilities.extensions[0].params;
   if (keyIdOf(params.public_key) !== params.key_id) return fail("card_invalid", "key_id does not match public_key");
+  if (params.seal_public_key !== undefined && sealKeyIdOf(fromB64url(params.seal_public_key)) !== params.seal_key_id) return fail("card_invalid", "seal_key_id does not match seal_public_key");
   if (params.owner_key === params.public_key) return fail("card_invalid", "the Obi's key must not be its owner's key");
   const skills = card.skills.map((s) => s.id).sort().join(",");
   if (skills !== [...params.accepts].sort().join(",")) return fail("card_invalid", "skills and accepts differ");

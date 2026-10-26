@@ -33,6 +33,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `forbidden` | 403 | The caller may not do this (a message `from` another Obi than the token's actor, an owner token where an Obi token is needed, an Obi token revoking a member, an Obi's token on another Obi's card, an owner key that differs from the bound one, no operator token configured). |
 | `policy_denied` | 403 | No policy rule allows this request, or the receiver's card doesn't accept its type. |
 | `recipient_revoked` | 403 | The receiver was revoked. |
+| `not_sealed` | 400 | The sender's and the receiver's cards both have a seal key, and the message isn't sealed ([protocol.md](protocol.md) section 9.1). |
 | `invitation_invalid` | 403 | Unknown, expired, used up, or the wrong secret: always the same answer. |
 | `not_found` | 404 | No such Sphere, member or invitation. |
 | `unknown_recipient` | 404 | `to` isn't a member. |
@@ -259,7 +260,7 @@ Replies are not governed by rules: a reply is allowed when it continues an open 
 | 8 | No message with this `id` is in the chain. If one is and the body is the same JSON value as the recorded envelope (the same canonical JSON, signature included), this is a **retry**: answer `200` with the original send's answer and record nothing, even when the message has expired or the sender's key has changed since it was recorded. Otherwise `409 duplicate`. | `409 duplicate` |
 | 9 | `key_id` is the sender's current key (protocol.md section 10, "Which key is valid for a message"), and the signature verifies (protocol.md section 9). | `400 unknown_key`, `400 bad_signature` |
 | 10 | Not expired; `created_at` at most 300 seconds ahead. | `400 expired`, `400 clock_skew` |
-| 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). | as written |
+| 11 | `to` is a member (`404 unknown_recipient`) and active (`403 recipient_revoked`); for a request, its card's `accepts` contains the type (`403 policy_denied`). A message with `seal` is sealed for `to`'s current card's seal key: `seal.key_id` is that card's `seal_key_id`, and a card without one takes no sealed message (`400 invalid_envelope`). A message without `seal` is refused when the current cards of `to` and `from` both have a seal key (`400 not_sealed`, [protocol.md](protocol.md) section 9.1). | as written |
 | 12 | A request is allowed by the policy (section 5). A reply keeps every exchange rule of protocol.md section 4 against the request its `in_reply_to` names in this Sphere's chain and the replies to it already recorded (the reference verifier's `exchangeProblem` is those rules, once). | `403 policy_denied`, `409 bad_reply` |
 | 13 | Record it: in one transaction, append the audit entry (section 7) and queue a delivery for `to`. | `500 internal` (nothing recorded); `429 rate_limited` with `Retry-After` when the record could not be made because of concurrent writes to the same Sphere (nothing recorded) |
 
@@ -325,6 +326,7 @@ Every message the Sphere relays is one entry in its append-only audit chain, in 
 - `recorded_at` is the Sphere's clock when it appended the entry, never earlier than the previous entry's.
 - `hash` is the lower-case hex SHA-256 over the UTF-8 bytes of `"obi/0.1 audit\n"` followed by the RFC 8785 canonical JSON of the entry **without `hash`**.
 - The Sphere signs nothing: each entry's authenticity is its sender's signature, kept verbatim, and the chain's integrity is the hash links.
+- A sealed envelope ([protocol.md](protocol.md) section 9.1) is kept as sent, its words sealed: the chain checks without any seal key, and a member reading it reads none of the words.
 
 `GET /v0.1/spheres/{sphere}/audit?from_seq=1&limit=500` answers entries with `seq` from `from_seq` (1 when left out; `limit` 1 to 1,000, 500 when left out), in order, and the head now:
 

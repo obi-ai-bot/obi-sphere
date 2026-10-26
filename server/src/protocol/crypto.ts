@@ -68,6 +68,12 @@ export async function keyIdOrNull(publicKey: string): Promise<string | null> {
   }
 }
 
+/** `x25519:` + base64url(SHA-256(raw seal key)) (protocol.md section 9.1), or null when it is not 32 bytes. */
+export async function sealKeyIdOrNull(publicKey: string): Promise<string | null> {
+  const raw = fromB64url(publicKey);
+  return raw.length === 32 ? "x25519:" + b64url(await sha256(raw)) : null;
+}
+
 const imported = new Map<string, Promise<CryptoKey>>();
 
 function importEd25519(publicKey: string): Promise<CryptoKey> {

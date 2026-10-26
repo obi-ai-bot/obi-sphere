@@ -5,7 +5,7 @@
 import { env } from "cloudflare:test";
 import { expect } from "vitest";
 import { handle } from "../src/app";
-import { b64url, keyIdOf } from "../src/protocol/crypto";
+import { b64url, keyIdOf, sealKeyIdOrNull } from "../src/protocol/crypto";
 import { canonicalBytes, utf8 } from "../src/protocol/json";
 import { envelopeSigningInput, timestamp } from "../src/protocol/envelope";
 import { cardSigningInput } from "../src/protocol/card";
@@ -76,7 +76,23 @@ export interface CardOptions {
   accepts?: string[];
   cardSeq?: number;
   issuedAt: string;
+  /** The Obi's seal key (protocol.md section 9.1): its id and public key. */
+  seal?: SealKey;
 }
+
+export interface SealKey {
+  keyId: string;
+  publicKey: string;
+}
+
+/** A seal key as a card publishes it. The Sphere only hashes and compares it, so any 32 bytes do. */
+export async function newSealKey(): Promise<SealKey> {
+  const publicKey = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  return { keyId: (await sealKeyIdOrNull(publicKey))!, publicKey };
+}
+
+/** What the Sphere sees of `bytes` bytes of words, sealed: base64url of their ciphertext and tag. */
+export const sealedText = (bytes: number): string => b64url(crypto.getRandomValues(new Uint8Array(bytes + 16)));
 
 const SKILLS: Record<string, { name: string; description: string }> = {
   review_request: { name: "Review a change", description: "Reviews a change for its owner and answers with typed findings." },
@@ -105,6 +121,7 @@ export async function makeCard(o: CardOptions): Promise<Record<string, unknown>>
           params: {
             protocol: "obi/0.1", sphere: o.sphere, obi_id: o.obi, owner: o.owner, owner_key: o.ownerKey.publicKey, key_id: o.obiKey.keyId,
             public_key: o.obiKey.publicKey, accepts, card_seq: o.cardSeq ?? 1, issued_at: o.issuedAt,
+            ...(o.seal ? { seal_key_id: o.seal.keyId, seal_public_key: o.seal.publicKey } : {}),
           },
         },
       ],
@@ -208,12 +225,12 @@ export class World {
     return this.call("POST", `/v0.1/spheres/${this.sphere}/invitations`, { token: await this.ownerToken(), body: { owner, obi, expires_in: expiresIn } });
   }
 
-  async join(owner: string, obi: string, accepts = ["review_request"]): Promise<Answer> {
+  async join(owner: string, obi: string, accepts = ["review_request"], seal?: SealKey): Promise<Answer> {
     const inv = await this.invite(owner, obi);
     expect(inv.status, JSON.stringify(inv.body)).toBe(201);
     const ownerKey = await this.ownerKey(owner);
     const key = await newKey();
-    const card = await makeCard({ sphere: this.sphere, obi, owner, ownerKey, obiKey: key, accepts, issuedAt: this.clock.ts() });
+    const card = await makeCard({ sphere: this.sphere, obi, owner, ownerKey, obiKey: key, accepts, issuedAt: this.clock.ts(), ...(seal ? { seal } : {}) });
     const r = await this.call("POST", `/v0.1/spheres/${this.sphere}/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: ownerKey.publicKey, card } });
     if (r.status === 201) this.obis.set(obi, { owner, key, accepts });
     return r;

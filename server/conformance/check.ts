@@ -13,6 +13,8 @@ import { verifyChain } from "../src/protocol/chain.ts";
 import { verifyEnvelope, type ReceiverContext, type Verdict } from "../src/protocol/envelope.ts";
 import * as validators from "../src/protocol/validators.generated.js";
 import { schemaErrors, type SchemaName } from "../src/protocol/schemas.ts";
+// @ts-expect-error: the spec's reference implementation is JavaScript with no types.
+import { openedProblem } from "../../spec/conformance/lib/obi.mjs";
 
 /** A wire case's schema (`wire/invitation-preview.request`) by the name the server compiles it under (`invitationPreviewRequest`). */
 const wireSchema = (schema: unknown): SchemaName | undefined => {
@@ -33,6 +35,9 @@ let verdict: Verdict;
 switch (testCase.case) {
   case "envelope":
     verdict = await verifyEnvelope(testCase.input, testCase.context as ReceiverContext);
+    // Check 11 (protocol.md section 9.1) is the receiving Obi's: a Sphere holds no seal key and
+    // never opens anything. The checker makes it with the reference implementation's.
+    if (verdict.ok) verdict = openedProblem(testCase.input, testCase.context) ?? verdict;
     break;
   case "card":
     verdict = await verifyCard(testCase.input, (testCase.context ?? {}) as { now?: string; bound_owner_key?: string });
