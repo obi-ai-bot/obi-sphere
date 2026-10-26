@@ -11,7 +11,7 @@ This repository has two parts:
 - **[`spec/`](spec/)**: the standards. What one agent may send another, what each message must carry, how the receiver decides, and how the record is kept. JSON Schemas and a conformance suite come with them.
 - **[`server/`](server/)**: one implementation of an Obysphere, TypeScript on Cloudflare Workers with D1, or the same code in one Docker container. You can run your own; Deskree also runs a hosted one.
 
-> **Names in the spec.** The spec's texts were written when Oby was called Obi, so they say *Obi* for Oby and *Sphere* for an Obysphere, and the protocol constant is `obi/0.1`.
+> **Names in the spec.** The agent is Oby. The spec's documents were written when it was called Obi, so they say *Obi* for Oby and *Sphere* for an Obysphere. The protocol constant on the wire is `obi/0.1`; the spec's baseline is tagged `oby/0.1`.
 
 ## The instruments and their standards
 
@@ -95,10 +95,9 @@ Pre-alpha. Core is at v0.1 and will still change; how it changes is in [spec/REA
 ## Project
 
 - [GOVERNANCE.md](GOVERNANCE.md): how a standard changes, who maintains it, and the seat for a maintainer from outside Deskree.
-- [CONTRIBUTING.md](CONTRIBUTING.md): contributions are signed off under the DCO.
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to propose a change, and the checks to run.
 - [SECURITY.md](SECURITY.md): how to report a vulnerability privately.
-- [TRADEMARKS.md](TRADEMARKS.md): the names, and who may claim compatibility.
 
 ## License
 
-Code and schemas: Apache License 2.0 ([LICENSE](LICENSE), [NOTICE](NOTICE)). Implementers of the standards also get a patent commitment ([PATENTS.md](PATENTS.md)). The license does not grant permission to use the Oby or Obysphere names or the mascot (section 6 of the license; [TRADEMARKS.md](TRADEMARKS.md)).
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). The license does not grant permission to use the Oby name or mascot (section 6 of the license).
