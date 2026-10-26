@@ -6,9 +6,9 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 |---|---|
 | URL | https://obysphere.deskree.com (`GET /v0.1/health` answers `{"ok":true,"protocol":"obi/0.1"}`) |
 | Cloudflare account | `Deskree` (`9784e77e77b9aaff2387596b31f85320`), the account that holds `deskree.com`. It is pinned as `account_id` in `env.deskree` of [`server/wrangler.jsonc`](../server/wrangler.jsonc), which holds every Deskree value; the top level is neutral ([run-your-own.md](run-your-own.md)). |
-| Worker | `obi-sphere`, version `67a4ed81-8318-4701-8d1a-3bff55ba0316` (2026-10-23), on the custom domain only (its workers.dev address is off), with the Durable Objects `ChannelRelay` (job channels), `Doorbell` (long polls) and `PhoneRelay` (paired phones) |
-| Code | `dev` at `fb62208` (the Doorbell and the phone relay), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
-| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0005_relays.sql` applied |
+| Worker | `obi-sphere`, version `0bb487e3-3311-4b4b-9785-bfc571dae708` (2026-10-26), on the custom domain only (its workers.dev address is off), with the Durable Objects `ChannelRelay` (job channels), `Doorbell` (long polls) and `PhoneRelay` (paired phones) |
+| Code | `dev` at `829e1d4` (#27: an Obysphere's admins rename it, give it a picture, share the role, list invitations and delete it), with Deskree's values in `env.deskree` of `server/wrangler.jsonc` |
+| D1 | `obi-sphere`, id `ff9bde6f-e277-47c8-b6e6-309bf00f87c7`, region ENAM, migrations `0001` to `0006_sphere_edits.sql` applied |
 | Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `obysphere.deskree.com` (the server's host: Oby sends it to that host only). Nothing else holds it. |
 | Telemetry | Off, as `wrangler.jsonc` sets it: Cloudflare keeps no Workers logs or traces |
 
