@@ -394,15 +394,19 @@ describe("sealed words (protocol.md section 9.1)", () => {
 
   it("relays a sealed message byte for byte, and its entry holds only what was sealed", async () => {
     const { w, seal } = await sealingTeam();
+    // ernesto's Obi can't seal yet: its words go in the clear, and the chain shows them.
+    const plain = await w.envelope("obi-ernesto", "obi-wellington", "review_request", BRIEF);
+    expect((await w.send(plain, await w.obiToken("obi-ernesto"))).status).toBe(202);
     const env = await w.envelope("obi-ernesto", "obi-wellington", "review_request", sealedBrief, { seal: sealFor(seal) });
     expect((await w.send(env, await w.obiToken("obi-ernesto"))).status).toBe(202);
     const d = await w.call("GET", "/v0.1/spheres/e2e/deliveries", { token: await w.obiToken("obi-wellington") });
     expectSchema("deliveriesResponse", d.body);
-    expect(canonicalize(d.body.deliveries[0].envelope)).toBe(canonicalize(env));
+    expect(canonicalize(d.body.deliveries[1].envelope)).toBe(canonicalize(env));
     const audit = await w.call("GET", "/v0.1/spheres/e2e/audit", { token: await w.ownerToken() });
     expectSchema("auditResponse", audit.body);
-    expect(canonicalize(audit.body.entries[0].envelope)).toBe(canonicalize(env));
-    expect(JSON.stringify(audit.body)).not.toContain("OBI-E2E-DATA-CANARY");
+    expect(JSON.stringify(audit.body.entries[0])).toContain("OBI-E2E-DATA-CANARY");
+    expect(canonicalize(audit.body.entries[1].envelope)).toBe(canonicalize(env));
+    expect(JSON.stringify(audit.body.entries[1])).not.toContain("OBI-E2E-DATA-CANARY");
   });
 
   it("refuses words in the clear between two Obis that seal (400 not_sealed), and takes them from one that can't yet", async () => {

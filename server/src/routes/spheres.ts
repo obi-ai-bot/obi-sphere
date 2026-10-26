@@ -11,7 +11,7 @@ import { ZERO_HASH } from "../protocol/chain.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
 import { checkSignIn, creatorWorkspaces, useSignIn, type SignIn } from "../signin.ts";
 
-export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL });
+export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
 
 /** The join page's one script: the Open in Oby link, built from the page's own address. */
 const JOIN_SCRIPT = `const a=document.getElementById("open");if(location.hash.length>1)a.href="oby://join/"+location.host+location.hash;`;
