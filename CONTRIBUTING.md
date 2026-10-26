@@ -2,17 +2,7 @@
 
 Thank you for helping. This repository holds the Obysphere's standards ([`spec/`](spec/)) and its reference server ([`server/`](server/)). How a standard changes, and who decides, is in [GOVERNANCE.md](GOVERNANCE.md).
 
-## Sign off every commit (DCO)
-
-Every commit is signed off under the [Developer Certificate of Origin 1.1](https://developercertificate.org/): by signing off you certify that you wrote the change, or otherwise have the right to submit it under this repository's license. Add the line with `git commit -s`:
-
-```
-Signed-off-by: Your Name <you@example.com>
-```
-
-The name and email are yours, as in your commit's author. A pull request with a commit that isn't signed off can't be merged; `git commit --amend -s` or `git rebase --signoff` adds the line to commits you already made.
-
-There is no contributor license agreement. Your contribution comes in under the Apache License 2.0, the license it goes out under ([LICENSE](LICENSE), section 5).
+The repository is under the Apache License 2.0 ([LICENSE](LICENSE)).
 
 ## Before you open a pull request
 
