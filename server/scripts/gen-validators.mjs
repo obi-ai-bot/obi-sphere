@@ -25,6 +25,7 @@ const SCHEMA_BASE = "https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/sche
 // documents it checks on its own (cards, chains, assertion headers), and what it answers.
 const EXPORTS = {
   envelope: "envelope.schema.json",
+  sealedEnvelope: "sealed/envelope.schema.json",
   runnerStatus: "runner-status.schema.json",
   agentCard: "agent-card.schema.json",
   auditEntry: "audit-entry.schema.json",
@@ -75,7 +76,7 @@ function build() {
     validateFormats: false,
     code: { source: true, esm: true, lines: true },
   });
-  ajv.addKeyword({ keyword: "x-obi-text", metaSchema: { enum: ["data"] } });
+  ajv.addKeyword({ keyword: "x-obi-text", metaSchema: { enum: ["data", "sealed"] } });
   for (const path of schemaFiles(SCHEMA_DIR)) {
     const schema = JSON.parse(readFileSync(path, "utf8"));
     if (schema.$id !== SCHEMA_BASE + relative(SCHEMA_DIR, path)) throw new Error(`${path}: $id does not match its path`);

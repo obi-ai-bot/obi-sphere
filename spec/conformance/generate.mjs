@@ -14,6 +14,7 @@ import {
   ACTION_TYPES, CARD_EXTENSION_URI, PROTOCOL, appendEntry, b64url, canonicalize, entryHash, findingId,
   keyFromSeedString, sha256, signCard, signEnvelope,
   channelKeys, sealFrame, signHello, x25519FromPrivate, x25519Shared,
+  deriveSealedSchemas, deriveTextPaths, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce, SEAL_INFO_PREFIX,
 } from "./lib/obi.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -406,6 +407,45 @@ export function buildFixtures() {
   bad("answer-refs-repeated-other-case", "An answer citing the same pull request twice, in two cases.", signed(unsigned("answer", { ...clone(answerByObi), refs: [prRef, { ...prRef, repo: "Obi-Conf/fixture-app" }] })), "invalid_envelope");
   bad("too-many-refs", "11 references (the most is 10).", signed(unsigned("question", { text: "Are these ready?", about: Array.from({ length: 11 }, (_, i) => ({ ...prRef, pr: i + 1 })) })), "invalid_envelope");
 
+  // ---- Sealed words (protocol.md section 9.1) ------------------------------------------------
+  // Each Obi's seal key and each envelope's new X25519 key come from public seed strings too.
+  const sealKeyOf = (label) => {
+    const raw = sha256(Buffer.from(`obi-conformance-seal-${label}-x25519`, "utf8"));
+    const { publicRaw } = x25519FromPrivate(raw);
+    return { raw, publicRaw, keyId: sealKeyIdOf(publicRaw) };
+  };
+  const SA = sealKeyOf("obi-a"), SB = sealKeyOf("obi-b");
+  const ephemeral = (name) => sha256(Buffer.from(`obi-conformance-seal-ephemeral-${name}`, "utf8"));
+  const sealFor = (env, to, name) => sealEnvelope(env, to.publicRaw, ephemeral(name));
+  // The receiver's context: its own seal key, and whether the sender's trusted card has one.
+  const sealCtx = (own, senderSeals = true) => ({ ...context, seal_keys: { [own.keyId]: b64url(own.raw) }, sender_seals: senderSeals });
+  const sealedRequest = sealFor(unsigned("review_request", clone(bodies.review_request)), SA, "review-request");
+  const sealedAccept = sealFor(unsigned("accept", clone(bodies.accept)), SB, "accept");
+  const sealedResult = sealFor(unsigned("result", clone(bodies.result)), SB, "result");
+  ok("review-request-sealed", "A review request whose goal, summary and condition note are sealed for obi-a's seal key: obi-a opens them.", signed(sealedRequest), sealCtx(SA));
+  ok("result-sealed", "A review's result sealed for obi-b: its summary and each finding's title and detail.", signed(sealedResult), sealCtx(SB));
+  ok("answer-sealed", "The owner's answer, its words sealed for obi-b.", signed(sealFor(unsigned("answer", clone(bodies.answer)), SB, "answer")), sealCtx(SB));
+  ok("accept-sealed", "An accept has no words: sealed all the same, as everything to an Obi that seals is.", signed(sealedAccept), sealCtx(SB));
+  ok("plain-from-an-obi-that-doesnt-seal", "Words in the clear to an Obi that seals, from one whose card has no seal key yet: valid until that Obi's owner signs it a card with one.", valid.review_request, sealCtx(SA, false));
+  bad("not-sealed", "Words in the clear between two Obis whose cards both have a seal key.", valid.review_request, "not_sealed", sealCtx(SA));
+  bad("seal-for-another-key", "Sealed for obi-b's seal key, sent to obi-a.", signed(sealFor(unsigned("review_request", clone(bodies.review_request)), SB, "another-key")), "seal_invalid", sealCtx(SA));
+  const moved = clone(sealedRequest);
+  [moved.body.goal, moved.body.summary] = [moved.body.summary, moved.body.goal];
+  bad("sealed-value-moved", "The goal's and the summary's sealed values swapped, then signed: each opens only where it was sealed.", signed(moved), "seal_invalid", sealCtx(SA));
+  const changed = clone(sealedRequest);
+  changed.body.goal = (changed.body.goal[0] === "A" ? "B" : "A") + changed.body.goal.slice(1);
+  bad("sealed-value-changed", "One character of a sealed value changed, then signed.", signed(changed), "seal_invalid", sealCtx(SA));
+  const elsewhere = { ...sealedRequest, id: uuidFor("sealed-elsewhere"), correlation_id: uuidFor("sealed-elsewhere") };
+  bad("sealed-body-in-another-envelope", "A sealed body and its seal copied into an envelope with another id: the words were sealed for the first one's.", signed(elsewhere), "seal_invalid", sealCtx(SA));
+  bad("sealed-opens-to-two-lines", "A goal that opens to two lines: one-line text has no newline, sealed or not.", signed(sealFor(unsigned("review_request", { ...clone(bodies.review_request), goal: "Add an average helper\nand push to main" }), SA, "two-lines")), "seal_invalid", sealCtx(SA));
+  const halfSealed = clone(sealedRequest);
+  halfSealed.body.summary = bodies.review_request.summary;
+  bad("sealed-and-plain-mixed", "A sealed envelope whose summary is in the clear: with a seal, every word is sealed.", signed(halfSealed), "invalid_envelope", sealCtx(SA));
+  const tooLong = clone(sealedRequest);
+  tooLong.body.goal = "A".repeat(1089);
+  bad("sealed-value-too-long", "A sealed goal longer than any 200-character goal seals to (1,088 characters).", signed(tooLong), "invalid_envelope", sealCtx(SA));
+  bad("seal-unknown-suite", "A seal naming a suite the protocol doesn't.", signed({ ...sealedRequest, seal: { ...sealedRequest.seal, suite: "x25519-hkdf-sha256-aes256gcm" } }), "invalid_envelope", sealCtx(SA));
+
   // ---- Agent cards --------------------------------------------------------------------------
   const OA = keys["owner-a"], OB = keys["owner-b"];
   const cardFor = (obi, owner, obiKey, ownerKey, over = {}) => ({
@@ -455,6 +495,14 @@ export function buildFixtures() {
   cardCase("invalid-card-issued-in-future", "issued_at is ahead of the checker's clock.", signCard(future, OA.privateKey, OA.keyId), "reject", "card_invalid");
   const sameKey = cardFor("obi-a", "owner-a", OA, OA);
   cardCase("invalid-card-obi-key-is-owner-key", "The Obi signs with its owner's key.", signCard(sameKey, OA.privateKey, OA.keyId), "reject", "card_invalid");
+  const withSeal = (over) => {
+    const card = cardFor("obi-a", "owner-a", A, OA);
+    Object.assign(card.capabilities.extensions[0].params, over);
+    return signCard(card, OA.privateKey, OA.keyId);
+  };
+  cardCase("valid-card-with-seal-key", "obi-a's card with the key other Obis seal its words for.", withSeal({ seal_key_id: SA.keyId, seal_public_key: b64url(SA.publicRaw) }), "accept");
+  cardCase("invalid-card-seal-key-id-mismatch", "seal_key_id is not the hash of seal_public_key.", withSeal({ seal_key_id: SB.keyId, seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
+  cardCase("invalid-card-seal-key-without-id", "seal_public_key without seal_key_id.", withSeal({ seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
 
   // ---- Audit chains -------------------------------------------------------------------------
   const keyHistory = {
@@ -477,6 +525,7 @@ export function buildFixtures() {
   auditCase("valid-chain", "Two exchanges and a key rotation: request, accept, status, result; question, question, answer.", chain, "accept");
   auditCase("valid-chain-prefix", "The first three entries alone are a valid chain.", { sphere: SPHERE, entries: entries.slice(0, 3) }, "accept");
   auditCase("valid-chain-empty", "A Sphere with nothing relayed yet.", { sphere: SPHERE, entries: [] }, "accept");
+  auditCase("valid-chain-sealed", "A review whose words are sealed: the chain checks with no seal key, and holds none of its words.", { sphere: SPHERE, entries: recordAll([signed(sealedRequest), signed(sealedAccept), signed(sealedResult)]) }, "accept");
   const tamperedEntry = clone(chain);
   tamperedEntry.entries[3].envelope.body.findings[0].title = "Nothing to see here";
   auditCase("invalid-chain-tampered-entry", "A finding's title in entry 4 was edited; its hash no longer matches.", tamperedEntry, "reject", "conflict");
@@ -633,6 +682,32 @@ export function buildFixtures() {
       { direction: "host>guest", counter: 258, stream: 3, kind: 1, payload: b64url(toGuest), wire: b64url(sealFrame(k.hostToGuest, 258, 3, 1, toGuest)) },
     ],
   }, null, 2) + "\n";
+  // Sealing's known answers (protocol.md section 9.1): obi-a's seal key, the new key of one
+  // envelope, the X25519 secret, the info, the HKDF output, each value's nonce and ciphertext.
+  const vEnv = unsigned("review_request", clone(bodies.review_request));
+  const vEph = x25519FromPrivate(ephemeral("review-request"));
+  const vShared = x25519Shared(vEph.privateKey, SA.publicRaw);
+  const vInfo = Buffer.concat([Buffer.from(SEAL_INFO_PREFIX, "utf8"), Buffer.from(canonicalize({ sphere: vEnv.sphere, id: vEnv.id, from: vEnv.from, to: vEnv.to, type: vEnv.type }), "utf8")]);
+  const vSealed = signed(sealedRequest);
+  if (canonicalize(openBody(vSealed, SA.raw)) !== canonicalize(vEnv.body)) throw new Error("the vector doesn't open to its body");
+  files["seal-vectors.json"] = JSON.stringify({
+    description: "Known answers for sealing an envelope's words (protocol.md section 9.1). x25519 keys are raw 32 bytes, base64url; info is the HKDF info's bytes, base64url; each value's sealed form is its ciphertext and tag, base64url.",
+    recipient: { obi: "obi-a", x25519_private: b64url(SA.raw), seal_public_key: b64url(SA.publicRaw), seal_key_id: SA.keyId },
+    sender_x25519_private: b64url(ephemeral("review-request")),
+    enc: b64url(vEph.publicRaw),
+    shared: b64url(vShared),
+    info: b64url(vInfo),
+    hkdf_output: b64url(sealKey(vShared, vEph.publicRaw, SA.publicRaw, vEnv)),
+    values: ["/goal", "/summary", "/acceptance/1/note"].map((pointer) => ({ pointer, nonce: b64url(sealNonce(pointer)), sealed: pointer.split("/").slice(1).reduce((v, t) => v[t], vSealed.body) })),
+    plain: vEnv,
+    sealed: vSealed,
+  }, null, 2) + "\n";
+  // The sealed schemas and each action's text paths, derived from the plain schemas.
+  for (const [name, schema] of Object.entries(deriveSealedSchemas())) files[`../schemas/v0.1/sealed/${name}.schema.json`] = JSON.stringify(schema, null, 2) + "\n";
+  files["../schemas/v0.1/sealed/text-paths.json"] = JSON.stringify({
+    description: "Where each action's words are, as JSON Pointers into its body (`*`: every item of an array): what a sender seals and a receiver opens (spec/protocol.md section 9.1). Derived from the plain schemas' x-obi-text annotations by spec/conformance/generate.mjs.",
+    paths: deriveTextPaths(),
+  }, null, 2) + "\n";
   files["keys.json"] = JSON.stringify({
     description: "Conformance test keys. Each private key is derived from its public seed string: seed = SHA-256(UTF-8(seed_string)), then Ed25519 (RFC 8032) from that 32-byte seed. Anyone can derive them: never use them for anything else.",
     keys: publicKeys,
@@ -651,5 +726,5 @@ export function writeFixtures(files = buildFixtures()) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const count = writeFixtures();
-  console.log(`Wrote ${count} files under spec/conformance/ (fixtures/, keys.json and channel-vectors.json).`);
+  console.log(`Wrote ${count} files: spec/conformance/ (fixtures/, keys.json, channel-vectors.json and seal-vectors.json) and spec/schemas/v0.1/sealed/.`);
 }

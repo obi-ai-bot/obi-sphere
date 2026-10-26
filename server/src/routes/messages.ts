@@ -103,7 +103,14 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     const to = rows<MemberRow>(3)[0];
     if (!to) throw apiError("unknown_recipient", `${env_.to} is not a member`);
     if (to.status !== "active") throw apiError("recipient_revoked", `${env_.to} was revoked`);
-    if (request_ && !cardParams(JSON.parse(to.card) as AgentCard).accepts.includes(env_.type)) throw apiError("policy_denied", `${env_.to}'s card doesn't accept ${env_.type}`);
+    const toCard = cardParams(JSON.parse(to.card) as AgentCard);
+    if (request_ && !toCard.accepts.includes(env_.type)) throw apiError("policy_denied", `${env_.to}'s card doesn't accept ${env_.type}`);
+    // Sealed for the recipient's current seal key, and never in the clear between two Obis that
+    // both seal (protocol.md section 9.1): the Sphere checks whose key, and can't read what's sealed.
+    if (env_.seal && env_.seal.key_id !== toCard.seal_key_id) throw apiError("invalid_envelope", `sealed for ${env_.seal.key_id}, not ${env_.to}'s seal key`);
+    if (!env_.seal && toCard.seal_key_id && cardParams(JSON.parse(rows<MemberRow>(4)[0]!.card) as AgentCard).seal_key_id) {
+      throw apiError("not_sealed", `${env_.from} and ${env_.to} both seal: its words go sealed for ${toCard.seal_key_id}`);
+    }
     // 12. The policy for a request; the exchange rules for a reply.
     if (request_) {
       const from = rows<MemberRow>(4)[0]!;

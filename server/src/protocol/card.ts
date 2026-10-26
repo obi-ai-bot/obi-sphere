@@ -1,7 +1,7 @@
 // Agent cards (spec/identity.md section 2): the owner's detached JWS over the card, and the
 // checks of section 2.2. `name`, `description` and the skills' words are data: never read here.
 
-import { fromB64url, keyIdOrNull, verifyEd25519 } from "./crypto.ts";
+import { fromB64url, keyIdOrNull, sealKeyIdOrNull, verifyEd25519 } from "./crypto.ts";
 import { canonicalBytes, utf8, type JsonObject } from "./json.ts";
 import { CLOCK_SKEW_SECONDS, OK, fail, seconds, type Verdict } from "./envelope.ts";
 import { matches, schemaErrors } from "./schemas.ts";
@@ -17,6 +17,9 @@ export interface CardParams {
   owner_key: string;
   key_id: string;
   public_key: string;
+  /** The X25519 key the Obi's words are sealed for (protocol.md section 9.1), and its id: both or neither. */
+  seal_key_id?: string;
+  seal_public_key?: string;
   accepts: string[];
   card_seq: number;
   issued_at: string;
@@ -53,6 +56,7 @@ export async function verifyCard(value: unknown, ctx: CardContext): Promise<Verd
   const params = cardParams(card);
   if ((await keyIdOrNull(params.public_key)) !== params.key_id) return fail("card_invalid", "key_id does not match public_key");
   if (params.owner_key === params.public_key) return fail("card_invalid", "the Obi's key must not be its owner's key");
+  if (params.seal_public_key !== undefined && (await sealKeyIdOrNull(params.seal_public_key)) !== params.seal_key_id) return fail("card_invalid", "seal_key_id does not match seal_public_key");
   const skills = card.skills.map((s) => s.id).sort().join(",");
   if (skills !== [...params.accepts].sort().join(",")) return fail("card_invalid", "skills and accepts differ");
   const urlTail = `/v0.1/spheres/${params.sphere}/members/${params.obi_id}`;

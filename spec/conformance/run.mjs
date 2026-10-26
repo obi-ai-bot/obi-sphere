@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { buildFixtures } from "./generate.mjs";
 import {
   ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, channelKeys, fromB64url, helloSigningInput, judge, openFrame, schemas, sealFrame,
-  x25519FromPrivate, x25519Shared,
+  x25519FromPrivate, x25519Shared, SEAL_INFO_PREFIX, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce,
 } from "./lib/obi.mjs";
 import { createPublicKey, verify } from "node:crypto";
 
@@ -103,6 +103,7 @@ async function implMode(command, kinds, label = "implementation") {
 // Self-check.
 
 const TEXT_DEFS = new Set(["line_text", "block_text"]);
+const SEALED_TEXT_DEF = "sealed_text";
 
 function lintSchemas() {
   section("Schemas");
@@ -119,7 +120,8 @@ function lintSchemas() {
     }
     if (node.type === "string") {
       strings++;
-      const isTextDef = TEXT_DEFS.has(path.split("/").pop()) && path.startsWith("/$defs/");
+      const last = path.split("/").pop();
+      const isTextDef = (TEXT_DEFS.has(last) || last === SEALED_TEXT_DEF) && path.startsWith("/$defs/");
       if (!isTextDef && node.maxLength === undefined) failed("schemas", `${name}${path}: a string needs maxLength`);
       if (!isTextDef && node.pattern === undefined && node.enum === undefined && node.const === undefined) failed("schemas", `${name}${path}: a string that isn't data text needs a pattern, enum or const`);
     }
@@ -129,8 +131,11 @@ function lintSchemas() {
         texts++;
         if (node["x-obi-text"] !== "data") failed("schemas", `${name}${path}: human-written text must be annotated x-obi-text: data`);
         if (node.maxLength === undefined || node.minLength === undefined) failed("schemas", `${name}${path}: data text sets its own minLength and maxLength`);
+      } else if (target === SEALED_TEXT_DEF) {
+        if (!name.startsWith("sealed/") || node["x-obi-text"] !== "sealed") failed("schemas", `${name}${path}: sealed text is only in the sealed schemas, annotated x-obi-text: sealed`);
+        if (node.maxLength === undefined || node.minLength === undefined) failed("schemas", `${name}${path}: sealed text sets its own minLength and maxLength`);
       } else if (node["x-obi-text"] !== undefined) {
-        failed("schemas", `${name}${path}: x-obi-text belongs only on line_text or block_text`);
+        failed("schemas", `${name}${path}: x-obi-text belongs only on line_text, block_text or sealed_text`);
       }
     } else if (node["x-obi-text"] !== undefined) {
       failed("schemas", `${name}${path}: x-obi-text belongs only on line_text or block_text`);
@@ -188,12 +193,44 @@ function checkChannel() {
   console.log(`${ok} channel answers as expected.`);
 }
 
+/** Sealing's known answers (seal-vectors.json), recomputed from their inputs. */
+function checkSeal() {
+  section("Sealing known answers (protocol.md section 9.1)");
+  const v = JSON.parse(readFileSync(join(here, "seal-vectors.json"), "utf8"));
+  const eq = (what, got, want) => (Buffer.from(got).equals(fromB64url(want)) ? 1 : (failed("seal", `${what} differs`), 0));
+  let ok = 0;
+  const recipient = x25519FromPrivate(fromB64url(v.recipient.x25519_private));
+  ok += eq("the recipient's seal key", recipient.publicRaw, v.recipient.seal_public_key);
+  if (sealKeyIdOf(recipient.publicRaw) === v.recipient.seal_key_id) ok++;
+  else failed("seal", "seal_key_id differs");
+  const sender = x25519FromPrivate(fromB64url(v.sender_x25519_private));
+  ok += eq("enc", sender.publicRaw, v.enc);
+  const shared = x25519Shared(sender.privateKey, recipient.publicRaw);
+  ok += eq("the X25519 secret", shared, v.shared) + eq("the X25519 secret, from the recipient's side", x25519Shared(recipient.privateKey, sender.publicRaw), v.shared);
+  ok += eq("info", Buffer.concat([Buffer.from(SEAL_INFO_PREFIX, "utf8"), Buffer.from(canonicalize({ sphere: v.plain.sphere, id: v.plain.id, from: v.plain.from, to: v.plain.to, type: v.plain.type }), "utf8")]), v.info);
+  ok += eq("the HKDF output", sealKey(shared, sender.publicRaw, recipient.publicRaw, v.plain), v.hkdf_output);
+  const resealed = sealEnvelope(v.plain, recipient.publicRaw, fromB64url(v.sender_x25519_private));
+  const { signature: _signature, ...sealedUnsigned } = v.sealed;
+  if (canonicalize(resealed) === canonicalize(sealedUnsigned)) ok++;
+  else failed("seal", "sealing the plain envelope gives another sealed one");
+  for (const value of v.values) {
+    ok += eq(`${value.pointer}'s nonce`, sealNonce(value.pointer), value.nonce);
+    const sealedValue = value.pointer.split("/").slice(1).reduce((x, t) => x[t], v.sealed.body);
+    if (sealedValue === value.sealed) ok++;
+    else failed("seal", `${value.pointer}'s sealed value differs`);
+  }
+  if (canonicalize(openBody(v.sealed, fromB64url(v.recipient.x25519_private))) === canonicalize(v.plain.body)) ok++;
+  else failed("seal", "the sealed envelope opens to another body");
+  console.log(`${ok} sealing answers as expected.`);
+}
+
 function checkDeterminism() {
   section("Fixtures are reproducible");
   const expected = buildFixtures();
   const onDisk = new Set(listFiles(join(here, "fixtures")).map((p) => relative(here, p)));
   onDisk.add("keys.json");
   onDisk.add("channel-vectors.json");
+  onDisk.add("seal-vectors.json");
   let same = 0;
   for (const [path, content] of Object.entries(expected)) {
     let actual = null;
@@ -305,6 +342,7 @@ async function selfCheck() {
   lintSchemas();
   checkJcs();
   checkChannel();
+  checkSeal();
   checkDeterminism();
   checkSecretScanAllowlist();
   const cases = checkVerdicts();

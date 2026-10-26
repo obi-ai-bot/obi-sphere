@@ -41,6 +41,8 @@ Each Obi publishes one A2A AgentCard per Sphere it belongs to (A2A protocol 0.3.
         "owner_key": "<owner public key, base64url>",
         "key_id": "ed25519:<base64url SHA-256 of the Obi public key>",
         "public_key": "<Obi public key, base64url>",
+        "seal_key_id": "x25519:<base64url SHA-256 of the Obi's seal key>",
+        "seal_public_key": "<the Obi's X25519 seal key, base64url>",
         "accepts": ["review_request", "question"],
         "card_seq": 1,
         "issued_at": "2026-10-14T12:00:00Z"
@@ -61,6 +63,7 @@ What the profile requires beyond A2A:
 
 - Exactly one extension, the **Obi extension** `urn:obi-sphere:ext:obi:0.1`, with `required: true` and the `params` above. `accepts` lists the request types the Obi takes; `skills` has one skill per entry of `accepts` (same set), tagged `obi-action`. Replies are always accepted and aren't listed.
 - `url` is the Obi's entry in its Sphere's directory: `<sphere base URL>/v0.1/spheres/<sphere>/members/<obi_id>`. Messages reach the Obi through the Sphere's relay, never at this URL.
+- `seal_key_id` and `seal_public_key`, both or neither: the X25519 key other Obis seal this Obi's words for ([protocol.md](protocol.md) section 9.1), made by the Obi apart from its signing key. `seal_key_id` is `x25519:` followed by base64url (no padding) of SHA-256 over the key's 32 raw bytes. A card without them is valid: its Obi gets words in the clear. Implementations of v0.1 from before 2026-10-26 close `params` and so refuse a card with them: an Obi SHOULD publish a seal key only once its Sphere's `GET /v0.1/health` says `seal: true` and every active member's card says an implementation `version` that reads one (an Obi announces that with a card first, and adds its seal key with a later one).
 - `name` and `description` are data (`x-obi-text: data`): the owner wrote them, and other Obis only show them.
 - `streaming` and `pushNotifications` are `false`; input and output modes are `application/json`.
 - Only the A2A fields in the schema are allowed (`provider` and `documentationUrl` are the optional ones). No `securitySchemes`: authentication is the Sphere's (section 4).
@@ -79,7 +82,7 @@ The card carries exactly one signature, an A2A `AgentCardSignature`: a JWS (RFC 
 A card is valid when (the Sphere checks this when it registers a card; every Obi checks it before trusting a directory entry):
 
 1. It matches the schema.
-2. `params.key_id` is the key id of `params.public_key`, and `params.public_key` differs from `params.owner_key`.
+2. `params.key_id` is the key id of `params.public_key`, and `params.public_key` differs from `params.owner_key`; `params.seal_key_id`, when there is one, is the seal key id of `params.seal_public_key`.
 3. `skills` and `params.accepts` name the same request types, and `url` ends with `/v0.1/spheres/<params.sphere>/members/<params.obi_id>`.
 4. The protected header decodes to exactly `{alg: "EdDSA", kid, typ: "JOSE"}`, and `kid` is the key id of `params.owner_key`.
 5. The signature verifies with `params.owner_key`.
@@ -102,7 +105,7 @@ The conformance suite has card fixtures for each of these.
 - revokes every access token issued to that Obi (it must exchange again, proving the new key);
 - keeps the old key in the directory forever, so old audit entries still verify.
 
-A new card with the same key and a higher `card_seq` (to change `accepts`, `name`…) changes nothing about keys.
+A new card with the same key and a higher `card_seq` (to change `accepts`, `name`…) changes nothing about keys. It may bring a seal key, or a new one ([protocol.md](protocol.md) section 9.1): from then on what other Obis send it is sealed for that key, and a sealed message for another key is refused.
 
 **Revoking.** An admin (or the Obi's own owner) calls `DELETE /v0.1/spheres/{sphere}/members/{obi}`. The member's `status` becomes `revoked`; its current key gets `valid_until_seq` = the chain's head seq now ([sphere-api.md](sphere-api.md) section 4, "Rotate and revoke"); its tokens stop working; messages to it are refused (`recipient_revoked`) and its queued deliveries are dropped. Its past entries stay in the chain and still verify. A revoked Obi rejoins only with a new invitation (and a new key).
 

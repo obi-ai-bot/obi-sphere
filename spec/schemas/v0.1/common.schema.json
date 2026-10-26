@@ -86,6 +86,36 @@
       "maxLength": 86,
       "pattern": "^[A-Za-z0-9_-]{86}$"
     },
+    "seal_key_id": {
+      "description": "`x25519:` followed by base64url (no padding) of SHA-256 over the 32 raw bytes of an Obi's seal key (spec/identity.md section 2).",
+      "type": "string",
+      "minLength": 50,
+      "maxLength": 50,
+      "pattern": "^x25519:[A-Za-z0-9_-]{43}$"
+    },
+    "x25519_public_key": {
+      "description": "An X25519 public key: the 32 raw bytes, base64url without padding.",
+      "type": "string",
+      "minLength": 43,
+      "maxLength": 43,
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "seal": {
+      "description": "How an envelope's words are sealed for its recipient (spec/protocol.md section 9.1): the suite, the recipient's seal key, and the sender's new X25519 key for this envelope.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "key_id", "enc"],
+      "properties": {
+        "suite": { "const": "x25519-hkdf-sha256-chacha20poly1305" },
+        "key_id": { "$ref": "#/$defs/seal_key_id" },
+        "enc": { "$ref": "#/$defs/x25519_public_key" }
+      }
+    },
+    "sealed_text": {
+      "description": "One text value sealed for the envelope's recipient: its ChaCha20-Poly1305 ciphertext and tag, base64url without padding (spec/protocol.md section 9.1). Only the sealed schemas (sealed/) use it, and each use sets its minLength and maxLength from the plain field's.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$"
+    },
     "hash": {
       "description": "A SHA-256 digest in lower-case hex.",
       "type": "string",
