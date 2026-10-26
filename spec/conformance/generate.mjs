@@ -702,6 +702,83 @@ export function buildFixtures() {
     plain: vEnv,
     sealed: vSealed,
   }, null, 2) + "\n";
+  // ---- Approving on the code host (protocol.md section 11): whether the receiver may post its
+  // approving review, with its owner's confirmation of this exchange or next to code owners'.
+  {
+    const CID = uuidFor("host-approval-exchange");
+    const OLD = "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a291807";
+    const CODEOWNERS = [
+      "# Code owners of acme/app",
+      "*                     @acme/maintainers",
+      "*.md                  @carol",
+      "/src/                 @alice",
+      "docs/*                @dana",
+      "/scripts/release.sh   @bob   # the release script",
+      "",
+    ].join("\n");
+    const base = (standing) => ({
+      now: NOW,
+      request: { correlation_id: CID, repo: "acme/app", pr: 12, base_branch: "main", head_sha: HEAD, expires_at: EXPIRES },
+      member: true,
+      owner_login: "wellington",
+      standing_permission: standing,
+    });
+    const confirmation = (over = {}) => ({ correlation_id: CID, head_sha: HEAD, signed_at: "2026-10-14T11:59:30Z", from_owner_device: true, used_before: false, ...over });
+    const review = (login, state = "APPROVED", over = {}) => ({ login, kind: "human", state, commit_id: HEAD, ...over });
+    const host = (over = {}) => ({
+      codeowners: CODEOWNERS,
+      changed_files: ["src/app.js", "test/app.test.js"],
+      files_complete: true,
+      reviews: [],
+      teams: { "acme/maintainers": ["bob", "wellington"] },
+      ...over,
+    });
+    const hostCase = (name, description, expect, reason, { standing = false, confirmations = [], code = {}, context = {} } = {}) =>
+      add("host_approval", name, {
+        description, expect, ...(expect === "reject" ? { reason } : {}),
+        context: { ...base(standing), ...context },
+        input: { owner_confirmations: confirmations, code_host: host(code) },
+      });
+    const both = [review("alice"), review("bob")];
+
+    // With the owner's confirmation of this exchange, at this commit.
+    hostCase("invalid-no-owner-confirmation", "No confirmation from the owner and no standing permission: the receiver doesn't approve.", "reject", "no_owner_confirmation");
+    hostCase("valid-owner-confirmed", "The owner confirmed this exchange at this commit on their device 30 seconds ago, used for the first time.", "accept", null, { confirmations: [confirmation()] });
+    hostCase("invalid-owner-confirmed-other-exchange", "The owner's confirmation names another exchange.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ correlation_id: uuidFor("host-approval-other-exchange") })] });
+    hostCase("invalid-owner-confirmed-older-head", "The owner confirmed this exchange at an earlier commit of the pull request.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ head_sha: OLD })] });
+    hostCase("invalid-owner-confirmation-stale", "The owner's confirmation is 121 seconds old.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ signed_at: "2026-10-14T11:57:59Z" })] });
+    hostCase("invalid-owner-confirmation-used", "The owner's confirmation was used already.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ used_before: true })] });
+    hostCase("invalid-owner-confirmation-not-from-device", "A yes that didn't come from the owner's own device (an API token, a job, anything received).", "reject", "no_owner_confirmation", { confirmations: [confirmation({ from_owner_device: false })] });
+    hostCase("invalid-owner-confirmed-request-expired", "The owner confirmed, but the request expired.", "reject", "lapsed", { confirmations: [confirmation()], context: { now: EXPIRES } });
+    hostCase("invalid-owner-confirmed-not-a-member", "The owner confirmed, but the receiver is no longer an active member of its Sphere.", "reject", "lapsed", { confirmations: [confirmation()], context: { member: false } });
+
+    // Next to code owners' approvals, under a standing permission.
+    hostCase("invalid-standing-permission-alone", "A standing permission and no code owner's approval: the receiver doesn't approve.", "reject", "no_code_owner_approval", { standing: true });
+    hostCase("valid-code-owners-approved", "A standing permission, and the owners of every changed file approved this commit (alice for src/, bob through @acme/maintainers).", "accept", null, { standing: true, code: { reviews: both } });
+    hostCase("invalid-code-owners-approved-no-standing-permission", "Code owners approved, but the owner gave no standing permission and didn't confirm.", "reject", "no_owner_confirmation", { code: { reviews: both } });
+    hostCase("invalid-code-owner-approved-older-head", "A code owner approved an earlier commit.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { commit_id: OLD }), review("bob")] } });
+    hostCase("invalid-code-owner-approval-then-changes-requested", "A code owner approved, then asked for changes.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "CHANGES_REQUESTED")] } });
+    hostCase("invalid-code-owner-approval-dismissed", "A code owner's approval was dismissed.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "DISMISSED")] } });
+    hostCase("valid-code-owner-comment-keeps-approval", "A comment after a code owner's approval leaves it standing.", "accept", null, { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "COMMENTED")] } });
+    hostCase("invalid-code-owner-review-by-a-bot", "The approval on src/ is by an account the code host marks as a bot.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { kind: "bot" }), review("bob")] } });
+    hostCase("invalid-code-owner-review-by-an-obi", "The approval on src/ carries an Obi's own fixed words.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { kind: "obi" }), review("bob")] } });
+    hostCase("invalid-receivers-own-owner-is-not-a-code-owner-here", "The receiver's own owner (a member of @acme/maintainers) approved: their login is the one the receiver posts with, so it counts for nobody.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("Wellington")] } });
+    hostCase("invalid-not-every-file-approved", "Only the owner of src/ approved; nobody who owns test/app.test.js did.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice")] } });
+    hostCase("invalid-file-with-no-owners", "A changed file no CODEOWNERS line covers.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: "/src/ @alice\n", changed_files: ["src/app.js", "package.json"], reviews: [review("alice")] } });
+    hostCase("invalid-line-with-no-owners", "The last line matching a changed file names no owners.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: "* @alice\n/vendor/\n", changed_files: ["vendor/lib.js"], reviews: [review("alice")] } });
+    hostCase("valid-team-owner", "bob owns test/ through @acme/maintainers, and approved.", "accept", null, { standing: true, code: { changed_files: ["test/app.test.js"], reviews: [review("bob")] } });
+    hostCase("invalid-unreadable-codeowners", "A CODEOWNERS pattern with `!` can't be read: nobody counts as a code owner.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: `${CODEOWNERS}!src/generated.js\n`, reviews: both } });
+    hostCase("invalid-no-codeowners-file", "The repository has no CODEOWNERS file on its base branch.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: null, reviews: both } });
+    hostCase("invalid-files-not-listed-in-full", "The code host couldn't list every changed file.", "reject", "no_code_owner_approval", { standing: true, code: { files_complete: false, reviews: both } });
+    hostCase("valid-last-matching-line-wins", "src/README.md matches `*.md` (carol) and, later, `/src/` (alice): alice owns it.", "accept", null, { standing: true, code: { changed_files: ["src/README.md"], reviews: [review("alice")] } });
+    hostCase("invalid-earlier-matching-line-loses", "src/README.md is alice's, not carol's, whose line comes first.", "reject", "no_code_owner_approval", { standing: true, code: { changed_files: ["src/README.md"], reviews: [review("carol")] } });
+    hostCase("valid-star-covers-one-level", "`docs/*` covers docs/guide.md.", "accept", null, { standing: true, code: { changed_files: ["docs/guide.md"], reviews: [review("dana")] } });
+    hostCase("invalid-star-not-nested", "`docs/*` doesn't cover docs/old/notes.md, which `*.md` gives to carol.", "reject", "no_code_owner_approval", { standing: true, code: { changed_files: ["docs/old/notes.md"], reviews: [review("dana")] } });
+    hostCase("valid-owners-end-at-a-comment", "The release script's owner is bob; the words after `#` are a comment.", "accept", null, { standing: true, code: { changed_files: ["scripts/release.sh"], reviews: [review("bob")] } });
+    hostCase("invalid-email-owner", "An owner given as an email address counts for nobody.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: "/src/ alice@acme.example\n", changed_files: ["src/app.js"], reviews: [review("alice")] } });
+    hostCase("invalid-renamed-from-an-owned-file", "A file renamed out of src/ lists both paths: the old one is alice's, and she didn't approve.", "reject", "no_code_owner_approval", { standing: true, code: { changed_files: ["src/old.js", "lib/new.js"], reviews: [review("bob")] } });
+  }
+
   // The sealed schemas and each action's text paths, derived from the plain schemas.
   for (const [name, schema] of Object.entries(deriveSealedSchemas())) files[`../schemas/v0.1/sealed/${name}.schema.json`] = JSON.stringify(schema, null, 2) + "\n";
   files["../schemas/v0.1/sealed/text-paths.json"] = JSON.stringify({

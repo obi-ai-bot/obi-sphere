@@ -656,6 +656,122 @@ export function verifyWire(input, context) {
   return errors.length ? fail("bad_request", errors.join("; ")) : OK;
 }
 
+// ---- Approving on the code host (protocol.md section 11, "Approving on the code host")
+
+// How long an owner's confirmation of one exchange stays fresh, either way of the receiver's clock.
+export const CONFIRMATION_FRESH = 120;
+
+// A CODEOWNERS pattern as a matcher of repository paths ("Who counts as a code owner"): `*` any
+// characters but `/`, `**` any characters, `?` one character but `/`; anchored when it starts with
+// `/` or has a `/` before its end; a trailing `/` covers everything under the directory; any other
+// pattern also covers everything under a directory it names, unless its last part is exactly `*`.
+export function codeownersPattern(pattern) {
+  const dirOnly = pattern.endsWith("/");
+  let body = dirOnly ? pattern.slice(0, -1) : pattern;
+  const anchored = body.startsWith("/") || body.includes("/");
+  if (body.startsWith("/")) body = body.slice(1);
+  let re = "";
+  for (let i = 0; i < body.length; i++) {
+    const c = body[i];
+    if (c === "*" && body[i + 1] === "*") {
+      if (body[i + 2] === "/") { re += "(?:.*/)?"; i += 2; } else { re += ".*"; i += 1; }
+    } else if (c === "*") re += "[^/]*";
+    else if (c === "?") re += "[^/]";
+    else re += c.replace(/[.+^${}()|\\]/g, "\\$&");
+  }
+  const last = body.split("/").pop();
+  const tail = dirOnly ? "/.*" : last === "*" ? "" : "(?:/.*)?";
+  return new RegExp(`^${anchored ? "" : "(?:.*/)?"}${re}${tail}$`, "s");
+}
+
+// The rules of a CODEOWNERS file, in order: [{match, owners}], or null when it can't be read.
+export function parseCodeowners(text) {
+  if (typeof text !== "string") return null;
+  const rules = [];
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const words = line.split(/\s+/);
+    const pattern = words[0];
+    if (/[!\[\]\\]/.test(pattern)) return null;
+    const owners = [];
+    for (const w of words.slice(1)) {
+      if (w.startsWith("#")) break;
+      owners.push(w);
+    }
+    rules.push({ match: codeownersPattern(pattern), owners });
+  }
+  return rules;
+}
+
+// The owners of `path`: the last matching rule's.
+export function ownersOf(rules, path) {
+  let owners = [];
+  for (const rule of rules) if (rule.match.test(path)) owners = rule.owners;
+  return owners;
+}
+
+// The logins whose approval of `head` counts: each person's last approving, changes-requesting or
+// dismissed review decides; only a person's (`kind` human), never the receiver's own owner's.
+export function countingApprovers(reviews, head, ownLogin) {
+  const last = new Map();
+  for (const r of reviews ?? []) {
+    if (!["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(r?.state) || typeof r.login !== "string") continue;
+    last.set(r.login.toLowerCase(), r);
+  }
+  const own = (ownLogin ?? "").toLowerCase();
+  return [...last.entries()]
+    .filter(([login, r]) => r.state === "APPROVED" && r.commit_id === head && r.kind === "human" && login !== own)
+    .map(([login]) => login);
+}
+
+const isOwner = (owner, login, teams) => {
+  if (!owner.startsWith("@")) return false;
+  const name = owner.slice(1).toLowerCase();
+  if (!name.includes("/")) return name === login;
+  const team = Object.entries(teams ?? {}).find(([t]) => t.toLowerCase() === name);
+  return !!team && team[1].some((m) => typeof m === "string" && m.toLowerCase() === login);
+};
+
+// Whether a person who owns every changed file approved `head` (input.code_host).
+export function codeOwnerApproved(host, head, ownLogin) {
+  const rules = parseCodeowners(host?.codeowners);
+  if (!rules) return false;
+  const files = host.changed_files ?? [];
+  if (!files.length || host.files_complete !== true) return false;
+  const approvers = countingApprovers(host.reviews, head, ownLogin);
+  return files.every((file) => {
+    const owners = ownersOf(rules, file);
+    return owners.length > 0 && approvers.some((login) => owners.some((o) => isOwner(o, login, host.teams)));
+  });
+}
+
+// A `host_approval` case: whether the receiver may post its approving review now. `context` is
+// {now, request: {correlation_id, head_sha, expires_at}, member, owner_login, standing_permission};
+// `input` is {owner_confirmations: [{correlation_id, head_sha, signed_at, from_owner_device,
+// used_before}], code_host: {codeowners, changed_files, files_complete, reviews, teams}}.
+export function verifyHostApproval(input, context) {
+  const now = seconds(context?.now);
+  const request = context?.request ?? {};
+  if (!(now < seconds(request.expires_at)) || context?.member !== true) {
+    return fail("lapsed", "the request expired, or the receiver is no longer an active member of its Sphere");
+  }
+  const confirmed = (input?.owner_confirmations ?? []).some((c) =>
+    c?.from_owner_device === true &&
+    c.used_before === false &&
+    c.correlation_id === request.correlation_id &&
+    c.head_sha === request.head_sha &&
+    Math.abs(now - seconds(c.signed_at)) <= CONFIRMATION_FRESH);
+  if (confirmed) return { ok: true };
+  if (context?.standing_permission !== true) {
+    return fail("no_owner_confirmation", "its owner didn't confirm this exchange at this commit on their own device");
+  }
+  if (!codeOwnerApproved(input?.code_host, request.head_sha, context?.owner_login)) {
+    return fail("no_code_owner_approval", "no person who owns every changed file approved this commit");
+  }
+  return { ok: true };
+}
+
 export function judge(testCase) {
   switch (testCase.case) {
     case "envelope":
@@ -666,6 +782,8 @@ export function judge(testCase) {
       return verifyChain(testCase.input, testCase.context);
     case "wire":
       return verifyWire(testCase.input, testCase.context);
+    case "host_approval":
+      return verifyHostApproval(testCase.input, testCase.context);
     default:
       return fail("bad_request", `unknown case kind ${testCase.case}`);
   }

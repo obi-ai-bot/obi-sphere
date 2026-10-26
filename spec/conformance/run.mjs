@@ -5,7 +5,7 @@
 //   node conformance/run.mjs --impl "<cmd>"     judge an implementation: each case's {case, context,
 //                                               input} on stdin (never its expected verdict),
 //                                               exit 0 = accept, anything else = reject
-//   options: --kinds envelope,card,audit,wire   only these case kinds (impl mode)
+//   options: --kinds envelope,card,audit,wire,host_approval   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
 //
 // Exit status 0 when every check passes, 1 otherwise.
@@ -307,6 +307,9 @@ function checkCoverage(cases) {
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");
   // Invitations, named and open (sphere-api.md section 4).
   for (const n of ["valid-invitation-named", "valid-invitation-open", "invalid-invitation-owner-without-obi", "invalid-invitation-named-max-uses", "invalid-invitation-email-domain", "valid-invitation-preview-response"]) need.push(`wire/${n}`);
+  // Approving on the code host (protocol.md section 11): the owner's confirmation counts only for
+  // this exchange, at this commit, fresh and once; a standing permission alone never does.
+  for (const n of ["valid-owner-confirmed", "invalid-no-owner-confirmation", "invalid-owner-confirmed-other-exchange", "invalid-owner-confirmed-older-head", "invalid-owner-confirmation-stale", "invalid-owner-confirmation-used", "invalid-owner-confirmation-not-from-device", "invalid-owner-confirmed-request-expired", "invalid-standing-permission-alone", "valid-code-owners-approved", "invalid-code-owners-approved-no-standing-permission", "invalid-code-owner-approved-older-head", "invalid-code-owner-review-by-an-obi", "invalid-receivers-own-owner-is-not-a-code-owner-here", "invalid-not-every-file-approved", "invalid-file-with-no-owners"]) need.push(`host_approval/${n}`);
   let ok = 0;
   for (const n of need) {
     if (names.has(n)) ok++;
