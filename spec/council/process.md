@@ -64,7 +64,7 @@ The convener writes the motion and signs it. A motion has:
 
 | Field | Meaning |
 |---|---|
-| `kind` | What is decided: `approve` (approve or reject), `choose` (one of several options), `claim` (true or false), `find` (find problems; the verdict is the set of findings that stand). |
+| `kind` | What is decided: `approve` (approve or reject), `claim` (true or false), `choose` (one of several options) or `estimate` (a number). Finding problems is an `approve` motion with the veto on: the findings that stand are part of its verdict (step 8). Each kind takes its own ballot (step 6) and rules (step 7). |
 | `subject` | What is assessed: a commit (`repo` and `head_sha`, with `base_sha`), an artifact (by hash), or a document. Data. |
 | `options` | For `choose`: 2 or more options, each with a stable id. |
 | `criteria` | Typed criteria the assessment checks, as protocol.md section 6's acceptance conditions (`tests_pass`, `no_blocker_findings`, `no_findings_at_or_above`, `custom`). |
@@ -120,7 +120,7 @@ Each seat casts a typed ballot, committed and revealed as in steps 4 and 5 so th
 | `approve` | `approve`, `reject` or `abstain` |
 | `claim` | `true`, `false` or `unknown` (counted as approve, reject and abstain) |
 | `choose` | a complete ranking of the options, best first, or `abstain` |
-| an estimate | an integer, or `abstain` |
+| `estimate` | an integer from 0 to 2^53 − 1 (protocol.md section 2), or `abstain` |
 
 A seat's final ballot may differ from its provisional ballot (step 4): the reveal and the challenges are evidence it may weigh. Both are in the record, so every change of mind after the reveal is visible, and the evaluation can measure whether reveals improve verdicts or only herd them. Reasons are data and are sealed (step 8).
 
@@ -132,11 +132,11 @@ The clerk applies the motion's rule to the valid ballots and the blocking findin
 |---|---|---|
 | `majority` | approve, claim | approve when approvals are more than rejections, reject when fewer, tie when equal |
 | `supermajority` *p*/*q* | approve, claim | approve when approvals are at least *p*/*q* of approvals and rejections together, otherwise reject |
-| `unanimity` | approve, claim | approve when there is at least one approval and no rejection, otherwise reject |
-| evidenced veto | with any of the three above | reject when any finding blocks (step 5), whatever the votes |
+| `unanimity` | approve, claim | approve when there is at least one approval and no rejection among the ballots cast, otherwise reject; an absent seat or an abstention doesn't stop it |
+| evidenced veto | approve, claim, with any of the three above | reject when any finding blocks (step 5), whatever the votes |
 | `schulze` | choose | the Condorcet winner when there is one; otherwise the Schulze winners |
 | `borda` | choose | the options with the highest Borda score |
-| `median` | estimates | the lower median of the values |
+| `median` | estimate | the lower median of the values |
 
 - **Quorum.** A seat is present when it cast a valid ballot, `abstain` included. With fewer present seats than the motion's quorum, the outcome is *no quorum*.
 - **Ties.** A tie, an all-abstain count and a missed quorum go to the motion's owner (step 9). A `choose` motion MAY instead name the seeded tie-break, which orders the tied options by the seed of step 3, so it is fixed by nobody's choice; a yes/no motion never breaks a tie by lot.
