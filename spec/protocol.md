@@ -320,7 +320,7 @@ An Obi whose card has a seal key ([identity.md](identity.md) section 2) gets its
 **Receiving** (section 10, check 11). After checks 1 to 10:
 
 - An envelope with `seal` is for a seal key the receiver holds (its `key_id`); every text value opens; and the opened envelope, without `seal`, matches envelope.schema.json and passes check 3. Otherwise it is `seal_invalid`: a value that doesn't open or isn't UTF-8, or opened words that break the schema. Section 8 applies to the opened words unchanged: they are data.
-- An envelope without `seal` is `not_sealed` when the receiver's own card and the sender's trusted card both have a seal key.
+- An envelope without `seal` is `not_sealed` when the receiver's own card and the sender's trusted card both have a seal key, and had one when it was written: its `created_at` is at least 300 seconds (the clock skew) after the later of the two cards' `issued_at`. A card is issued a little before the Sphere takes it, and words in the clear written before both cards had a seal key were valid when sent. A sender that seals by mistake an envelope for a receiver whose card has no seal key yet is answered in the clear.
 
 A sender scans the plain words for secrets before it seals them (section 11, step 8): sealing never takes text past the scan.
 
