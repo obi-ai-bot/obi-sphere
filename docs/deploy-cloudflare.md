@@ -12,7 +12,7 @@ Deployed 2026-10-20. It runs the Sphere server from [`server/`](../server/), unc
 | Secrets | `SPHERE_OPERATOR_TOKEN` (a Worker secret). A copy is in the deployer's macOS Keychain under service `obi-sphere-operator-token`, account `obysphere.deskree.com` (the server's host: Oby sends it to that host only). Nothing else holds it. |
 | Telemetry | Off, as `wrangler.jsonc` sets it: Cloudflare keeps no Workers logs or traces |
 
-The first test deploy ran in the owner's personal account at `obi-sphere.well0cp.workers.dev`, with D1 `b93094ac-9fe4-4dee-88fc-f67297899392`. It held only test Spheres and was replaced by this deploy, so it can be deleted.
+The first test deploy ran in a personal account. It held only test Spheres and was replaced by this deploy.
 
 ## Checked against the deployed URL
 
