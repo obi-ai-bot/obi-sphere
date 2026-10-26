@@ -658,8 +658,17 @@ export function verifyWire(input, context) {
 
 // ---- Approving on the code host (protocol.md section 11, "Approving on the code host")
 
-// How long an owner's confirmation of one exchange stays fresh, either way of the receiver's clock.
+// How long an owner's confirmation of one exchange stays fresh: signed at most this long before
+// the receiver checks it, and at most CONFIRMATION_AHEAD after (the device's clock running ahead).
 export const CONFIRMATION_FRESH = 120;
+export const CONFIRMATION_AHEAD = 30;
+
+// What every review an Obi posts on the code host carries, matched without regard to case: a
+// review whose body has it is an Obi's, whoever's account posted it.
+export const OBI_REVIEW_MARKER = "by oby:";
+
+// The code host's access levels that let an approval count: write or more.
+export const WRITE_ACCESS = ["admin", "maintain", "write"];
 
 // A CODEOWNERS pattern as a matcher of repository paths ("Who counts as a code owner"): `*` any
 // characters but `/`, `**` any characters, `?` one character but `/`; anchored when it starts with
@@ -711,45 +720,56 @@ export function ownersOf(rules, path) {
   return owners;
 }
 
-// The logins whose approval of `head` counts: each person's last approving, changes-requesting or
-// dismissed review decides; only a person's (`kind` human), never the receiver's own owner's.
-export function countingApprovers(reviews, head, ownLogin) {
+// Whether a review is a person's: not an account the code host marks as a bot, and no Obi's marker.
+export const byAPerson = (review) =>
+  review?.account_type !== "Bot" && !String(review?.body ?? "").toLowerCase().includes(OBI_REVIEW_MARKER);
+
+// The logins (lower case) whose approval of `head` counts: each person's last approving,
+// changes-requesting or dismissed review decides; only a person's, with write access or more
+// (`permissions`), and never the receiver's own owner's.
+export function countingApprovers(reviews, head, ownLogin, permissions) {
   const last = new Map();
   for (const r of reviews ?? []) {
     if (!["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(r?.state) || typeof r.login !== "string") continue;
     last.set(r.login.toLowerCase(), r);
   }
   const own = (ownLogin ?? "").toLowerCase();
+  const access = (login) => Object.entries(permissions ?? {}).find(([l]) => l.toLowerCase() === login)?.[1];
   return [...last.entries()]
-    .filter(([login, r]) => r.state === "APPROVED" && r.commit_id === head && r.kind === "human" && login !== own)
+    .filter(([login, r]) => r.state === "APPROVED" && r.commit_id === head && byAPerson(r) && login !== own && WRITE_ACCESS.includes(access(login)))
     .map(([login]) => login);
 }
 
-const isOwner = (owner, login, teams) => {
+// Whether `owner` (`@login` or `@org/team`) names `login`: a team only of the repository's own
+// organization (`org`), with `login` among its members.
+const isOwner = (owner, login, teams, org) => {
   if (!owner.startsWith("@")) return false;
   const name = owner.slice(1).toLowerCase();
   if (!name.includes("/")) return name === login;
+  if (name.split("/")[0] !== org) return false;
   const team = Object.entries(teams ?? {}).find(([t]) => t.toLowerCase() === name);
   return !!team && team[1].some((m) => typeof m === "string" && m.toLowerCase() === login);
 };
 
-// Whether a person who owns every changed file approved `head` (input.code_host).
-export function codeOwnerApproved(host, head, ownLogin) {
+// Whether people who between them own every changed file of `repo` approved `head`.
+export function codeOwnerApproved(host, repo, head, ownLogin) {
   const rules = parseCodeowners(host?.codeowners);
   if (!rules) return false;
   const files = host.changed_files ?? [];
   if (!files.length || host.files_complete !== true) return false;
-  const approvers = countingApprovers(host.reviews, head, ownLogin);
+  const org = String(repo ?? "").split("/")[0].toLowerCase();
+  const approvers = countingApprovers(host.reviews, head, ownLogin, host.permissions);
   return files.every((file) => {
     const owners = ownersOf(rules, file);
-    return owners.length > 0 && approvers.some((login) => owners.some((o) => isOwner(o, login, host.teams)));
+    return owners.length > 0 && approvers.some((login) => owners.some((o) => isOwner(o, login, host.teams, org)));
   });
 }
 
 // A `host_approval` case: whether the receiver may post its approving review now. `context` is
-// {now, request: {correlation_id, head_sha, expires_at}, member, owner_login, standing_permission};
-// `input` is {owner_confirmations: [{correlation_id, head_sha, signed_at, from_owner_device,
-// used_before}], code_host: {codeowners, changed_files, files_complete, reviews, teams}}.
+// {now, request: {correlation_id, repo, head_sha, expires_at}, member, owner_login,
+// standing_permission}; `input` is {owner_confirmations: [{correlation_id, head_sha, signed_at,
+// from_owner_device, used_before}], code_host: {codeowners, changed_files, files_complete,
+// reviews: [{login, account_type, body, state, commit_id}], teams, permissions}}.
 export function verifyHostApproval(input, context) {
   const now = seconds(context?.now);
   const request = context?.request ?? {};
@@ -761,12 +781,13 @@ export function verifyHostApproval(input, context) {
     c.used_before === false &&
     c.correlation_id === request.correlation_id &&
     c.head_sha === request.head_sha &&
-    Math.abs(now - seconds(c.signed_at)) <= CONFIRMATION_FRESH);
+    now - seconds(c.signed_at) <= CONFIRMATION_FRESH &&
+    seconds(c.signed_at) - now <= CONFIRMATION_AHEAD);
   if (confirmed) return { ok: true };
   if (context?.standing_permission !== true) {
     return fail("no_owner_confirmation", "its owner didn't confirm this exchange at this commit on their own device");
   }
-  if (!codeOwnerApproved(input?.code_host, request.head_sha, context?.owner_login)) {
+  if (!codeOwnerApproved(input?.code_host, request.repo, request.head_sha, context?.owner_login)) {
     return fail("no_code_owner_approval", "no person who owns every changed file approved this commit");
   }
   return { ok: true };

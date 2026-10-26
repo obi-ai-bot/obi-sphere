@@ -724,13 +724,16 @@ export function buildFixtures() {
       standing_permission: standing,
     });
     const confirmation = (over = {}) => ({ correlation_id: CID, head_sha: HEAD, signed_at: "2026-10-14T11:59:30Z", from_owner_device: true, used_before: false, ...over });
-    const review = (login, state = "APPROVED", over = {}) => ({ login, kind: "human", state, commit_id: HEAD, ...over });
+    // Reviews as the code host lists them: the account's type, the words, the opinion, the commit.
+    const review = (login, state = "APPROVED", over = {}) => ({ login, account_type: "User", body: "Looks good to me.", state, commit_id: HEAD, ...over });
+    const OBI_APPROVAL = "Oby reviewed this commit and approves it.\n\nby Oby: Oby wrote this review.";
     const host = (over = {}) => ({
       codeowners: CODEOWNERS,
       changed_files: ["src/app.js", "test/app.test.js"],
       files_complete: true,
       reviews: [],
       teams: { "acme/maintainers": ["bob", "wellington"] },
+      permissions: { alice: "write", bob: "maintain", carol: "write", dana: "admin", wellington: "write" },
       ...over,
     });
     const hostCase = (name, description, expect, reason, { standing = false, confirmations = [], code = {}, context = {} } = {}) =>
@@ -747,6 +750,8 @@ export function buildFixtures() {
     hostCase("invalid-owner-confirmed-other-exchange", "The owner's confirmation names another exchange.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ correlation_id: uuidFor("host-approval-other-exchange") })] });
     hostCase("invalid-owner-confirmed-older-head", "The owner confirmed this exchange at an earlier commit of the pull request.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ head_sha: OLD })] });
     hostCase("invalid-owner-confirmation-stale", "The owner's confirmation is 121 seconds old.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ signed_at: "2026-10-14T11:57:59Z" })] });
+    hostCase("valid-owner-confirmation-device-clock-ahead", "The owner's device clock runs 30 seconds ahead of the receiver's.", "accept", null, { confirmations: [confirmation({ signed_at: "2026-10-14T12:00:30Z" })] });
+    hostCase("invalid-owner-confirmation-from-the-future", "The owner's confirmation is signed 31 seconds after the receiver's now.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ signed_at: "2026-10-14T12:00:31Z" })] });
     hostCase("invalid-owner-confirmation-used", "The owner's confirmation was used already.", "reject", "no_owner_confirmation", { confirmations: [confirmation({ used_before: true })] });
     hostCase("invalid-owner-confirmation-not-from-device", "A yes that didn't come from the owner's own device (an API token, a job, anything received).", "reject", "no_owner_confirmation", { confirmations: [confirmation({ from_owner_device: false })] });
     hostCase("invalid-owner-confirmed-request-expired", "The owner confirmed, but the request expired.", "reject", "lapsed", { confirmations: [confirmation()], context: { now: EXPIRES } });
@@ -760,8 +765,14 @@ export function buildFixtures() {
     hostCase("invalid-code-owner-approval-then-changes-requested", "A code owner approved, then asked for changes.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "CHANGES_REQUESTED")] } });
     hostCase("invalid-code-owner-approval-dismissed", "A code owner's approval was dismissed.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "DISMISSED")] } });
     hostCase("valid-code-owner-comment-keeps-approval", "A comment after a code owner's approval leaves it standing.", "accept", null, { standing: true, code: { reviews: [review("alice"), review("bob"), review("alice", "COMMENTED")] } });
-    hostCase("invalid-code-owner-review-by-a-bot", "The approval on src/ is by an account the code host marks as a bot.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { kind: "bot" }), review("bob")] } });
-    hostCase("invalid-code-owner-review-by-an-obi", "The approval on src/ carries an Obi's own fixed words.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { kind: "obi" }), review("bob")] } });
+    hostCase("invalid-code-owner-review-by-a-bot", "The approval on src/ is by an account the code host marks as a bot.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { account_type: "Bot" }), review("bob")] } });
+    hostCase("invalid-code-owner-review-by-an-obi", "The approval on src/ carries an Obi's marker (`by Oby:`), though a person's account posted it.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { body: OBI_APPROVAL }), review("bob")] } });
+    hostCase("invalid-code-owner-review-obi-verdict", "An Obi's verdict, signed with its marker at the end, posted from a person's account in the owners' team.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("bob", "APPROVED", { body: "Oby's verdict: approved.\n\nNo findings.\n\nby Oby: Oby wrote this review." })] } });
+    hostCase("invalid-code-owner-review-obi-marker-any-case", "The Obi's marker counts in any case (`BY OBY:`).", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice", "APPROVED", { body: "Approved. BY OBY: an agent wrote this." }), review("bob")] } });
+    hostCase("invalid-code-owner-without-write-access", "bob is in @acme/maintainers but can only read the repository: the code host ignores his approval, and so does the receiver.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: both, permissions: { alice: "write", bob: "read" } } });
+    hostCase("invalid-code-owner-access-unknown", "The code host didn't say what access alice has: her approval doesn't count.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: both, permissions: { bob: "write" } } });
+    hostCase("invalid-team-in-another-org", "The owners' team belongs to another organization than the repository's.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: "* @other-org/maintainers\n", changed_files: ["test/app.test.js"], teams: { "other-org/maintainers": ["bob"] }, reviews: [review("bob")] } });
+    hostCase("valid-logins-in-any-case", "Logins and team names match without regard to case: @Alice, ALICE, Bob and @ACME/Maintainers.", "accept", null, { standing: true, code: { codeowners: "* @ACME/Maintainers\n/src/ @Alice\n", teams: { "acme/maintainers": ["BOB"] }, permissions: { ALICE: "write", bob: "write" }, reviews: [review("ALICE"), review("Bob")] } });
     hostCase("invalid-receivers-own-owner-is-not-a-code-owner-here", "The receiver's own owner (a member of @acme/maintainers) approved: their login is the one the receiver posts with, so it counts for nobody.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice"), review("Wellington")] } });
     hostCase("invalid-not-every-file-approved", "Only the owner of src/ approved; nobody who owns test/app.test.js did.", "reject", "no_code_owner_approval", { standing: true, code: { reviews: [review("alice")] } });
     hostCase("invalid-file-with-no-owners", "A changed file no CODEOWNERS line covers.", "reject", "no_code_owner_approval", { standing: true, code: { codeowners: "/src/ @alice\n", changed_files: ["src/app.js", "package.json"], reviews: [review("alice")] } });
