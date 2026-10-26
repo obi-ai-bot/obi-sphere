@@ -53,6 +53,13 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `POST /v0.1/signin/google/callback` | none (Google's form post) | | form | `303` to `obi-sphere://signin?…` |
 | `POST /v0.1/oauth/token` | none | | form (identity.md 4.3) | `200` [token.response](schemas/v0.1/wire/token.response.schema.json) |
 | `GET /v0.1/spheres/{sphere}` | bearer | any | | `200` sphere |
+| `PATCH /v0.1/spheres/{sphere}` | owner token | `admin` | [sphere-update.request](schemas/v0.1/wire/sphere-update.request.schema.json) | `200` sphere |
+| `DELETE /v0.1/spheres/{sphere}` | owner token | `admin` | | `204` |
+| `GET /v0.1/spheres/{sphere}/image` | bearer | any | | `200` `image/png` |
+| `PUT /v0.1/spheres/{sphere}/image` | owner token | `admin` | `image/png` | `200` sphere |
+| `DELETE /v0.1/spheres/{sphere}/image` | owner token | `admin` | | `200` sphere |
+| `PUT`, `DELETE /v0.1/spheres/{sphere}/admins/{owner}` | owner token | `admin` | | `200` sphere |
+| `GET /v0.1/spheres/{sphere}/invitations` | owner token | `admin` | | `200` [invitations.response](schemas/v0.1/wire/invitations.response.schema.json) |
 | `POST /v0.1/spheres/{sphere}/invitations` | owner token | `admin` | [invitation.request](schemas/v0.1/wire/invitation.request.schema.json) | `201` [invitation.response](schemas/v0.1/wire/invitation.response.schema.json) |
 | `DELETE /v0.1/spheres/{sphere}/invitations/{invitation_id}` | owner token | `admin` | | `204` |
 | `POST /v0.1/spheres/{sphere}/invitations/{invitation_id}/preview` | none (secret) | | [invitation-preview.request](schemas/v0.1/wire/invitation-preview.request.schema.json) | `200` [invitation-preview.response](schemas/v0.1/wire/invitation-preview.response.schema.json) |
@@ -88,7 +95,8 @@ Outside `/v0.1`, a Sphere server may answer `GET /join` with a page for people: 
 It binds `owner_key` to the admin owner, sets the policy to version 0 with no rules (every request refused) and `updated_at` equal to the Sphere's `created_at`, and starts an empty audit chain (head seq 0, head hash 64 zeros). Answers `201`:
 
 ```json
-{"sphere": "e2e", "name": "E2E sphere", "protocol": "obi/0.1", "admin_owner": "wellington", "created_at": "2026-10-14T12:00:00Z"}
+{"sphere": "e2e", "name": "E2E sphere", "protocol": "obi/0.1", "admin_owner": "wellington", "admins": ["wellington"],
+ "created_at": "2026-10-14T12:00:00Z"}
 ```
 
 `409 conflict` when the id is taken. Some ids are **reserved** and taken from the start, so nobody creates a Sphere with them, the operator included: `avenga`, `tetrix`, `oby`, `app`, `www`, `admin`, `api`, `help` and `acme`. `GET /v0.1/spheres/{sphere}` for a reserved id that has no Sphere answers as for a Sphere that exists (`401 unauthorized` without a valid token for it), never `404`, so a client asking whether an id is free sees it taken.
@@ -96,6 +104,14 @@ It binds `owner_key` to the admin owner, sets the policy to version 0 with no ru
 **Without the operator token.** The body may carry `signin`, a sign-in (section 3.1), in place of the operator's `Authorization`. The Sphere then checks the sign-in as section 3.1 says, that it was started for `admin.owner_key`, and that its account belongs to a Google Workspace the operator lets create Spheres (`403 forbidden` for each, the same answer for all; a personal Google account belongs to none). The sign-in is used up, and the admin owner is bound to its account (section 3.1, "One owner per account"). A Sphere server whose operator named no such Workspace creates Spheres with the operator token only (`403 forbidden`).
 
 **How many.** An account may be the admin owner of at most `SPHERE_CREATE_LIMIT` Spheres on a Sphere server (the operator's setting, 3 when unset): a Sphere counts when its admin owner is bound to the account, however it was created. Past it, a create with a sign-in is `429 rate_limited`, with no `Retry-After`, since waiting doesn't free one; the sign-in isn't used. The operator's create has no limit.
+
+**Its admins.** `admin_owner` is the owner who made the Sphere; `admins` lists every owner who administers it now, sorted. Any admin's own token may hold `admin` (identity.md 4.2), and every call that needs it is open to each of them. `PUT /v0.1/spheres/{sphere}/admins/{owner}` makes an owner who has joined (whose key is bound) an admin, `409 conflict` for anyone else; `DELETE` takes it away, from anyone, the one who made it included, and their tokens holding `admin` stop at once (`401 unauthorized`). A Sphere keeps at least one admin: taking the last one's away is `409 conflict`. Both answer `200` with the Sphere; taking it from someone who isn't one changes nothing.
+
+**Changing it.** An admin renames the Sphere with `PATCH /v0.1/spheres/{sphere}` and `{"name": "…"}` (1 to 100 characters, one line). Its id never changes, so neither does any address that names it.
+
+**Its picture.** `PUT /v0.1/spheres/{sphere}/image` with `Content-Type: image/png` and the PNG as the body: square, 128 to 1,024 pixels a side, at most one request body (128 KB); anything else is `400 bad_request` and keeps the picture it had. The Sphere answers with `image_sha256`, the picture's SHA-256, lower-case hex, so a client fetches it again only when it changes. `GET /v0.1/spheres/{sphere}/image`, with any token for the Sphere, serves it as `image/png` with `X-Content-Type-Options: nosniff` and a `Content-Security-Policy` of `default-src 'none'` (`404 not_found` without one); `DELETE` takes it away.
+
+**Deleting it.** `DELETE /v0.1/spheres/{sphere}`, by an admin, erases everything the Sphere kept at once and for everyone: its members and their keys, its owners, tokens, invitations, audit chain, deliveries, runner statuses and phone relays, whose sockets close. Answers `204`. Its id stays taken: creating a Sphere with it is `409 conflict`, as for a reserved one, so nobody makes another under the address its members knew. A member's Oby learns it from `404 not_found` on its next call.
 
 ### 3.1 Signing in
 
@@ -142,9 +158,11 @@ POST /v0.1/spheres/e2e/invitations
 {"expires_in": 2592000, "max_uses": 1000, "domain": "example.com"}
 ```
 
-The answer echoes `domain`. `owner` and `obi` come together or not at all, and a named invitation takes neither `max_uses` nor `domain` (`400 bad_request`). The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. A named invitation's `obi` id that is or was a member is `409 conflict`: ids are never reused.
+The answer echoes `domain`. Any invitation may carry `label`, a few words for the admins' own list below (1 to 100 characters, one line), echoed too; never an email address (`400 bad_request` for one with `@`): the Sphere keeps no address (section 3.1), and a client that invites by email keeps the address itself. `owner` and `obi` come together or not at all, and a named invitation takes neither `max_uses` nor `domain` (`400 bad_request`). The secret is 32 random bytes, base64url, shown once; the Sphere keeps its SHA-256. `expires_at` is the Sphere's clock when it made the invitation plus `expires_in` seconds. A named invitation's `obi` id that is or was a member is `409 conflict`: ids are never reused.
 
-**Withdraw.** `DELETE /invitations/{invitation_id}`, by the admin with an owner token, withdraws an invitation at once, used or not: `204`, and from then on its preview and redeem are `403 invitation_invalid`, as for one that never existed. A redeem that lands before the withdrawal stays (the member is revoked as any other); one that comes after it uses nothing. An invitation the Sphere doesn't have (never made, or withdrawn already) is `404 not_found`.
+**List.** `GET /v0.1/spheres/{sphere}/invitations`, by an admin, answers those that can still be used (not withdrawn, unexpired, uses left), the newest first: each one's id, `owner` and `obi` for a named one, `label`, `max_uses`, `uses`, `domain`, `created_at` (left out for one made before the Sphere kept it) and `expires_at`. Never a secret: the Sphere keeps only its hash, so an invitation can't be sent again, only withdrawn and made anew.
+
+**Withdraw.** `DELETE /invitations/{invitation_id}`, by an admin with an owner token, withdraws an invitation at once, used or not: `204`, and from then on its preview and redeem are `403 invitation_invalid`, as for one that never existed. A redeem that lands before the withdrawal stays (the member is revoked as any other); one that comes after it uses nothing. An invitation the Sphere doesn't have (never made, or withdrawn already) is `404 not_found`.
 
 **Preview.** Before joining, whoever holds the link can read what it leads to, so a Join screen can show it. The secret is the credential, sent in the body to keep it out of URLs and logs, as for redeeming; nothing is used up:
 

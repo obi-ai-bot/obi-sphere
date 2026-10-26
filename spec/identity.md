@@ -138,7 +138,7 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 
 | Scope | Lets the token holder |
 |---|---|
-| `admin` | Invite, write the policy, revoke members. Only for the Sphere's admin owner, only without an actor. |
+| `admin` | Invite, write the policy, revoke members, and change the Sphere (sphere-api.md section 3). Only for an owner who administers the Sphere, only without an actor. |
 | `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer` | Send requests of that type. |
 | `reply` | Send `status`, `accept`, `decline`, `result` and `answer`. |
 | `receive` | Fetch and acknowledge its deliveries. |
@@ -147,7 +147,7 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 
 **Canonical order.** Wherever the Sphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `reply`, `receive`, `directory:read`, `audit:read`. So an Obi's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Sphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
 
-An Obi's token can carry every scope but `admin`, limited to what the delegation grants. An owner's own token can carry `admin` (if they are the admin), `directory:read` and `audit:read`.
+An Obi's token can carry every scope but `admin`, limited to what the delegation grants. An owner's own token can carry `admin` (if they administer the Sphere), `directory:read` and `audit:read`.
 
 ### 4.3 The exchange
 

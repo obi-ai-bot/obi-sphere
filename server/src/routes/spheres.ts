@@ -1,10 +1,11 @@
-// Spheres (spec/sphere-api.md section 3) and health.
+// Spheres (spec/sphere-api.md section 3) and health: creating one, reading it, and what its admins
+// change afterwards (its name and picture, who else administers it, and deleting it).
 
-import { bearer, requireOperator } from "../auth.ts";
-import { constraintFailure, getSphere, unforeseen, type SphereRow } from "../db.ts";
+import { bearer, requireOperator, requireOwnerToken, requireScope, type Caller } from "../auth.ts";
+import { constraintFailure, getOwner, getSphere, requireSphere, unforeseen, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
-import { apiError, json, readJson } from "../http.ts";
-import { keyIdOf } from "../protocol/crypto.ts";
+import { apiError, json, readBody, readJson } from "../http.ts";
+import { b64url, fromB64url, keyIdOf, sha256Hex } from "../protocol/crypto.ts";
 import { PROTOCOL, timestamp } from "../protocol/envelope.ts";
 import { ZERO_HASH } from "../protocol/chain.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
@@ -43,7 +44,12 @@ export async function joinPage(): Promise<Response> {
   );
 }
 
-export const sphereJson = (s: SphereRow) => ({ sphere: s.id, name: s.name, protocol: PROTOCOL, admin_owner: s.admin_owner, created_at: s.created_at });
+/** The Sphere as the API answers it (sphere.schema.json): who made it, who administers it now, and its picture's hash. */
+export async function sphereJson(db: D1Database, s: SphereRow): Promise<Record<string, unknown>> {
+  const { results } = await db.prepare("SELECT owner FROM owners WHERE sphere = ?1 AND admin = 1 ORDER BY owner").bind(s.id).all<{ owner: string }>();
+  const admins = results.length ? results.map((r) => r.owner) : [s.admin_owner];
+  return { sphere: s.id, name: s.name, protocol: PROTOCOL, admin_owner: s.admin_owner, admins, created_at: s.created_at, ...(s.image_sha256 ? { image_sha256: s.image_sha256 } : {}) };
+}
 
 /** Sphere ids taken from the start, Sangam's TAKEN list (sphere-api.md section 3): nobody creates them. */
 export const RESERVED_SPHERES = new Set(["avenga", "tetrix", "oby", "app", "www", "admin", "api", "help", "acme"]);
@@ -85,6 +91,8 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
     if ((admin?.n ?? 0) >= createLimit(env)) throw apiError("rate_limited", "this account is the admin of as many Spheres as this server allows");
   }
   if (RESERVED_SPHERES.has(req.sphere)) throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
+  // A deleted Sphere's id stays taken: its members' Obys still know that address.
+  if (await env.DB.prepare("SELECT 1 AS gone FROM deleted_spheres WHERE id = ?1").bind(req.sphere).first()) throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
   let ownerKeyId: string;
   try {
     ownerKeyId = await keyIdOf(req.admin.owner_key);
@@ -98,14 +106,14 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
         `INSERT INTO spheres (id, name, admin_owner, created_at, policy_version, policy_rules, policy_updated_at, head_seq, head_hash, head_recorded_at_s)
          VALUES (?1, ?2, ?3, ?4, 0, '[]', ?4, 0, ?5, NULL)`,
       ).bind(req.sphere, req.name, req.admin.owner, createdAt, ZERO_HASH),
-      env.DB.prepare("INSERT INTO owners (sphere, owner, owner_key, owner_key_id, account) VALUES (?1, ?2, ?3, ?4, ?5)").bind(req.sphere, req.admin.owner, req.admin.owner_key, ownerKeyId, signin?.account ?? null),
+      env.DB.prepare("INSERT INTO owners (sphere, owner, owner_key, owner_key_id, account, admin) VALUES (?1, ?2, ?3, ?4, ?5, 1)").bind(req.sphere, req.admin.owner, req.admin.owner_key, ownerKeyId, signin?.account ?? null),
       ...(signin ? [useSignIn(env.DB, signin.state)] : []),
     ]);
   } catch (e) {
     if (constraintFailure(e) === "UNIQUE constraint failed: spheres.id") throw apiError("conflict", `the Sphere id ${req.sphere} is taken`);
     unforeseen(e, "creating a Sphere");
   }
-  return json(201, { sphere: req.sphere, name: req.name, protocol: PROTOCOL, admin_owner: req.admin.owner, created_at: createdAt });
+  return json(201, { sphere: req.sphere, name: req.name, protocol: PROTOCOL, admin_owner: req.admin.owner, admins: [req.admin.owner], created_at: createdAt });
 }
 
 export async function getSphereRoute(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
@@ -114,5 +122,135 @@ export async function getSphereRoute(request: Request, env: Env, deps: Deps, sph
   const sphere = (await getSphere(env.DB, sphereId)) ?? (RESERVED_SPHERES.has(sphereId) ? ({ id: sphereId } as SphereRow) : null);
   if (!sphere) throw apiError("not_found", `no Sphere ${sphereId}`);
   await bearer(request, env, sphere, Math.floor(deps.now() / 1000));
-  return json(200, sphereJson(sphere));
+  return json(200, await sphereJson(env.DB, sphere));
+}
+
+const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
+
+/** An admin's own token for the Sphere `sphereId` (which exists): what every change below needs. */
+async function admin(request: Request, env: Env, deps: Deps, sphereId: string): Promise<{ sphere: SphereRow; caller: Caller }> {
+  const sphere = await requireSphere(env.DB, sphereId);
+  const caller = await bearer(request, env, sphere, nowS(deps));
+  requireScope(caller, "admin");
+  requireOwnerToken(caller);
+  return { sphere, caller };
+}
+
+const answer = async (env: Env, id: string) => json(200, await sphereJson(env.DB, await requireSphere(env.DB, id)));
+
+// ---------------------------------------------------------------------------------------------
+// PATCH /v0.1/spheres/{sphere}: its name. Its id, and so its address, never changes.
+
+export async function updateSphere(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  const body = await readJson(request);
+  const errors = schemaErrors("sphereUpdateRequest", body);
+  if (errors.length) throw apiError("bad_request", "the body doesn't match sphere-update.request", errors);
+  await env.DB.prepare("UPDATE spheres SET name = ?1 WHERE id = ?2").bind((body as { name: string }).name, sphere.id).run();
+  return answer(env, sphere.id);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Its picture: `PUT …/image` with a square PNG, `DELETE …/image`, and `GET …/image` for members.
+
+/** A PNG's first eight bytes. A picture is at most one request body (http.ts, 128 KB). */
+const PNG = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const SIDE = { least: 128, most: 1024 };
+
+/** Why `bytes` isn't a picture the Sphere keeps, or null: a PNG, square, 128 to 1,024 pixels a side. */
+export function pictureProblem(bytes: Uint8Array): string | null {
+  if (bytes.length < 24 || PNG.some((b, i) => bytes[i] !== b)) return "a picture is a PNG";
+  // The IHDR chunk comes first: its width and height, big-endian, after its length and type.
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (String.fromCharCode(...bytes.subarray(12, 16)) !== "IHDR") return "a picture is a PNG";
+  const width = view.getUint32(16), height = view.getUint32(20);
+  if (width !== height) return "a picture is square";
+  if (width < SIDE.least || width > SIDE.most) return `a picture is ${SIDE.least} to ${SIDE.most} pixels a side`;
+  return null;
+}
+
+export async function putImage(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  if ((request.headers.get("Content-Type") ?? "").split(";")[0]!.trim().toLowerCase() !== "image/png") throw apiError("bad_request", "a picture is sent as Content-Type: image/png");
+  const bytes = await readBody(request);
+  const problem = pictureProblem(bytes);
+  if (problem) throw apiError("bad_request", problem);
+  await env.DB.prepare("UPDATE spheres SET image = ?1, image_sha256 = ?2 WHERE id = ?3").bind(b64url(bytes), await sha256Hex(bytes), sphere.id).run();
+  return answer(env, sphere.id);
+}
+
+export async function deleteImage(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  await env.DB.prepare("UPDATE spheres SET image = NULL, image_sha256 = NULL WHERE id = ?1").bind(sphere.id).run();
+  return answer(env, sphere.id);
+}
+
+/** For anyone with a token for it: the PNG, served as nothing but an image. */
+export async function getImage(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const sphere = await requireSphere(env.DB, sphereId);
+  await bearer(request, env, sphere, nowS(deps));
+  const row = await env.DB.prepare("SELECT image, image_sha256 FROM spheres WHERE id = ?1").bind(sphere.id).first<{ image: string | null; image_sha256: string | null }>();
+  if (!row?.image) throw apiError("not_found", "this Sphere has no picture");
+  return new Response(fromB64url(row.image), {
+    status: 200,
+    headers: {
+      "Content-Type": "image/png",
+      "Cache-Control": "private, no-cache",
+      ETag: `"${row.image_sha256}"`,
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'",
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// Who administers it: `PUT …/admins/{owner}` and `DELETE …/admins/{owner}`, at least one always.
+
+export async function putAdmin(request: Request, env: Env, deps: Deps, sphereId: string, owner: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  if (!(await getOwner(env.DB, sphere.id, owner))) throw apiError("conflict", `${owner} hasn't joined this Sphere: only someone who has can administer it`);
+  await env.DB.prepare("UPDATE owners SET admin = 1 WHERE sphere = ?1 AND owner = ?2").bind(sphere.id, owner).run();
+  return answer(env, sphere.id);
+}
+
+export async function deleteAdmin(request: Request, env: Env, deps: Deps, sphereId: string, owner: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  // One statement, so two admins taking each other's away at once can't leave none.
+  const done = await env.DB.prepare(
+    "UPDATE owners SET admin = 0 WHERE sphere = ?1 AND owner = ?2 AND admin = 1 AND (SELECT COUNT(*) FROM owners WHERE sphere = ?1 AND admin = 1) > 1",
+  ).bind(sphere.id, owner).run();
+  if (done.meta.changes === 0) {
+    const row = await getOwner(env.DB, sphere.id, owner);
+    if (row?.admin === 1) throw apiError("conflict", "a Sphere keeps at least one admin: make someone else one first");
+    return answer(env, sphere.id);
+  }
+  // Their admin tokens stop now, not when they expire.
+  await env.DB.prepare("UPDATE tokens SET revoked = 1 WHERE sphere = ?1 AND subject = ?2 AND actor IS NULL AND instr(' ' || scope || ' ', ' admin ') > 0")
+    .bind(sphere.id, owner).run();
+  return answer(env, sphere.id);
+}
+
+// ---------------------------------------------------------------------------------------------
+// DELETE /v0.1/spheres/{sphere}: everything it kept goes, in one transaction, and its phone relays
+// close. Its id stays taken (`deleted_spheres`).
+
+export async function deleteSphere(request: Request, env: Env, deps: Deps, sphereId: string): Promise<Response> {
+  const { sphere } = await admin(request, env, deps, sphereId);
+  const { results: relays } = await env.DB.prepare("SELECT id FROM relays WHERE sphere = ?1").bind(sphere.id).all<{ id: string }>();
+  const db = env.DB;
+  await db.batch([
+    db.prepare("DELETE FROM relay_devices WHERE relay IN (SELECT id FROM relays WHERE sphere = ?1)").bind(sphere.id),
+    ...["relays", "runner_status", "deliveries", "audit", "used_jtis", "tokens", "invitations", "member_keys", "members", "owners"].map((table) =>
+      db.prepare(`DELETE FROM ${table} WHERE sphere = ?1`).bind(sphere.id),
+    ),
+    db.prepare("DELETE FROM spheres WHERE id = ?1").bind(sphere.id),
+    db.prepare("INSERT INTO deleted_spheres (id, deleted_at) VALUES (?1, ?2)").bind(sphere.id, timestamp(deps.now() / 1000)),
+  ]);
+  // Their sockets close now (a relay's own check would close them within a minute anyway).
+  await Promise.all(relays.map(async (r) => {
+    try {
+      await env.RELAYS.get(env.RELAYS.idFromName(r.id)).forget(null);
+    } catch {}
+  }));
+  return new Response(null, { status: 204 });
 }

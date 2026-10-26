@@ -151,7 +151,7 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   // 6. Scopes.
   const granted = parseScopes(sc.scope!, "the owner assertion");
   const wanted = requested === undefined ? granted : parseScopes(requested, "scope");
-  const mayHold = (s: string) => (actorObi !== null ? s !== "admin" : s === "directory:read" || s === "audit:read" || (s === "admin" && sc.iss === sphere.admin_owner));
+  const mayHold = (s: string) => (actorObi !== null ? s !== "admin" : s === "directory:read" || s === "audit:read" || (s === "admin" && owner.admin === 1));
   const scope = canonicalScope(SCOPES.filter((s) => wanted.has(s) && granted.has(s) && mayHold(s)));
   if (!scope) throw new OAuthError("invalid_scope", "no scope asked for can be granted");
 

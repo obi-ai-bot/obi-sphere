@@ -48,7 +48,7 @@ describe("POST /v0.1/spheres", () => {
     const r = await w.create();
     expect(r.status).toBe(201);
     expectSchema("sphere", r.body);
-    expect(r.body).toEqual({ sphere: "e2e", name: "E2E sphere", protocol: "obi/0.1", admin_owner: "wellington", created_at: "2026-10-14T12:00:00Z" });
+    expect(r.body).toEqual({ sphere: "e2e", name: "E2E sphere", protocol: "obi/0.1", admin_owner: "wellington", admins: ["wellington"], created_at: "2026-10-14T12:00:00Z" });
 
     const token = await w.ownerToken();
     const policy = await w.call("GET", "/v0.1/spheres/e2e/policy", { token });

@@ -22,6 +22,8 @@ export interface SphereRow {
   head_hash: string;
   head_recorded_at_s: number | null;
   rev: number;
+  /** Its picture's SHA-256, lower-case hex, or null (the picture itself is read only to serve it). */
+  image_sha256: string | null;
 }
 
 export interface OwnerRow {
@@ -31,6 +33,8 @@ export interface OwnerRow {
   owner_key_id: string;
   /** The account the owner signed in with (`google:<sub>`), once one did (src/signin.ts). */
   account?: string | null;
+  /** 1 when the owner administers the Sphere (section 3), else 0; a row made in code before it's written has none. */
+  admin?: number;
 }
 
 export interface MemberRow {
@@ -61,8 +65,12 @@ export interface PolicyRule {
   repos: string[];
 }
 
+/** A Sphere's row but its picture, which only `GET …/image` reads: what every other read selects. */
+export const SPHERE_COLUMNS =
+  "id, name, admin_owner, created_at, policy_version, policy_rules, policy_updated_at, head_seq, head_hash, head_recorded_at_s, rev, image_sha256";
+
 export const getSphere = (db: D1Database, id: string): Promise<SphereRow | null> =>
-  db.prepare("SELECT * FROM spheres WHERE id = ?1").bind(id).first<SphereRow>();
+  db.prepare(`SELECT ${SPHERE_COLUMNS} FROM spheres WHERE id = ?1`).bind(id).first<SphereRow>();
 
 export async function requireSphere(db: D1Database, id: string): Promise<SphereRow> {
   const sphere = await getSphere(db, id);
