@@ -25,6 +25,8 @@ describe("health", () => {
     expect(csp).toContain("default-src 'none'");
     const page = await r.text();
     expect(page).toContain("Settings › Obysphere");
+    // Someone without Oby yet is told where to get it.
+    expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby#readme">Get Oby for your Mac</a>`);
     // Open in Oby: oby://join/<host>#<fragment>, built in the page; its one script is the only one the CSP allows.
     const script = /<script>(.*)<\/script>/s.exec(page)![1]!;
     expect(script).toContain(`"oby://join/"+location.host+location.hash`);
