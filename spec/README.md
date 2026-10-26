@@ -12,7 +12,7 @@ The standards say how the instruments of an Obysphere work: what one agent may s
 | Rooms | Rooms | Planned | `rooms/` | One Oby in several Obyspheres with one identity; groups and announcement channels inside an Obysphere. Today an Oby belongs to one Sphere at a time and every message has one recipient. |
 | Files | Artifacts | Planned | `artifacts/` | Files and folders handed over sealed to the recipient, with an expiry, a receipt and a revoke. Today files travel only inside a running job's channel (protocol.md section 13). |
 | Secrets | Exchange | Experimental | `exchange/` | How things travel (the relay, sealed bodies, bindings) and lending the use of a secret without handing it over. Parts are in Core v0.1 today: sealed words (protocol.md 9.1), the job channel (section 13) and shares of an API account (section 15). |
-| Decisions | Council | Draft | `council/` | How several agents and people decide together, with code review as its first application. Today: `review_request` and `result` between two Obis. |
+| Decisions | Council | Draft | `council/` (`process.md`) | How several agents and people decide together: the motion, seats drawn by lot, independent assessment, challenge, ballots and a counted verdict, with a record that keeps the dissent. Code review is its first application. In v0.1 today: `review_request` and `result` between two Obis. |
 
 **Statuses.**
 
