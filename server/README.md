@@ -33,9 +33,7 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
 | `pnpm run check:fixtures` | [e2e/fixtures/](e2e/fixtures/) still equal obi's `e2e/fixtures/messages/brief.json` and the `body` of `result.example.json` ([e2e/fixtures.mjs](e2e/fixtures.mjs)). It needs an obi checkout (`OBI_DIR`, or `../obi` beside obi-sphere) and fails without one. The scenario makes the same comparison whenever it finds a checkout, and stops on a difference. |
 | `pnpm run check:validators` | [src/protocol/validators.generated.js](src/protocol/validators.generated.js) is up to date with `../spec/schemas/v0.1` (`pnpm run gen:validators` rewrites it). |
 
-CI runs all of them ([.github/workflows/server.yml](../.github/workflows/server.yml)); `check:fixtures` only when the repository secret `OBI_READ_TOKEN` exists. Without it the run stays green but says so twice: a warning annotation, and a line in the job summary that the fixture comparison was skipped.
-
-**Blocked on a person:** the secret `OBI_READ_TOKEN` doesn't exist yet. Someone with admin rights on obi-ai-bot/obi-sphere creates a fine-grained token with Contents: read on obi-ai-bot/obi only, and adds it as this repository's Actions secret `OBI_READ_TOKEN`. Until then CI doesn't compare [e2e/fixtures/](e2e/fixtures/) with obi's; run `pnpm run check:fixtures` locally with an obi checkout instead.
+CI runs all of them but `test:node` ([.github/workflows/server.yml](../.github/workflows/server.yml)), `check:fixtures` against a checkout of oby's `dev` (obi-ai-bot/oby, public, so no token is needed).
 
 ## How it is built
 
