@@ -33,7 +33,7 @@ The same Sphere server as on Cloudflare ([run-your-own.md](run-your-own.md)), on
    - A client that opens claim links can do it for you instead: the page offers one for each listed client that does ([`server/src/clients.ts`](../server/src/clients.ts)).
    - Or skip the claim: put a token you made in `.env` as `SPHERE_OPERATOR_TOKEN=…`, run `chmod 600 .env`, then `docker compose up -d` again.
 
-Check it: `curl https://sphere.acme.com/v0.1/health` answers `{"ok":true,"protocol":"obi/0.1","seal":true}`, and `curl https://sphere.acme.com/v0.1/features` answers `{"features":["cancel","card_classes","card_runtime","card_topics","follow_up","introduction","phone_relay"]}`. Then create an Obysphere and invite your team as in [run-your-own.md](run-your-own.md#stand-it-up), steps 4 and 5.
+Check it: `curl https://sphere.acme.com/v0.1/health` answers `{"ok":true,"protocol":"obi/0.1","seal":true}`, and `curl https://sphere.acme.com/v0.1/features` lists what it takes and offers, `phone_relay` and `dpop` among them. Then create an Obysphere and invite your team as in [run-your-own.md](run-your-own.md#stand-it-up), steps 4 and 5.
 
 ## Updating
 
@@ -66,7 +66,7 @@ docker compose start sphere
 - **HTTPS only:** the server refuses a request that came over plain HTTP, except health, so a server left without TLS in front takes no tokens. Caddy sends plain HTTP on to HTTPS.
 - **Nothing leaves the server:** no telemetry. Its log holds startup lines and the claim link, never a token or a message.
 - **Not served here:** job channels, which compute sharing used. Their path answers 404.
-- **Google sign-in** works as on Cloudflare: set `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` in `.env` ([run-your-own.md](run-your-own.md#optional-let-your-team-create-obyspheres)), then `docker compose up -d`.
+- **Sign-in** works as on Cloudflare: set `GOOGLE_CLIENT_ID`, or `SIGNIN_PROVIDERS` for any other OpenID Connect provider (as JSON, on one line), and `CREATOR_WORKSPACES` in `.env` ([run-your-own.md](run-your-own.md#optional-let-your-team-create-obyspheres)), then `docker compose up -d`.
 - **The phone relay**, the optional extension that lets a member's phone reach their agent, is on; `PHONE_RELAY=off` in `.env` turns it off ([run-your-own.md](run-your-own.md#optional-turn-off-the-phone-relay)). Any other value turns it off too, with a line in the log.
 
 ## The claim

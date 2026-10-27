@@ -14,7 +14,7 @@ You need a Cloudflare account (a free one holds a small team: [The plan](#the-pl
    openssl rand -base64 32 | tr '+/' '-_' | tr -d '='
    ```
 
-2. **Deploy.** Choose the button, sign in to Cloudflare and to GitHub or GitLab, keep the names it offers, and paste the token where Cloudflare asks for `SPHERE_OPERATOR_TOKEN`: it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty; to add [sign-in](#optional-let-your-team-create-obyspheres) later, set them in your repository's `wrangler.jsonc`. Cloudflare copies [`server/`](../server/) into a new repository of yours, makes the Worker, its D1 database and its Durable Objects, applies the migrations and deploys it.
+2. **Deploy.** Choose the button, sign in to Cloudflare and to GitHub or GitLab, keep the names it offers, and paste the token where Cloudflare asks for `SPHERE_OPERATOR_TOKEN`: it becomes a Worker secret. Leave `GOOGLE_CLIENT_ID` and `CREATOR_WORKSPACES` empty; to add [sign-in](#optional-let-your-team-create-obyspheres) later, set them (or `SIGNIN_PROVIDERS`) in your repository's `wrangler.jsonc`. Cloudflare copies [`server/`](../server/) into a new repository of yours, makes the Worker, its D1 database and its Durable Objects, applies the migrations and deploys it.
 
    [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/obi-ai-bot/obi-sphere/tree/main/server)
 
@@ -25,7 +25,7 @@ You need a Cloudflare account (a free one holds a small team: [The plan](#the-pl
    curl https://<your address>/v0.1/features
    ```
 
-   They answer `{"ok":true,"protocol":"obi/0.1","seal":true}` (the protocol it speaks, and that it takes sealed messages) and `{"features":["cancel","card_classes","card_runtime","card_topics","follow_up","introduction","phone_relay"]}` (the additions it takes and the optional extensions it offers: [spec/sphere-api.md](../spec/sphere-api.md), section 2).
+   They answer `{"ok":true,"protocol":"obi/0.1","seal":true}` (the protocol it speaks, and that it takes sealed messages) and `{"features":[…]}`, the additions it takes and the optional extensions it offers, `phone_relay` and `dpop` among them ( [spec/sphere-api.md](../spec/sphere-api.md), section 2).
 
 4. **Create an Obysphere** for its first admin, with the admin's owner id and owner key: the Ed25519 public key, base64url, that their client keeps for them ([spec/identity.md](../spec/identity.md), section 1). `printf` is built into the shell, so the token never shows in a process list or your history:
 
@@ -54,11 +54,17 @@ Free's limit that can't be measured outside Cloudflare is CPU: 10 ms a request. 
 
 ## Optional: let your team create Obyspheres
 
-With Google sign-in, anyone with a Google Workspace account you name can create an Obysphere from their client without the operator token, and an invite link can be for your Workspace's people only ("Anyone with @acme.com can join"). The server checks Google's ID token itself ([spec/sphere-api.md](../spec/sphere-api.md), section 3.1) and keeps only the account id and its Workspace, never an email.
+With sign-in, anyone with an account from a domain you name can create an Obysphere from their client without the operator token, and an invite link can be for one domain's people only ("Anyone with @acme.com can join"). The server checks the provider's ID token itself ([spec/sphere-api.md](../spec/sphere-api.md), section 3.1) and keeps only the account id and its domain, never an email. Any OpenID Connect provider works: Google, or your organisation's own (Okta, Microsoft Entra ID, Keycloak, Authentik and the like). A client lists them with `GET /v0.1/signin`.
 
-1. In Google Cloud console, APIs & Services, Credentials: create an OAuth client ID of type **Web application**. Authorized redirect URI: `https://<your server>/v0.1/signin/google/callback`. For your organization's people only, make the consent screen **Internal**. No client secret is used.
-2. In your repository's `wrangler.jsonc`, under `vars` (your environment's `vars` by hand): `"GOOGLE_CLIENT_ID": "<the client id>"` and `"CREATOR_WORKSPACES": "acme.com"` (comma-separated for several). The client id is public; it is fine in git. Each account may be the admin of 3 Spheres; `"SPHERE_CREATE_LIMIT": "10"` changes that.
-3. Push (by hand: `pnpm run deploy -- --env acme` again). Variables set in the dashboard instead are replaced by `wrangler.jsonc`'s at the next deploy.
+1. **Register a client with the provider.** Use a Web application client with the ID token sent by form post (OpenID Connect's implicit flow, `response_type=id_token`, `response_mode=form_post`); no client secret is used. Its redirect URI is `https://<your server>/v0.1/signin/<id>/callback`, where `<id>` is the name you give the provider below (`google` for Google). For Google: Google Cloud console, APIs & Services, Credentials, an OAuth client ID of type **Web application**, with the consent screen **Internal** for your organisation's people only.
+2. **Name it in `wrangler.jsonc`**, under `vars` (your environment's `vars` by hand):
+   - Google: `"GOOGLE_CLIENT_ID": "<the client id>"`. An account's domain is its Google Workspace.
+   - Any other: `"SIGNIN_PROVIDERS": [{"id": "acme-sso", "name": "Acme SSO", "issuer": "https://sso.acme.com", "client_id": "<the client id>", "domain": "acme.com"}]`. The server reads the issuer's `/.well-known/openid-configuration`. `domain` says that every account of this issuer is acme.com's: name it only for an issuer that signs in no one else. Or, for an issuer that says each account's domain in a claim it sets itself, `"domain_claim": "<the claim>"` instead (never an email address, which a person can choose). `"email_verified": true` makes it refuse an account whose email isn't verified.
+   - And `"CREATOR_WORKSPACES": "acme.com"`, the domains whose people may create Obyspheres, comma-separated. Each account may be the admin of 3 Obyspheres; `"SPHERE_CREATE_LIMIT": "10"` changes that.
+   - The client ids are public; they are fine in git. Never reuse a provider's `id` for another issuer: an account is the `id` and the issuer's `sub`.
+3. **Push** (by hand: `pnpm run deploy -- --env acme` again). Variables set in the dashboard instead are replaced by `wrangler.jsonc`'s at the next deploy.
+
+A client that isn't Oby gets the sign-in's code back on its own machine: it sends `return_to`, a loopback URL or a scheme of its own, when it starts the sign-in. Oby's is the default.
 
 ## Optional: turn off the phone relay
 
@@ -127,7 +133,7 @@ If you build Oby yourself, set `OBY_SPHERE_URL` in `apps/config/Signing.xcconfig
 
 | What | Where |
 |---|---|
-| Your Worker's settings, the Google client id | `wrangler.jsonc`, in git (public values): your repository's, or your environment block by hand |
+| Your Worker's settings, the sign-in providers' client ids | `wrangler.jsonc`, in git (public values): your repository's, or your environment block by hand |
 | The operator token | a Worker secret, and wherever you keep it: your password manager, or your Mac's Keychain under your server's host; nowhere else |
 | Invitation secrets, access tokens, sign-in codes | only as SHA-256, in your D1 |
 | Telemetry | none: `observability` is off and wrangler sends no metrics |

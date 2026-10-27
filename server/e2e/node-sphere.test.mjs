@@ -86,7 +86,8 @@ test("a Node Sphere is claimed once, answers only over HTTPS, relays, and keeps 
 
   // Unclaimed: health and the claim answer, nothing else does.
   assert.equal((await fetch(`${base}/v0.1/health`)).status, 200);
-  assert.deepEqual(await (await fetch(`${base}/v0.1/features`)).json(), { features: ["cancel", "card_classes", "card_runtime", "card_topics", "follow_up", "introduction", "phone_relay"] });
+  const listed = (await (await fetch(`${base}/v0.1/features`)).json()).features;
+  for (const id of ["dpop", "phone_relay", "signin_providers", "sphere_url_aud"]) assert.ok(listed.includes(id), `features: ${listed}`);
   const claimPage = await fetch(`${base}/claim`);
   assert.equal(claimPage.status, 200);
   // The page says how to claim it with curl, for any operator; its one script is the one the CSP allows.

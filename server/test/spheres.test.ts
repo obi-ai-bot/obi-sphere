@@ -4,6 +4,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handle } from "../src/app";
 import { CLIENTS } from "../src/clients";
+import { FEATURES } from "../src/protocol/features";
 import { joinPageFor } from "../src/routes/spheres";
 import { sha256Hex } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
@@ -22,7 +23,7 @@ describe("health", () => {
   it("lists the additions it takes and the extensions it offers at /v0.1/features, never in health (spec/README.md, Versions)", async () => {
     const r = await makeCall(new Clock())("GET", "/v0.1/features");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ features: ["cancel", "card_classes", "card_runtime", "card_topics", "follow_up", "introduction", "phone_relay"] });
+    expect(r.body).toEqual({ features: [...FEATURES, "dpop", "phone_relay", "signin_providers", "sphere_url_aud"].sort() });
     expectSchema("featuresResponse", r.body);
   });
 

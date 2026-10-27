@@ -90,7 +90,10 @@ A path for an Obysphere that doesn't exist is `404 not_found`; a token for anoth
 
 | Feature | What | Where |
 |---|---|---|
+| `dpop` | Tokens bound to a key (DPoP): `token_type` `DPoP`, and `Authorization: DPoP` with a proof. | [identity.md](identity.md) section 4.6 |
 | `phone_relay` | A member's phones reach its agent through the Obysphere. | section 9 |
+| `signin_providers` | `GET /v0.1/signin` lists the sign-in providers, `POST /v0.1/signin/{provider}` takes any of them, and `return_to`. | section 3.1 |
+| `sphere_url_aud` | An assertion's `aud` may be the Obysphere's own URL, binding it to this server. | [identity.md](identity.md) section 4.1 |
 
 ### 2.1 Invite links
 

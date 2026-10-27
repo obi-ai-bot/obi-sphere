@@ -16,13 +16,16 @@ import { phoneRelay } from "./relays.ts";
 
 export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
 
+/** What this server always takes: tokens bound to a key, its sign-in providers' list, and assertions bound to it (identity.md 4.1 and 4.6, sphere-api.md 3.1). */
+const ALWAYS = ["dpop", "signin_providers", "sphere_url_aud"];
+
 /**
  * `GET /v0.1/features`: the additions to obi/0.1 this Obysphere takes (src/protocol/features.ts)
  * and the optional extensions it offers, in code-point order (sphere-api.md section 2). Not in
  * health, which implementations from before check against its closed schema.
  */
 export function features(_request: Request, env: Env): Response {
-  return json(200, { features: [...FEATURES, ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
+  return json(200, { features: [...FEATURES, ...ALWAYS, ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
 }
 
 /** Where a client's author reads the invite link's format (spec/sphere-api.md section 2.1). */
