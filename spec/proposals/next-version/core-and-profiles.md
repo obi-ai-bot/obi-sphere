@@ -409,7 +409,7 @@ A member that lists `code` in its card's `profiles` may accept `review_request`,
 
 `run_request`, `run_progress`, `run_return` and `run_cancel` run one member's job on another's machine, in a VM, through an end-to-end encrypted job channel that also carries the job's model calls; a runner status says who offers their machine. `share_offer`, `share_status` and `share_revoke` lend the use of a company-paid API account, metered by the key holder. Oby, the one implementation that had them, has removed them ([obi-ai-bot/oby#1515](https://github.com/obi-ai-bot/oby/pull/1515)), and no other implementation is known to have them.
 
-**Recommended: drop them from the next version**, rather than carry them as an optional profile.
+**Decided: they are dropped from the next version** ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52#issuecomment-6456517732)), rather than carried as an optional profile, for these reasons.
 
 1. **No standard ahead of use.** Nobody uses them now. A profile no implementation runs is text, schemas and fixtures that nobody tests against real use, and that every server keeps paying for (the job channel, the runner directory, their limits).
 2. **They are the largest attack surface in the spec.** Running another person's code on one's machine; relaying a model API with credentials added on the way; metering money in cents against a budget; blurring when an owner is at their machine. Each needed careful rules (protocol.md sections 13 to 15), and each is a place for a mistake. A version meant to be the minimal Core for every agent shouldn't carry them.
@@ -417,7 +417,7 @@ A member that lists `code` in its card's `profiles` may accept `review_request`,
 4. **Lending a secret is the Exchange standard's work** ([#44](https://github.com/obi-ai-bot/oby-sphere/issues/44)), which is planned with a more general design. When a real use needs running work elsewhere or lending an account, it can start from `obi/0.1`'s text, which stays as it is (version rule 2), and come back as a profile through the spec.
 5. **Dropping is cheap to undo; keeping is not.** A later version can add a profile. Once a profile is in a version, removing it is another breaking change.
 
-**If kept instead**, as an optional profile, "Compute": the actions and the job channel as in `obi/0.1`, with neutral identifiers (the channel's prefixes become `NAME/0.2 channel…`, its `obi` member `agent`, the bundle's `obi-base` branch `base`), and `agent`, the coding agent that runs a job, becomes `runtime`, an open runtime id from the registry ([runtimes.md](runtimes.md)), not the closed `claude`/`codex` enum.
+**The alternative, not taken**: keeping them as an optional profile, "Compute": the actions and the job channel as in `obi/0.1`, with neutral identifiers (the channel's prefixes become `sphere/0.2 channel…`, its `obi` member `agent`, the bundle's `obi-base` branch `base`), and `agent`, the coding agent that runs a job, becomes `runtime`, an open runtime id from the registry ([runtimes.md](runtimes.md)), not the closed `claude`/`codex` enum.
 
 **What goes with them.** The scopes `send:run_request` and `send:share_offer`; `decline`'s `share_used`; `result`'s `for: run_request`; the endpoints `/channels/{correlation_id}` and `/members/{agent}/runner`; protocol.md sections 13 to 15; and the conformance class *holder*, which has no action until Exchange gives it one.
 

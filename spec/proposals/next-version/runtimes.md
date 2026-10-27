@@ -9,7 +9,7 @@ Status: **Draft**, part of [the next protocol version](README.md). Issue: [#54](
 
 ## 2. In the next version
 
-**There is no `agent` enum left to open** if the compute and share actions are dropped ([D4](README.md#decisions-for-the-maintainers)): `run_request`, `share_offer` and the runner status were its only uses. The runtime a member runs is said once, on its card, by the open id #54 adds. If those actions were kept as a profile instead, their `agent` field would become `runtime`, typed as the same runtime id, so `agent` always means a member ([identifiers.md](identifiers.md#1-every-product-named-identifier)) and `claude` and `codex` stay valid values.
+**There is no `agent` enum left to open** if the compute and share actions are dropped ([D4](README.md#decisions)): `run_request`, `share_offer` and the runner status were its only uses. The runtime a member runs is said once, on its card, by the open id #54 adds. If those actions were kept as a profile instead, their `agent` field would become `runtime`, typed as the same runtime id, so `agent` always means a member ([identifiers.md](identifiers.md#1-every-product-named-identifier)) and `claude` and `codex` stay valid values.
 
 **The card** carries `runtime` and `vendors` as Core fields, no longer behind a feature, in the shape #54 gives them:
 
@@ -53,7 +53,7 @@ The spec lists the ids it knows, so that two implementations call the same runti
 }
 ```
 
-**Recommended rules:**
+**The rules** (D12, decided on [#51](https://github.com/obi-ai-bot/oby-sphere/issues/51#issuecomment-6456517079)):
 
 1. **Open on the wire.** Any id that matches the pattern is valid in a card or a message. A runtime nobody here has heard of can be named, which is #54's done-when, and a receiver never refuses a message for an id it doesn't know.
 2. **Listed by pull request, first come.** Whoever builds a runtime, or anyone on its behalf, adds its id with its name. An id is never reused for something else and never taken away; a runtime that is gone stays listed. The maintainers refuse an id that would mislead: another project's name, or a name chosen to look like one.
