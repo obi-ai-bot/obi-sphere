@@ -182,7 +182,7 @@ The first profile runs on today's `obi/0.1` actions, with no new wire types:
 
 ## 7. Open questions
 
-- **Model vendors.** A card declares the vendors its member may use ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)), and the draw counts a seat for a vendor only when its card declares exactly one ([draw.md](draw.md) section 2). Declared, not proven: what checks a declaration beyond calibration is open.
+- **Model vendors.** A card declares the vendors its member may use ([identity.md](../identity.md) section 2.3), and the draw counts a seat for a vendor only when its card declares exactly one ([draw.md](draw.md) section 2). Declared, not proven: what checks a declaration beyond calibration is open.
 - **The seed.** [draw.md](draw.md) takes it from drand's quicknet, at the first round more than 300 seconds after the pool's first anchor, and a motion whose round can't be had fails to convene. It trusts the Obysphere's clock; whether to add a second source (commitments from pool members) is open.
 - **Evidence in findings.** `obi/0.1` findings carry a location and words, not typed evidence (a test name and its output, a probe). Typed evidence would let the clerk check rule I5's evidence kind instead of trusting the profile's mapping.
 - **Ballots as a person's.** How an owner sitting in person casts a ballot from their own device, so that rule I7 holds for panels too.

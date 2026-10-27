@@ -61,7 +61,7 @@ The clerk's `pool` builds the record from the members active at `at.seq`, each a
 
 ### Counted vendors
 
-A card declares the model vendors its member may use, as ids such as `anthropic`, `openai` or `google`: the card's runtime and vendors, [#54](https://github.com/obi-ai-bot/oby-sphere/issues/54) (`params.vendors`, behind a feature, in its draft). A card from before it declares none. Declared, not proven: the Council's calibration (process.md step 10) is what catches a false declaration.
+A card declares the model vendors its member may use in `params.vendors`, as ids such as `anthropic`, `openai` or `google`, behind the feature `card_runtime` ([../identity.md](../identity.md) section 2.3). A card without the feature declares none. Declared, not proven: the Council's calibration (process.md step 10) is what catches a false declaration.
 
 A seat **counts for a vendor** only when its card declares exactly one. A card that declares several says only that its member may use any of them, so the seat might run the same vendor as another seat; a card that declares none says nothing. Either can sit, and adds no vendor to the panel's count. *Why:* rule I4 exists because seats on one model share blind spots, and a count that guessed which vendor a multi-vendor seat would use could meet the rule with a panel that runs one vendor.
 
