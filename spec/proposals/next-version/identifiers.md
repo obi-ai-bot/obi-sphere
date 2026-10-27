@@ -6,7 +6,7 @@ Status: **Draft**, part of [the next protocol version](README.md). Issue: [#51](
 
 ## 1. Every product-named identifier
 
-Found by reading every schema in `schemas/v0.1/`, the three documents, the conformance contract and the reference server. protocol.md section 1.1, from #50, lists the ones on the wire for `obi/0.1`'s readers; this table adds the schemas' internal names, the fixtures' contract and the reserved ids. "Gone" means it goes with the compute and share actions ([D4](README.md#decisions-for-the-maintainers)); if they were kept as a profile instead, each would take the neutral form in brackets.
+Found by reading every schema in `schemas/v0.1/`, the three documents, the conformance contract and the reference server. [protocol.md section 1.1](../../protocol.md#11-names-on-the-wire), from #50, lists them for `obi/0.1`'s readers; this table has the same ones, with the fixtures' contract too, and says what replaces each. "Gone" means it goes with the compute and share actions ([D4](README.md#decisions-for-the-maintainers)); if they were kept as a profile instead, each would take the neutral form in brackets.
 
 | `obi/0.1` | Where | Next version |
 |---|---|---|
@@ -45,8 +45,6 @@ The run and share actions also carry `agent`, the coding agent's CLI that runs a
 - The reference verifier's file `conformance/lib/obi.mjs` and the names inside it; the client library (#55) is where they will live.
 - The schemas' `title` and `description` strings, which still say Obi and Sphere: words for readers, not identifiers. The next version's schemas are written with the plain names.
 
-protocol.md section 1.1, from #50, keeps the same list for `obi/0.1`'s readers.
-
 ## 2. The protocol constant (D1)
 
 The constant is every envelope's `protocol`, it begins every signing and hash input, it names the schemas folder, and it stays in the record forever. Whatever it is, renaming it again costs another breaking version. So the name should hold whatever happens to the project's or the standards' names.
@@ -75,7 +73,7 @@ When an agent posts a review on a code host, its body carries a marker, and a re
 
 | Option | For | Against |
 |---|---|---|
-| **A. `by agent:`, and `by Oby:` still recognised** (recommended) | Plain words that name no product; a reader of the code host understands them. Recognising the old marker too keeps every review an agent posted under `obi/0.1` from counting as a person's. | Two strings to look for, for good. |
+| **A. `by agent:`, and `by Oby:` still recognised** (recommended) | Plain words that name no product; a reader of the code host understands them. Recognising the old marker too keeps every review an agent posted under `obi/0.1` from counting as a person's. | Two strings to look for, for good; and `by agent:` is a phrase a person might write, which then only makes their review count for less, as the rule below says. |
 | B. Keep `by Oby:` | Nothing changes. | Every implementation writes another product's name on every review it posts. |
 | C. A marker with the constant's name, such as `by sphere agent:` | Ties the marker to the standards. | Ties a visible text to a name that may change, which D1 avoids for the wire. |
 

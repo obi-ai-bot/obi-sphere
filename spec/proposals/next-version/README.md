@@ -72,7 +72,7 @@ GOVERNANCE.md asks a breaking change to say why an addition wouldn't do ("How a 
 - `work_request`, its conditions, and the new reference kinds: a new request type and new kinds, with every earlier message unchanged;
 - `scopes` next to `repos` in a policy rule.
 
-An addition is relayed only once every active member's card lists its feature, since every member verifies the whole chain. So an addition reaches an Obysphere when its last member has it, the same moment a version switch would (migration.md, section 4).
+**Proposed here:** a message that uses an addition is relayed only once every active member's card lists its feature, not only the receiver's, since every member verifies the whole chain. (spec/README.md's rule 1 asks it of the receiver only, and #70 says it for cards.) So an addition reaches an Obysphere when its last member has it, the same moment a version switch would (migration.md, section 4).
 
 **D13, recommended:** organisation owners come to `obi/0.1` first, as an addition behind a feature, as #61 plans, with this design. `work_request` and its references come as an addition when an implementation that doesn't work on code needs them, and otherwise with the next version: no standard ahead of use. Everything breaking waits for the version.
 
@@ -86,11 +86,14 @@ Each is written into the document named, with its reason, and changes if the mai
 - an organisation's agents' cards and delegations carry several signatures, one per signing answerer, with a token type of their own ([owners.md, section 4](owners.md#4-its-agents-cards));
 - an organisation joins only through a named invitation, and rate limits count people ([owners.md, sections 3 and 5](owners.md#3-joining-the-directory-and-what-an-organisations-people-do));
 - a `suspended` member status, for members without a next-version card at the switch ([migration.md, section 4](migration.md#4-the-switch-d8));
-- tokens bound by DPoP required for an agent's tokens, bound to its own key, once the #60 addition defines them (below).
+- tokens bound by DPoP required for an agent's tokens, bound to its own key, once the #60 addition defines them (below);
+- policy matched scope by scope, and no remembered accept keyed by a topic ([core-and-profiles.md, section 8](core-and-profiles.md#8-scopes-policy-and-remembered-decisions));
+- a result consistent with its request, checked by the requester ([core-and-profiles.md, section 5](core-and-profiles.md#5-a-request-for-work));
+- for the maintainers to accept: #51's two exceptions in the next version's fixtures, the old marker `by Oby:` and agent ids carried over ([identifiers.md, section 6](identifiers.md#6-done-when)), and #54's last clause, a runtime named in a request, which has nothing left to apply to once the compute and share actions are dropped ([runtimes.md, section 4](runtimes.md#4-done-when)).
 
 ## Additions to `obi/0.1`, folded in
 
-These are being added to `obi/0.1` behind features. The next version takes each as its addition defines it, without the feature flag, unless this table says otherwise.
+These are being added to `obi/0.1` behind features: #54 as obi-ai-bot/oby-sphere#70 and #62 as obi-ai-bot/oby-sphere#69 are open; the others have no pull request yet. The next version takes each as its addition defines it, without the feature flag, unless this table says otherwise. Where an addition has no text yet, the shape in this Draft is its own assumption.
 
 | Addition | Issue | In the next version |
 |---|---|---|

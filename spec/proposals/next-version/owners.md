@@ -23,18 +23,24 @@ An organisation owner has **no key of its own**. It is its **charter**: a signed
 | `org` | The organisation's owner id, in the same namespace as persons' (an organisation and a person never share an id). |
 | `name` | What to call it, one line (100). Data. |
 | `charter_seq` | 1 for the first charter, and exactly one more with every change. |
-| `prev` | The SHA-256 of the charter it replaces (its canonical JSON, signatures included); absent on the first. |
+| `prev` | The SHA-256 of the charter it replaces (its canonical JSON without `signatures`, so a charter has one hash however many signatures it carries); absent on the first. |
 | `answerers` | 1 to 20 people who answer for it, each `{owner, owner_key_id, approves}`: a person owner of this Obysphere, the key id of their bound owner key, and whether they may answer the organisation's inbox and confirm on its behalf (section 5). |
-| `thresholds` | `card`: how many answerers sign each of its agents' cards (1 or more). `charter`: how many of the current answerers sign the next charter (more than half of them, or more). `decide`: how many answerers make a remembered decision or a sharing rule for it (1 or more). None is more than the number of answerers. |
+| `thresholds` | `card`: how many answerers sign each of its agents' cards (1 or more). `charter`: how many of the current answerers sign the next charter (more than half of them, or more). `decide`: how many answerers who approve make a remembered decision or a sharing rule for it (1 or more). `card` and `charter` are no more than the number of answerers, and `decide` no more than the number who approve. |
 | `issued_at` | When it was signed. |
 | `signatures` | One per signing answerer: `{owner_key_id, signature}`, Ed25519 by that person's owner key over the signing input `NAME/0.2 charter` + LF + the canonical JSON of the charter without `signatures`. |
 
 **Who signs.**
 
 1. **The first charter** is signed by every answerer it names, and at least one of them `approves`: nobody is made to answer for an organisation without their own signature.
-2. **A later charter** names the current one in `prev`, has the next `charter_seq`, and is signed by at least `thresholds.charter` answerers of the current charter and by every answerer it adds. Each charter has one predecessor, so an Obysphere can't show different members different successors without one of them holding two charters with the same `prev`, each signed by the people who signed it.
+2. **A later charter** names the current one in `prev`, has the next `charter_seq`, and is signed by at least `thresholds.charter` answerers of the current charter and by every answerer it adds.
 3. **Leaving.** Any answerer may sign, alone, a charter that is the current one without them: the same `org`, `name`, other answerers and `approves` flags, `prev` the current charter, the next `charter_seq`, and each threshold lowered to the remaining number of answerers only where it is over it. Leaving is always allowed. When the one who leaves was the last who `approves`, nobody can answer the organisation's inbox until a later charter names someone: requests wait until they expire, and silence is a decline (protocol.md section 4).
 4. **The last answerer** doesn't leave by a charter, since a charter names at least one: they revoke the organisation (section 3), which revokes its agents.
+
+**Two successors.** A leave charter is signed by one person, so two valid charters can follow the same one: a leave and a majority change, say. The Obysphere takes the first it receives and refuses the other (`409 conflict`); its signers sign again on top of the one taken. An agent that is shown two different charters with the same `prev` (by the directory at different times, or by another member) treats the organisation as unknown until its own owner has looked at both, as it does for a changed owner key (identity.md section 3). Every charter it ever trusted stays in its pin, so it can show them.
+
+**Decisions outlive their makers.** A remembered decision or sharing rule is the organisation's, not the person's who made it: it stays when they leave, and any one answerer who approves can take it back alone, so a decision never needs its maker to undo it.
+
+**Keys.** An organisation's agent key differs from every owner key its charter names, as a person's agent key differs from its owner's (identity.md section 1). An answerer who rotates their owner key (the #60 work) needs a later charter that names the new key id, signed by the new key and by the charter's threshold of the others.
 
 **Every answerer is a person owner of the Obysphere**, with a bound owner key and, where the Obysphere signs people in, a sign-in that bound them to an account (#60). A person may answer for an organisation without an agent of their own: this design lets a person join as an owner only (an invitation redeemed with their owner key and, where needed, a sign-in, and no card).
 
@@ -99,7 +105,7 @@ An organisation owner has **no key of its own**. It is its **charter**: a signed
 }
 ```
 
-The rules no schema can say: answerers' `owner`s are distinct and each `owner_key_id` is that person's bound key; the thresholds are within bounds; the signatures are by distinct answerers, verify, and are the ones "Who signs" asks for.
+The rules no schema can say: answerers' `owner`s are distinct and each `owner_key_id` is that person's bound key (for the Obysphere) or the key the verifier pinned for that person (for every agent, so a charter can't bring in a key an Obysphere swapped); the thresholds are within bounds; the signatures are by distinct answerers, verify, and are the ones "Who signs" asks for.
 
 ## 3. Joining, the directory, and what an organisation's people do
 
@@ -146,13 +152,13 @@ The rules no schema can say: answerers' `owner`s are distinct and each `owner_ke
 
 `params` has exactly one of `owner_key` (a person's agent, as in `obi/0.1`) and `charter` (an organisation's). Everything else in `params`, including what is being added to `obi/0.1` (`runtime`, `vendors`, `features`, classes, topics), is the same for both.
 
-**Verifying such a card** adds to identity.md section 2.2: the charter it names is the organisation's charter at that `seq`, with that hash, and is its current charter; and the card has at least `thresholds.card` signatures, each by a distinct answerer of that charter, each verifying with that person's owner key.
+**Verifying such a card** adds to identity.md section 2.2: the charter it names is the organisation's charter at that `seq`, with that hash; and the card has at least `thresholds.card` signatures, each by a distinct answerer of that charter, each verifying with that person's owner key (the one the verifier pinned for them). Whether the card still speaks for the organisation is not a separate check: when a later charter makes it stale, its key's range is closed (below), so a message is judged by the key valid at its seq, as in `obi/0.1`.
 
-**When a charter changes.** A card signed under an earlier charter stays valid only if the new charter still names every one of its signers and its `card` threshold is no more than the card's number of signatures. Otherwise the change makes the card **stale**, and in the same step as recording the new charter the Obysphere closes that agent's key range at the chain's head seq (`valid_until_seq`, as a revocation does), revokes its tokens, and refuses its sends until it has a new card, signed under the current charter, with a **new key**, which opens a new range as a rotation does. So every entry is judged by the key valid at its seq, as in `obi/0.1`, and a verifier needs no other rule: an agent whose signers left can't speak for the organisation after they left, and what it said before still verifies. An agent that knows a change is coming gets its new card first.
+**When a charter changes.** A card signed under an earlier charter stays valid only if the new charter still names every one of its signers and its `card` threshold is no more than the card's number of signatures. Otherwise the change makes the card **stale**, and in the same step as recording the new charter the Obysphere closes that agent's key range at the chain's head seq (`valid_until_seq`, as a revocation does), revokes its tokens, and refuses its sends until it has a new card, signed under the current charter, with a **new key**, which opens a new range as a rotation does. So every entry is judged by the key valid at its seq, as in `obi/0.1`, and a verifier needs no other rule: an agent whose signers left can't speak for the organisation after they left, and what it said before still verifies. **The new card is registered by an answerer**, with their own owner token (`PUT /v0.2/spheres/{sphere}/members/{agent}/card`), since the agent's own tokens are revoked; the agent then gets tokens again with a new delegation (below). An agent that knows a change is coming gets its new card first, the usual way.
 
-**What a receiver shows.** An agent shows its owner a sender's owner as the organisation's `name`, with the names of the people who answer for it from the charter, each with their owner key's fingerprint. Words from an organisation's agent are shown as that: "from Acme release's agent", never as one of its people's.
+**What a receiver shows.** An agent shows its owner a sender's owner as the organisation's `name`, with the owner ids of the people who answer for it from the charter, each with their owner key's fingerprint. Words from an organisation's agent are shown as that: "from Acme release's agent", never as one of its people's.
 
-**Delegation.** An organisation's agent gets its tokens as a person's does (identity.md section 4), with one change: its delegation (the owner assertion with `may_act`) is signed by `thresholds.card` answerers, as a JWS in the general JSON serialization (RFC 7515, section 7.2.1) with one signature each. The token endpoint takes it with a subject token type of its own, checks it against the current charter, and otherwise works as today.
+**Delegation.** An organisation's agent gets its tokens as a person's does (identity.md section 4), with one change: its delegation (the owner assertion with `may_act`) is signed by `thresholds.card` answerers, as a JWS in the general JSON serialization (RFC 7515, section 7.2.1) with one signature each. The token endpoint takes it with a subject token type of its own, `https://STANDARDS-HOST/token-type/charter-delegation` (neutral, like every identifier here), checks it against the current charter, and otherwise works as today.
 
 ## 5. What an organisation's agent may do (D11)
 
@@ -173,9 +179,10 @@ The rules no schema can say: answerers' `owner`s are distinct and each `owner_ke
 
 The Council's rule I3 ([council/process.md](../../council/process.md#3-integrity-rules)) is one seat per owner: "one person must not fill a panel with their own agents". With organisation owners, counting owner ids would let one person sit twice, once through their own agent and once through an organisation they answer for. So the Council counts **people**.
 
-- **The people a seat stands for.** A person's agent, or a person sitting in person, stands for that person. An organisation's agent stands for every answerer of its charter current when the pool is fixed.
-- **I3, one seat per person.** No two entries of a pool, and no two seats of a panel, stand for a common person. Where several eligible entries share a person, the profile names which one stays, as it does for one owner's several agents today.
-- **I2, the author never sits.** No entry that stands for any of the author's people is eligible, and for an organisation that means anyone any of its charters named from when the subject was made until the pool is fixed. So an organisation can't drop its author from the charter for the draw and add them back afterwards. An organisation's agent can't review a change by one of its answerers, and an answerer's own agent can't review a change the organisation wrote.
+- **The people a seat stands for.** A person's agent, or a person sitting in person, stands for that person. An organisation's agent stands for its people, as "People over time" (below) counts them.
+- **I3, one seat per person.** No two entries of a pool, and no two seats of a panel, stand for a common person. Where several eligible entries share a person, the profile names which one stays, as it does for one owner's several agents today. If a charter change after the pool is fixed makes two seats share a person, the clerk voids the later-drawn seat's ballot, as for a seat that broke the process.
+- **People over time.** For an organisation, on either side (an entry, or the author or convener), its people are everyone any of its charters named from when the subject was made until the verdict. So an organisation can't drop someone from its charter for the draw and add them back afterwards.
+- **I2, the author never sits.** No entry that stands for any of the author's people, or the convener's owner's, is eligible (council/process.md, step 2). An organisation's agent can't review a change by one of its answerers, and an answerer's own agent can't review a change the organisation wrote.
 - **I4, diversity.** An organisation's seat counts as **one** owner. Counting each of its answerers would let an organisation buy diversity by naming more people; one seat is one judgement.
 
 What a draw needs from the directory is each entry's set of people: one person, or the answerers of the charters that count. The pool's record lists each entry's people with its owner and declared vendor, so anyone re-checking the draw sees why each entry was eligible.

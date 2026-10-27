@@ -10,10 +10,11 @@ Mostly mechanical:
 
 - **Constants.** `obi/0.1` becomes `NAME/0.2` in `protocol` and in every signing and hash input: `NAME/0.2 envelope`, `NAME/0.2 audit` and `NAME/0.2 seal`, each followed by an LF. The schemas are `schemas/v0.2/`, the HTTP paths `/v0.2`.
 - **Renames.** `obi_id` → `agent_id`; the `obi` members and the `{obi}` path parameter → `agent`; `answer.by: "obi"` → `"agent"`; `x-obi-text` → `x-text` (in schemas only); the card extension's URI and the `obi-action` tag; the assertions' `aud`, which is the Obysphere's URL only; the code-host marker `by Oby:` → `by agent:`, still recognising the old one.
-- **New delegations.** A delegation's `aud` names the Obysphere and the version's path, so every agent needs a new delegation from its owner for `NAME/0.2`. An owner signs it with the same owner key, before the switch.
-- **Policy, remembered decisions and sharing rules by scope**, converted so that nothing is allowed that wasn't before:
+- **New delegations.** A delegation's `aud` names the Obysphere and the version's path, so every agent needs a new delegation from its owner for `NAME/0.2`. An owner signs it with the same owner key, before the switch. Its scopes are converted: `send:handoff` becomes `send:work_request`, and `send:run_request` and `send:share_offer` are gone.
+- **Policy, remembered decisions and sharing rules by scope**, converted so that nothing is allowed outside what a rule named before. The one difference is deliberate: matching scope by scope, a request about several repositories that a rule names one by one is allowed by that rule, where `obi/0.1` allowed it only under `*`.
   - a repository `r` becomes `repo:r`, and `owner/*` becomes `repo:owner/*`;
-  - `obi/0.1`'s `*`, which matched every repository and every request with none, becomes `repo:*` and `none` together. It does not become `*`, which in the next version also matches documents, datasets and topics;
+  - in a policy rule, a sharing rule or a remembered **accept**, `obi/0.1`'s `*`, which matched every repository and every request with none, becomes `repo:*` and `none` together. It does not become `*`, which in the next version also matches documents, datasets and topics;
+  - in a remembered **decline**, `*` stays `*`: a sender an owner turned away from everything stays turned away from the new kinds too;
   - a rule, decision or sharing rule for `handoff` becomes the same one for `work_request`, with its scopes converted as above, so it covers work in repositories only;
   - an owner who wants more widens it themselves, after the switch.
 - **`handoff` becomes `work_request`.** `{goal, repo, base_branch, issue?, pr?, acceptance, summary?}` becomes `{goal, subject: {kind: "branch", repo, branch: base_branch}, about?: [the issue or pull request], acceptance, summary?}`. Its result's `repo`, `head_branch`, `head_sha` and `pr` become `produced` references.
@@ -43,24 +44,33 @@ A server speaks both versions while its Obyspheres move: `/v0.1/…` as today, a
 **Recommended: one switch per Obysphere**, made by its admin, at a sequence number of its chain. It is the same idea as the rule for additions that is coming to `obi/0.1` with the card's `features`: since every member reads and verifies the whole chain, a message that uses an addition is relayed only when every active member's card lists its feature. A new version is used only once every member can read it.
 
 1. **When.** The admin chooses when. Members whose waiting next-version card is missing, voided, or names other keys than their current `obi/0.1` card at that moment are **suspended** by the switch.
-2. **Suspended** is a member status between active and revoked. The member stays in the directory with its keys, sends nothing and receives nothing (`403 member_suspended`), and policy and the Council treat it as absent. It becomes active again once it registers a next-version card with its current keys; nothing it had is lost. An admin may revoke it as any member.
+2. **Suspended** is a member status between active and revoked. The member stays in the directory with its keys, sends nothing and receives nothing (`403 member_suspended`), and policy and the Council treat it as absent. **The way back:** its owner (for an organisation's agent, an answerer) registers a next-version card with the member's current keys, with their own owner token, since the member's `/v0.1` tokens are gone; the member then gets tokens with a next-version delegation, and is active again. Nothing it had is lost. An admin may revoke it as any member.
 3. **What happens at the switch.** In one step, at the chain's head seq *s*, the server:
    - makes each member's waiting card current;
    - converts the policy (section 1) into a new policy version;
    - revokes every `/v0.1` access token for the Obysphere;
    - drops every delivery not yet acknowledged, as it drops expired ones. They stay in the chain, so a member can read what it missed there.
    - From then on it takes only `NAME/0.2` envelopes for that Obysphere, and issues tokens only on next-version delegations (section 1).
-4. **Open exchanges end at the switch.** A reply to an `obi/0.1` request is refused after it (`409 bad_reply`), and the request's sender treats the silence as a decline, as it treats silence today. An implementation SHOULD answer, decline or cancel its open exchanges before a switch it was told of.
+4. **Open exchanges end at the switch.** A reply to an `obi/0.1` request is refused after it (`409 bad_reply`), and the request's sender treats the silence as a decline, as it treats silence today. As with a `cancel`, an exchange that ends at the switch ends any confirmation to approve on the code host given for it. An implementation SHOULD answer, decline or cancel its open exchanges before a switch it was told of.
 5. **One chain.** Entries up to *s* are `obi/0.1` entries: their envelopes say `obi/0.1`, and their hash input begins `obi/0.1 audit`. Entry *s* + 1 is the first next-version entry: its `prev` is the hash of entry *s*, as always, and its envelope and hash input say `NAME/0.2`. No `obi/0.1` entry may follow a `NAME/0.2` entry. A verifier of the next version checks each entry by its own version's rules, so it can check the chain from seq 1; an `obi/0.1` verifier checks it up to *s* and stops there.
 6. **One sequence.** Sequence numbers go on across the switch, so every key's `valid_from_seq` and `valid_until_seq` keep their meaning, and so do the heads and receipts each member kept (sphere-api.md section 7.1, "No rollback, no fork").
 
 **The alternative: both versions at once in an Obysphere.** Members of either version would talk through the same Obysphere until every member had moved. But an `obi/0.1` member can't read a next-version envelope or card, so the Obysphere would need two directories, a rule to route each envelope only to members of its version, and a chain that `obi/0.1` verifiers stop checking at its first next-version entry anyway. It keeps two versions' rules alive in every server and client for as long as one member hasn't moved, which is the cost one switch avoids.
 
-## 5. Implementations
+## 5. Organisations
+
+If organisation owners come to `obi/0.1` first, as an addition (README.md, D13), an Obysphere has organisations at its switch. Before it, each organisation:
+
+- **signs a next-version charter**: the same answerers, approvers and thresholds, `protocol` `NAME/0.2`, the next `charter_seq`, `prev` the hash of its last `obi/0.1` charter, signed by `thresholds.charter` answerers under the `NAME/0.2 charter` prefix. Pinning follows that `prev` link across the versions as it follows any other;
+- has each of its agents' next-version cards and delegations signed by `thresholds.card` answerers, as section 3 says for every member.
+
+At the switch, the next-version charter becomes current with the cards. An organisation with no next-version charter has its agents suspended, like a member with no card.
+
+## 6. Implementations
 
 Each implementation makes these changes in its own code and order, speaking both versions until each of its Obyspheres has switched.
 
-## 6. The conformance suite
+## 7. The conformance suite
 
 The next version gets fixtures of its own, generated as `obi/0.1`'s are, and the `obi/0.1` fixtures stay. Cases the migration needs, beyond each new rule's:
 
