@@ -208,8 +208,9 @@ export async function callTool(c: Connector, name: string, a: Args): Promise<str
     case "reply": {
       need("request_id");
       need("kind");
-      const item = await c.reply(str(a, "request_id")!, str(a, "kind")!, a as ReplyArgs);
-      return renderItem(item, c.file, { words: false });
+      const { item, withheld } = await c.reply(str(a, "request_id")!, str(a, "kind")!, a as ReplyArgs);
+      const note = withheld ? "The secret scan stopped what you wrote: as the protocol says, the request was finished without your words. Nothing you wrote was sent.\n" : "";
+      return note + renderItem(item, c.file, { words: false });
     }
     default:
       throw new ConnectorError(`no tool ${name}`);

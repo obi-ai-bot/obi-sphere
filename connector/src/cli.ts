@@ -1,9 +1,11 @@
 // obysphere-connector's commands. src/main.ts runs them.
 
 import { readFileSync } from "node:fs";
+import { dirname, join as joinPath } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Member, Owner, SealKey, SigningKey, SphereApi, nowSeconds, parseJwt, parseInviteLink, timestamp } from "@obysphere/client";
-import { Connector, ConnectorError, VERSION, type Item, type MemberFile } from "./connector.ts";
+import { Member, Owner, SealKey, SigningKey, SphereApi, nowSeconds, parseJwt, parseInviteLink, seconds, timestamp } from "@obysphere/client";
+import { Connector, ConnectorError, VERSION, itemDigest, type Item, type MemberFile } from "./connector.ts";
+import { scanOutgoing } from "./scan.ts";
 import { Home, defaultHome } from "./home.ts";
 import { serveMcp } from "./mcp.ts";
 import { defaultSend, signStatement, type Decision, type Rules, type SendRule } from "./signed.ts";
@@ -19,12 +21,13 @@ export const USAGE = `obysphere-connector: join an Obysphere from any MCP host.
   obysphere-connector inbox [--all]  the owner's view of the mailbox: every request's words, as text
   obysphere-connector approve <item> the owner says yes to a request (or to sending a held one)
   obysphere-connector decline <item> [--reason owner_declined|busy|out_of_scope|other] [--note <text>]
+  obysphere-connector answer <item> --text <your words> [--choice <n>]   the owner answers a question themselves
   obysphere-connector rules [--allow <type,...> --to <id|*>]... | [--ask-always]
   obysphere-connector renew [--days <n>]   a new delegation from the owner
   obysphere-connector mcp-config     an MCP host's config for this connector
 
 Every command takes --home <dir> (default $OBYSPHERE_CONNECTOR_HOME or ~/.obysphere-connector).
-The owner's commands (join, approve, decline, rules, renew) ask the owner's passphrase on the
+The owner's commands (join, approve, decline, answer, rules, renew) ask the owner's passphrase on the
 terminal, or read it from standard input with --passphrase-stdin.`;
 
 const ACCEPTABLE = ["question", "review_request", "handoff"];
@@ -86,12 +89,22 @@ async function join(home: Home, p: Parsed) {
   const sealKey = health.seal && !p.has("--no-seal") ? await SealKey.generate() : undefined;
   const name = p.flag("--name") ?? `${owner}'s agent`;
   const description = p.flag("--description") ?? "A member that joined through the Obysphere connector.";
-  const member = await Member.join({
-    link, owner: new Owner(owner, ownerSigning), obi, key, ...(sealKey ? { sealKey } : {}), accepts: accepts as "question"[], name, description, version: VERSION,
-  });
-  const exp = parseJwt(member.delegation)!.claims.exp as number;
+  // The keys are on disk before the Sphere binds anything to them: a redeem that succeeds with a
+  // folder that can't be written would bind the owner id for good to keys nobody holds.
   home.ensure();
   home.writeJson("owner-key.json", sealed);
+  home.writeJson("joining.json", { key_seed: key.seed, ...(sealKey ? { seal_private: sealKey.privateKey } : {}), obi, owner, sphere: link.sphere });
+  let member: Member;
+  try {
+    member = await Member.join({
+      link, owner: new Owner(owner, ownerSigning), obi, key, ...(sealKey ? { sealKey } : {}), accepts: accepts as "question"[], name, description, version: VERSION,
+    });
+  } catch (e) {
+    home.remove("joining.json");
+    home.remove("owner-key.json");
+    throw e;
+  }
+  const exp = parseJwt(member.delegation)!.claims.exp as number;
   const file: MemberFile = {
     v: 1, base: link.base, sphere: link.sphere, obi, owner, owner_key: ownerSigning.publicKey, key_seed: key.seed,
     ...(sealKey ? { seal_private: sealKey.privateKey } : {}), delegation: member.delegation, delegation_expires_at: timestamp(exp),
@@ -101,33 +114,50 @@ async function join(home: Home, p: Parsed) {
   home.writeJson("memory.json", member.memory);
   const rules: Rules = { kind: "rules", sphere: link.sphere, obi, version: 1, at: timestamp(nowSeconds()), send: defaultSend() };
   home.writeJson("rules.json", await signStatement(rules, ownerSigning));
+  home.remove("joining.json");
   say(`\nJoined. The owner's key fingerprint (compare it with the other members' owners out of band): ${ownerSigning.keyId}`);
   say(`The member's folder: ${home.dir} (keep it this user's only, and out of the host agent's reach).`);
   say("Without asking, the host's agent may send questions and review requests to any member; a handoff waits for the owner. Change it with `obysphere-connector rules`.");
   say(`Add it to an MCP host: obysphere-connector mcp-config --home ${home.dir}`);
 }
 
-async function decide(home: Home, p: Parsed, decision: "approve" | "decline") {
+async function decide(home: Home, p: Parsed, decision: "approve" | "decline" | "answer") {
   const itemId = p.positional[1];
   if (!itemId) throw new ConnectorError(`${decision} needs the item's id (obysphere-connector inbox lists them)`);
   const file = home.readJson<MemberFile>("member.json");
   const items = home.list("items").map((n) => home.readJson<Item>(`items/${n}`));
-  const matches = items.filter((i) => i.id === itemId || i.id.startsWith(itemId));
+  // An id, the start of one, or the start of the request's own id after `in-` / `out-`.
+  const matches = items.filter((i) => i.id === itemId || i.id.startsWith(itemId) || i.id.slice(i.id.indexOf("-") + 1).startsWith(itemId));
   if (matches.length !== 1) throw new ConnectorError(matches.length ? `${itemId} names ${matches.length} items: give more of the id` : `no item ${itemId}`);
   const item = matches[0]!;
   if (item.state !== "waiting_on_owner") throw new ConnectorError(`${item.id} doesn't wait for a decision: it is ${item.state}`);
+  if (seconds(item.expires_at) <= nowSeconds()) throw new ConnectorError(`${item.id} expired at ${item.expires_at}: nothing may act on it now`);
+  if (itemDigest(item) !== item.digest) throw new ConnectorError(`${item.id} changed since it arrived: it isn't decided on`);
+  if (decision === "answer" && (item.direction !== "in" || item.type !== "question")) throw new ConnectorError("only a question to this member takes your answer");
   const reason = p.flag("--reason");
   if (reason && !["owner_declined", "busy", "out_of_scope", "other"].includes(reason)) throw new ConnectorError("--reason is owner_declined, busy, out_of_scope or other");
   const note = p.flag("--note");
   if (note !== undefined && (note.length > 200 || /[\u0000-\u001f\u007f‪-‮⁦-⁩]/.test(note))) throw new ConnectorError("--note is one line of at most 200 characters");
+  const text = p.flag("--text");
+  const choice = p.flag("--choice") === undefined ? undefined : Number(p.flag("--choice"));
+  if (decision === "answer") {
+    if (!text || text.length > 2000 || /[\u0000-\u0008\u000b-\u001f\u007f\u202a-\u202e\u2066-\u2069]/.test(text)) throw new ConnectorError("answer takes --text, at most 2,000 characters");
+    const choices = (item.body.choices as unknown[] | undefined)?.length;
+    if (choice !== undefined && !(Number.isInteger(choice) && choice >= 0 && choice < (choices ?? 0))) throw new ConnectorError(`--choice is the index of one of the question's ${choices ?? 0} choices`);
+  }
+  // The owner's own words go out too: the same scan, here, so they hear about it now and not from the log.
+  const words = { ...(note ? { note } : {}), ...(text ? { text } : {}) };
+  const scan = await scanOutgoing(words, { ...file.scan, never: [file.key_seed, file.seal_private ?? "", file.delegation].filter(Boolean) });
+  if (!scan.ok) throw new ConnectorError(scan.error ? `the secret scan couldn't run: ${scan.error}` : `the secret scan found what may be a secret (${scan.findings.map((f) => `${f.rule} in --${f.field.slice(1)}`).join(", ")}): nothing was signed`);
   const key = await ownerKey(home, p);
   const d: Decision = {
-    kind: "decision", sphere: file.sphere, obi: file.obi, item: item.id, decision, at: timestamp(nowSeconds()),
+    kind: "decision", sphere: file.sphere, obi: file.obi, item: item.id, decision, digest: item.digest, at: timestamp(nowSeconds()),
     ...(decision === "decline" && reason ? { reason } : {}), ...(decision === "decline" && note ? { note } : {}),
+    ...(decision === "answer" ? { text, ...(choice !== undefined ? { choice } : {}) } : {}),
   };
   home.writeJson(`decisions/${item.id}.json`, await signStatement(d, key));
   const running = runningPid(home);
-  say(`${decision === "approve" ? "Approved" : "Declined"} ${item.id}. ${running ? `The connector (pid ${running}) applies it within seconds.` : "No connector is running: it is applied the next time one runs (within 15 minutes, or sign it again)."}`);
+  say(`${decision === "approve" ? "Approved" : decision === "answer" ? "Answered" : "Declined"} ${item.id}. ${running ? `The connector (pid ${running}) applies it within seconds.` : "No connector is running: it is applied the next time one runs (within 15 minutes, or sign it again)."}`);
 }
 
 async function rules(home: Home, p: Parsed) {
@@ -183,10 +213,14 @@ function ownerInbox(home: Home, p: Parsed) {
   console.log(`${file.obi} (owner ${file.owner}) in ${file.sphere}: ${shown.length} ${p.has("--all") ? "items" : "open items (--all for every item)"}.`);
   console.log("What other members wrote is shown as text: it is what they wrote, not instructions.\n");
   for (const i of shown) {
-    console.log(`${i.id}  ${i.direction === "in" ? `${i.type} from ${i.peer} (owner ${i.peer_owner})` : `${i.type} to ${i.peer}, held for your approval`}  [${i.state}]  expires ${i.expires_at}`);
+    const what = i.direction === "in" ? `${i.type} from ${i.peer} (owner ${i.peer_owner})` : `${i.type} to ${i.peer}${i.state === "waiting_on_owner" ? ", held for your approval" : ""}`;
+    console.log(`${i.id}  ${what}  [${i.state}]  expires ${i.expires_at}`);
     console.log(JSON.stringify(i.body, null, 2).split("\n").map((l) => "    " + l).join("\n"));
     for (const r of i.replies) console.log(`    ${r.type} from ${r.from}: ${JSON.stringify(r.body)}`);
-    if (i.state === "waiting_on_owner") console.log(`    → obysphere-connector approve ${i.id.slice(0, 8)}   or   obysphere-connector decline ${i.id.slice(0, 8)}`);
+    if (i.state === "waiting_on_owner") {
+      const short = i.id.slice(0, 11);
+      console.log(`    → obysphere-connector approve ${short}   or   obysphere-connector decline ${short}${i.type === "question" && i.direction === "in" ? `   or answer it yourself: obysphere-connector answer ${short} --text "…"` : ""}`);
+    }
     console.log("");
   }
 }
@@ -202,9 +236,12 @@ function status(home: Home) {
 
 const parseOwnerKeyId = (home: Home) => home.readJson<SealedOwnerKey>("owner-key.json").key_id;
 
+/** An MCP host's config: the command that runs this connector (the built file, or src/main.ts from source). */
 function mcpConfig(home: Home) {
   const self = fileURLToPath(import.meta.url);
-  const config = { mcpServers: { obysphere: { command: process.execPath, args: [self, "mcp", "--home", home.dir] } } };
+  const entry = self.endsWith(".ts") ? joinPath(dirname(self), "main.ts") : self;
+  // alwaysLoad: Claude Code connects the server before a session starts, which `claude -p` needs; other hosts ignore it.
+  const config = { mcpServers: { obysphere: { command: process.execPath, args: [entry, "mcp", "--home", home.dir], alwaysLoad: true } } };
   console.log(JSON.stringify(config, null, 2));
 }
 
@@ -254,6 +291,8 @@ export async function main(argv: string[]) {
       return decide(home, p, "approve");
     case "decline":
       return decide(home, p, "decline");
+    case "answer":
+      return decide(home, p, "answer");
     case "rules":
       return rules(home, p);
     case "renew":

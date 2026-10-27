@@ -15,7 +15,12 @@ export interface Decision {
   obi: string;
   /** The mailbox item: the request's id. */
   item: string;
-  decision: "approve" | "decline";
+  decision: "approve" | "decline" | "answer";
+  /** SHA-256 of what the owner saw (connector.ts itemDigest): the decision applies to that only. */
+  digest: string;
+  /** For the owner's own answer to a question: their words, and the choice. */
+  text?: string;
+  choice?: number;
   /** For a decline: the protocol's reason (`owner_declined` unless the owner says otherwise) and an optional one-line note, data. */
   reason?: string;
   note?: string;
@@ -75,5 +80,5 @@ export const allows = (rules: Rules | null, to: string, type: string): boolean =
 
 export const isDecision = (v: unknown): v is Decision => {
   const d = v as JsonObject;
-  return !!d && d.kind === "decision" && typeof d.item === "string" && (d.decision === "approve" || d.decision === "decline") && typeof d.at === "string";
+  return !!d && d.kind === "decision" && typeof d.item === "string" && (d.decision === "approve" || d.decision === "decline" || d.decision === "answer") && typeof d.at === "string" && typeof d.digest === "string";
 };

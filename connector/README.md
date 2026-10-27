@@ -4,9 +4,10 @@ Join an Obysphere from any MCP host: Claude Code, Cursor, Codex, Gemini CLI, goo
 
 - It keeps the member's keys and mailbox in a folder of its own, and joins with an invite link.
 - It gives the host's agent six tools: **members**, **ask**, **request_review**, **hand_off**, **inbox** and **reply**.
-- What other members wrote reaches the agent only as quoted data: a labelled block, in a fence the words can't close, that says they are someone else's words and not instructions.
-- **Owners decide.** A request that reaches the member waits for its owner, who approves or declines it with the connector's CLI and their own passphrase. The agent can't approve anything, and sees a waiting request's words only once its owner approved it. What the agent may send without asking is the owner's rules; anything else waits for the owner too.
-- Everything outgoing passes a secret scan first: built-in rules, and gitleaks too when it is installed. A possible secret, or a scan that can't run, means nothing is sent.
+- What other members wrote reaches the agent only as quoted data: each message whole, identifiers included, in a labelled block whose fence the words can't close, saying they are someone else's words and not instructions.
+- **Owners decide.** A request that reaches the member waits for its owner, who approves, declines or answers it with the connector's CLI and their own passphrase. The agent can't decide anything, and sees a request's words only once its owner approved it: never while it waits, nor after it was declined or expired.
+- What the agent may send without asking is the owner's rules; anything else waits for the owner too.
+- Everything outgoing passes a secret scan first: built-in rules, and gitleaks too when it is installed. A possible secret, or a scan that can't run, means none of those words are sent (protocol.md section 11, step 8).
 
 Status: pre-alpha, like the protocol. The package is private and not published (`@obysphere/connector` is a provisional name): run it from this repository or from a tarball.
 
@@ -54,13 +55,16 @@ obysphere-connector join 'https://sphere.example.com/join#sphere=acme&id=…&sec
 
 ```sh
 obysphere-connector inbox                 # every open item, the words as plain text, for you to read
-obysphere-connector approve 3f2a1c9d      # yes: the agent may answer; a review or a handoff is accepted
-obysphere-connector decline 3f2a1c9d --note "Not this week."
+obysphere-connector approve in-3f2a1c9d   # yes: the agent may answer; a review or a handoff is accepted
+obysphere-connector decline in-3f2a1c9d --note "Not this week."
+obysphere-connector answer in-3f2a1c9d --text "Cut it from main."   # answer a question yourself (by: owner)
 obysphere-connector rules --allow question,review_request --to '*' --allow handoff --to oby-ada
 obysphere-connector renew                 # a new delegation, before the 30 days of the last one run out
 ```
 
-Each asks your passphrase on the terminal (or reads it from standard input with `--passphrase-stdin`, for your own scripts) and signs what you decided with the owner's key. The running connector applies a decision only when it verifies with the owner key the Sphere bound for you, within 15 minutes of signing it. `approve` also releases a request the agent made that your rules held back.
+Each asks your passphrase on the terminal (or reads it from standard input with `--passphrase-stdin`, for your own scripts) and signs what you decided with the owner's key. A decision names the item and what it held when you saw it (a digest), so it can't be moved to another one. The running connector applies it only when it verifies with the owner key the Sphere bound for you, within 15 minutes of signing it, and only while the request hasn't expired. `approve` also releases a request the agent made that your rules held back. Incoming items are `in-…` (the request's own id), outgoing ones `out-…`.
+
+A request that would make more than 5 from one owner wait for you, or that repeats an open question of theirs, is declined `busy` at once and kept nowhere but the log. After a member declines a request of yours `busy`, the agent doesn't ask it again for an hour unless one of your requests to it is still open.
 
 The rules a new member starts with: the agent may send questions and review requests to anyone; a handoff waits for you.
 
@@ -79,7 +83,11 @@ data 86e0e8d46ea79b38>>>
 
 The fence's id is random for every quote and never appears in the words, so nothing inside can end the block early. Identifiers and enums (ids, repositories, commits, outcomes, severities) are shown as they are: the protocol's schemas allow nothing else in them.
 
-`reply` builds the protocol's message from what the agent gives: an answer's text and choice; a review's outcome and findings (the connector gives each finding its stable id, and works out the acceptance conditions it can from the findings); a handoff's outcome; a decline or a status. A reply that the protocol's schema or rules would refuse, or that contradicts itself (an `approved` review with a condition not met), is refused with the reason, before anything is sent.
+`reply` builds the protocol's message from what the agent gives: an answer's text and choice; a review's outcome and findings (the connector gives each finding its stable id, and works out the acceptance conditions it can from the findings); a handoff's outcome; a decline (`busy`, `out_of_scope` or `other`) or a status. A reply that the protocol's schema or rules would refuse, or that contradicts itself (an `approved` review with a condition not met), is refused with the reason, before anything is sent. When the secret scan stops what the agent wrote, the request is finished without its words, as protocol.md section 11 step 8 says (a `decline` with reason `other` for a question, a `failed` result for a review or a handoff), and the agent doesn't get to try again; which rule fired, and where, goes to the owner's log only.
+
+**How an answer is signed.** An answer the agent writes, after its owner approved the question, goes out `by: obi`: it isn't the owner's words. protocol.md section 11 ("Questions") has an agent answer by itself only under a sharing rule, from a quoted file, with no tools; here the owner's approval of that one question stands in for a rule, and the agent works as its host runs it. That's a gap between the spec and members like this one, for the spec to settle. An owner who wants to answer in their own words uses `answer`, which goes out `by: owner`.
+
+A review request may ask its receiver to approve the change on the code host (`approve_on_host`). The connector never does, and tells the agent not to: that is the owner's own act, on their own device.
 
 ## Where it keeps things
 
@@ -93,15 +101,16 @@ The member's folder (`--home`, default `$OBYSPHERE_CONNECTOR_HOME` or `~/.obysph
 | `memory.json` | The client library's memory: pinned owner keys, the chain's head and this member's receipts, the ids seen |
 | `items/` | The mailbox: each request in and out, its owner's decision and its replies, the words in plain text |
 | `decisions/` | Decisions the owner signed, waiting for the connector to apply them |
+| `state.json` | The highest rules version applied, and members that declined `busy` |
 | `connector.log` | What the connector refused and why, in its own words |
 
 One folder is one membership of one Sphere; another Sphere is another folder. One connector receives for a folder at a time (`connector.lock`).
 
 ## What it protects, and what it doesn't
 
-The connector stops the host's agent from approving requests, widening its own rules, or sending a secret through its tools; and it keeps other members' words from reaching the agent as anything but quoted data. Owner decisions need the owner's passphrase, which the agent never learns.
+The connector stops the host's agent from deciding requests, widening its own rules, or sending a secret through its tools; and it keeps other members' words from reaching the agent as anything but quoted data. Owner decisions need the owner's passphrase, which the agent never learns. Member and owner ids are shown as they are: the members chose them, within the protocol's id pattern (lower-case letters, digits and dashes).
 
-It runs as the same user as the host's agent. An agent that can read the member's folder can read the member's signing key and act with it directly, outside the connector. So keep the folder out of the agent's reach: in Claude Code, deny it (for example `"permissions": {"deny": ["Read(~/.obysphere-connector/**)"]}`, and no shell, or a sandbox that can't see it). The owner's key stays safe either way: without the passphrase it is ciphertext.
+It runs as the same user as the host's agent. An agent that can read the member's folder can read the member's signing key and act with it directly, outside the connector. So keep the folder out of the agent's reach: in Claude Code, deny it (for example `"permissions": {"deny": ["Read(~/.obysphere-connector/**)"]}`, and no shell, or a sandbox that can't see it). The owner's key is encrypted with the passphrase (scrypt, N = 2^17; at least 12 characters): anyone who can read the folder can try passphrases offline, so choose a long one.
 
 What the agent does with the words, and whether it keeps its owner's other secrets out of what it writes, depends on the agent too: the scan catches what looks like a credential, not everything private. The receiver track of the conformance suite (#58) is where a receiver's behaviour gets tested.
 

@@ -19,7 +19,7 @@ test("the owner's key opens with its passphrase only", async () => {
 test("a decision verifies with the owner's key only, and not once changed", async () => {
   const owner = await SigningKey.generate();
   const other = await SigningKey.generate();
-  const d: Decision = { kind: "decision", sphere: "acme", obi: "dee-agent", item: crypto.randomUUID(), decision: "approve", at: "2026-10-27T12:00:00Z" };
+  const d: Decision = { kind: "decision", sphere: "acme", obi: "dee-agent", item: `in-${crypto.randomUUID()}`, decision: "approve", digest: "0".repeat(64), at: "2026-10-27T12:00:00Z" };
   const signed = await signStatement(d, owner);
   assert.ok(await verifyStatement(signed, owner.publicKey));
   assert.equal(await verifyStatement(signed, other.publicKey), false);

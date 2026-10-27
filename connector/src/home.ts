@@ -31,8 +31,13 @@ export class Home {
     return join(this.dir, ...parts);
   }
 
-  /** Makes the folder and its subfolders, this user's only. */
+  /** Makes the folder and its subfolders, this user's only: a new folder, an empty one, or this connector's own. */
   ensure(): void {
+    if (existsSync(this.dir)) {
+      const names = readdirSync(this.dir);
+      const ours = new Set(["member.json", "owner-key.json", "joining.json", "rules.json", "memory.json", "state.json", "items", "decisions", "connector.log", "connector.lock"]);
+      if (names.some((n) => !ours.has(n) && !n.endsWith(".tmp"))) throw new Error(`${this.dir} holds files of something else: choose a new or empty folder for --home`);
+    }
     for (const d of [this.dir, this.path("items"), this.path("decisions")]) {
       mkdirSync(d, { recursive: true, mode: 0o700 });
       chmodSync(d, 0o700);
@@ -96,9 +101,11 @@ export class Home {
         };
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-        const pid = Number(readFileSync(p, "utf8"));
+        const held = readFileSync(p, "utf8");
+        const pid = Number(held);
         if (Number.isSafeInteger(pid) && pid > 0 && alive(pid)) throw new Error(`another connector (pid ${pid}) is running for ${this.dir}`);
-        rmSync(p, { force: true });
+        // Taken over only while it still names the process that is gone: another connector may have just taken it.
+        if (readFileSync(p, "utf8") === held) rmSync(p, { force: true });
       }
     }
     throw new Error(`could not take ${p}`);

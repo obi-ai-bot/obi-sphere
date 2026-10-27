@@ -4,6 +4,9 @@
 // run, means nothing is sent. What it reports names the rule and the field, never the match.
 
 import { spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Json } from "@obysphere/client";
 
 export interface ScanFinding {
@@ -93,10 +96,16 @@ function gitleaksScan(values: { field: string; text: string }[], bin: string): P
       fieldOfLine.push(field);
     }
   }
-  return new Promise((done, failed) => {
+  // An empty folder of its own and no GITLEAKS_* settings: no `.gitleaks.toml` of the repository
+  // being worked on (or of the agent's) can allowlist anything.
+  const cwd = mkdtempSync(join(tmpdir(), "obysphere-scan-"));
+  const cleanup = () => rmSync(cwd, { recursive: true, force: true });
+  return new Promise<ScanFinding[] | null>((done, failed) => {
     let child;
     try {
-      child = spawn(bin, ["stdin", "--no-banner", "--redact", "--log-level", "error", "--report-format", "json", "--report-path", "-"], { stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn(bin, ["stdin", "--no-banner", "--redact", "--log-level", "error", "--report-format", "json", "--report-path", "-"], {
+        cwd, env: { PATH: process.env.PATH ?? "", HOME: cwd }, stdio: ["pipe", "pipe", "pipe"],
+      });
     } catch (e) {
       return failed(e);
     }
@@ -127,7 +136,7 @@ function gitleaksScan(values: { field: string; text: string }[], bin: string): P
     });
     child.stdin.on("error", () => {});
     child.stdin.end(lines.join("\n") + "\n");
-  });
+  }).finally(cleanup);
 }
 
 /** Scans an outgoing body. `ok` only when every scanner ran and none found anything. */

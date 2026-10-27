@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { appendFileSync } from "node:fs";
 import {
-  Member, SealKey, SigningKey, SphereApi, SphereError, emptyMemory, fromB64url, nowSeconds, resultProblems, schemaErrors, seconds, timestamp,
+  Member, SealKey, SigningKey, SphereApi, SphereError, canonicalize, emptyMemory, fromB64url, nowSeconds, resultProblems, schemaErrors, seconds, timestamp,
   type JsonObject, type MemberMemory, type Peer, type Received, type ReceivedMessage, type SchemaName,
 } from "@obysphere/client";
 import { Home } from "./home.ts";
@@ -21,6 +21,10 @@ export const VERSION = "0.1.0";
 export const INBOX_LIMIT = 5;
 /** How long an owner's signed decision stays good to apply. */
 export const DECISION_FRESH_SECONDS = 900;
+/** After a member declines `busy`, how long before the agent may ask it again with nothing open (protocol.md section 11). */
+export const BUSY_BACKOFF_SECONDS = 3600;
+/** A finished item is forgotten this long after it expired. */
+export const KEEP_FINISHED_SECONDS = 30 * 86400;
 
 /** member.json: the membership. `key_seed` and `seal_private` are secret. */
 export interface MemberFile {
@@ -43,11 +47,19 @@ export interface MemberFile {
   scan?: Pick<ScanOptions, "gitleaks" | "gitleaksPath">;
 }
 
+/** state.json: what the connector itself keeps besides the library's memory. */
+interface ConnectorState {
+  /** The highest rules version applied: an older rules file never replaces it. */
+  rules_version: number;
+  /** Members that declined `busy`, and until when the agent doesn't ask them again with nothing open. */
+  busy_until: Record<string, number>;
+}
+
 export type ItemState =
   | "waiting_on_owner" // in: the owner hasn't decided; out: held until the owner approves sending it
   | "approved" // in: the owner said yes; the agent may reply
   | "declined" // in: the owner said no (a decline was sent); out: the other member declined
-  | "replied" // in: the agent's answer or result went out
+  | "replied" // in: an answer, a result or a decline went out
   | "not_sent" // out: the owner declined to send it
   | "sent" // out: recorded by the Sphere, no reply yet
   | "accepted" // out: the other member accepted
@@ -63,7 +75,7 @@ export interface Reply {
 }
 
 export interface Item {
-  /** The item's id: an incoming request's id, or a local id for an outgoing one. */
+  /** `in-` and the incoming request's id, or `out-` and a local id: never one the other side chose alone. */
   id: string;
   direction: "in" | "out";
   type: string;
@@ -74,20 +86,28 @@ export interface Item {
   expires_at: string;
   /** The request's body, its words in plain text: in this member's folder only. */
   body: JsonObject;
+  /** SHA-256 of what the owner decides on (type, peer, body): a decision names it. */
+  digest: string;
   replies: Reply[];
-  /** Out: the id of the request as sent. */
+  /** In: the request's id. Out: the id of the request as sent. */
   request_id?: string;
   /** Out: its lifetime in seconds, to send it with. */
   expires_in?: number;
-  decided?: { decision: "approve" | "decline"; at: string; reason?: string; note?: string };
+  decided?: { decision: Decision["decision"]; at: string; reason?: string };
   /** The connector's own words about what happened: never another member's. */
   log: string[];
 }
 
 export class ConnectorError extends Error {}
 
+export const itemDigest = (item: Pick<Item, "type" | "peer" | "body">): string =>
+  createHash("sha256").update(canonicalize({ type: item.type, peer: item.peer, body: item.body }), "utf8").digest("hex");
+
 const findingId = (file: string, line: number, title: string) =>
   "f-" + createHash("sha256").update(`${file}\n${line}\n${title}`, "utf8").digest("hex").slice(0, 16);
+
+const ITEM_ID = /^(in|out)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const OPEN: ItemState[] = ["waiting_on_owner", "approved", "sent", "accepted"];
 
 export class Connector {
   readonly home: Home;
@@ -110,7 +130,7 @@ export class Connector {
     const file = home.readJson<MemberFile>("member.json");
     const memory = home.readJsonOr<MemberMemory>("memory.json", emptyMemory());
     const member = new Member({
-      api: new SphereApi(file.base), sphere: file.sphere, obi: file.obi, owner: file.owner,
+      api: new SphereApi(file.base), sphere: file.sphere, obi: file.obi, owner: file.owner, ownerKey: file.owner_key,
       key: await SigningKey.fromSeed(fromB64url(file.key_seed)),
       ...(file.seal_private ? { sealKey: await SealKey.fromPrivate(fromB64url(file.seal_private)) } : {}),
       delegation: file.delegation, memory,
@@ -132,8 +152,10 @@ export class Connector {
     return this.home.list("items").map((n) => this.home.readJson<Item>(`items/${n}`));
   }
 
+  /** An item by its id; a bare request id names the incoming item for it. */
   item(id: string): Item | undefined {
-    if (!/^[0-9a-f-]{36}$/.test(id)) return undefined;
+    if (!ITEM_ID.test(id) && ITEM_ID.test(`in-${id}`)) id = `in-${id}`;
+    if (!ITEM_ID.test(id)) return undefined;
     return this.home.exists(`items/${id}.json`) ? this.home.readJson<Item>(`items/${id}.json`) : undefined;
   }
 
@@ -144,6 +166,14 @@ export class Connector {
 
   #saveMemory() {
     this.home.writeJson("memory.json", this.member.memory);
+  }
+
+  #state(): ConnectorState {
+    return { rules_version: 0, busy_until: {}, ...this.home.readJsonOr<Partial<ConnectorState>>("state.json", {}) };
+  }
+
+  #saveState(s: ConnectorState) {
+    this.home.writeJson("state.json", s);
   }
 
   #note(what: string) {
@@ -179,19 +209,27 @@ export class Connector {
     }
   }
 
+  /** The owner's rules, when they verify with the owner's key and aren't older than rules applied before. */
   async rules(): Promise<Rules | null> {
     const rules = this.home.readJsonOr<Rules | null>("rules.json", null);
     if (!rules || rules.kind !== "rules" || rules.sphere !== this.file.sphere || rules.obi !== this.file.obi) return null;
-    return (await verifyStatement(rules, await this.boundOwnerKey())) ? rules : null;
+    if (!(await verifyStatement(rules, await this.boundOwnerKey()))) return null;
+    const state = this.#state();
+    if (rules.version < state.rules_version) {
+      this.#note(`ignored rules version ${rules.version}: version ${state.rules_version} was applied before`);
+      return null;
+    }
+    if (rules.version > state.rules_version) this.#saveState({ ...state, rules_version: rules.version });
+    return rules;
   }
 
   // ---------------------------------------------------------------------------------------------
   // Receiving.
 
-  /** One round: the owner's decisions applied, expired items settled, the deliveries waiting checked and recorded. */
+  /** One round: expired items settled, the owner's decisions applied, the deliveries waiting checked and recorded. */
   async poll(wait = 0): Promise<number> {
-    await this.serial(() => this.applyDecisions());
     await this.serial(async () => this.#expire());
+    await this.serial(() => this.applyDecisions());
     const received = await this.member.receive({ wait });
     if (!received.length) return 0;
     await this.serial(async () => {
@@ -205,7 +243,7 @@ export class Connector {
 
   async #handle(r: Received) {
     if (r.problem) {
-      this.#note(`refused delivery ${r.delivery_id} at seq ${r.seq}: ${r.problem.code} ${r.problem.message}`);
+      this.#note(`refused delivery ${r.delivery_id} at seq ${r.seq}: ${r.problem.code} (${r.problem.message})`);
       return;
     }
     const m = r.message!;
@@ -213,26 +251,28 @@ export class Connector {
     return this.#handleRequest(m, r);
   }
 
+  /** A request: in the mailbox to wait for the owner, or declined at once, and then kept nowhere but the log. */
   async #handleRequest(m: ReceivedMessage, r: Received) {
-    const item: Item = {
-      id: m.id, direction: "in", type: m.type, peer: m.from, peer_owner: m.owner, state: "waiting_on_owner",
-      created_at: timestamp(nowSeconds()), expires_at: m.expires_at, body: plainBody(m.body), replies: [], log: [`received at seq ${r.seq}`],
+    const id = `in-${m.id}`;
+    // A delivery seen before (its acknowledgement lost): what was decided about it stands.
+    if (this.home.exists(`items/${id}.json`)) return;
+    const body = plainBody(m.body);
+    const decline = async (reason: string, why: string) => {
+      this.#note(`declined ${m.type} ${m.id} from ${m.from}: ${reason} (${why})`);
+      await this.#sendReply(m.id, "decline", { reason }).catch((e) => this.#note(`the decline of ${m.id} didn't go out: ${(e as Error).message}`));
     };
-    if (!this.file.accepts.includes(m.type)) {
-      item.state = "declined";
-      item.log.push("declined: out_of_scope (this member doesn't accept it)");
-      this.#save(item);
-      await this.#sendReply(m.id, "decline", { reason: "out_of_scope" }).catch((e) => item.log.push(`the decline didn't go out: ${(e as Error).message}`));
-      return this.#save(item);
+    if (!this.file.accepts.includes(m.type)) return decline("out_of_scope", "this member doesn't accept it");
+    const waiting = this.items().filter((i) => i.direction === "in" && i.state === "waiting_on_owner" && i.peer_owner === m.owner);
+    if (waiting.length >= INBOX_LIMIT) return decline("busy", `${waiting.length} requests from ${m.owner} already wait for the owner`);
+    const same = (i: Item) => i.type === m.type && canonicalize(i.body.text ?? null) === canonicalize(body.text ?? null) && canonicalize(i.body.about ?? null) === canonicalize(body.about ?? null);
+    if (m.type === "question" && this.items().some((i) => i.direction === "in" && OPEN.includes(i.state) && i.peer_owner === m.owner && same(i))) {
+      return decline("busy", "the same question from that owner is open already");
     }
-    const waiting = this.items().filter((i) => i.direction === "in" && i.state === "waiting_on_owner" && i.peer_owner === m.owner).length;
-    if (waiting >= INBOX_LIMIT) {
-      item.state = "declined";
-      item.log.push(`declined: busy (${waiting} requests from ${m.owner} already wait for the owner)`);
-      this.#save(item);
-      await this.#sendReply(m.id, "decline", { reason: "busy" }).catch((e) => item.log.push(`the decline didn't go out: ${(e as Error).message}`));
-      return this.#save(item);
-    }
+    const item: Item = {
+      id, direction: "in", type: m.type, peer: m.from, peer_owner: m.owner, state: "waiting_on_owner", created_at: timestamp(nowSeconds()),
+      expires_at: m.expires_at, body, digest: "", replies: [], request_id: m.id, log: [`received at seq ${r.seq}`],
+    };
+    item.digest = itemDigest(item);
     this.#save(item);
     await this.#sendReply(m.id, "status", { state: "waiting_on_owner" }).catch((e) => this.#note(`status for ${m.id} didn't go out: ${(e as Error).message}`));
   }
@@ -243,10 +283,17 @@ export class Connector {
       this.#note(`a ${m.type} to ${m.in_reply_to}, which no item of this mailbox sent`);
       return;
     }
+    if (item.replies.some((x) => x.id === m.id)) return;
     item.replies.push({ id: m.id, type: m.type, from: m.from, at: timestamp(nowSeconds()), body: plainBody(m.body) });
     if (m.type === "accept") item.state = "accepted";
     else if (m.type === "answer" || m.type === "result") item.state = "answered";
-    else if (m.type === "decline") item.state = "declined";
+    else if (m.type === "decline") {
+      item.state = "declined";
+      if ((m.body as JsonObject).reason === "busy") {
+        const state = this.#state();
+        this.#saveState({ ...state, busy_until: { ...state.busy_until, [item.peer]: nowSeconds() + BUSY_BACKOFF_SECONDS } });
+      }
+    }
     item.log.push(`${m.type} received at seq ${r.seq}`);
     this.#save(item);
   }
@@ -254,11 +301,12 @@ export class Connector {
   #expire() {
     const now = nowSeconds();
     for (const item of this.items()) {
-      const open = item.state === "waiting_on_owner" || item.state === "approved" || item.state === "sent" || item.state === "accepted";
-      if (open && seconds(item.expires_at) <= now) {
+      if (OPEN.includes(item.state) && seconds(item.expires_at) <= now) {
         item.state = "expired";
         item.log.push("expired");
         this.#save(item);
+      } else if (!OPEN.includes(item.state) && seconds(item.expires_at) + KEEP_FINISHED_SECONDS < now) {
+        this.home.remove(`items/${item.id}.json`);
       }
     }
   }
@@ -266,7 +314,7 @@ export class Connector {
   // ---------------------------------------------------------------------------------------------
   // The owner's decisions.
 
-  /** Applies every decision waiting in decisions/ that the owner signed, for an item that waits for one. */
+  /** Applies every decision waiting in decisions/ that the owner signed, for an unexpired item that waits for one and is what the owner saw. */
   async applyDecisions(): Promise<void> {
     const names = this.home.list("decisions");
     if (!names.length) return;
@@ -299,32 +347,45 @@ export class Connector {
         this.#note(`ignored ${name}: ${d.item} doesn't wait for a decision`);
         continue;
       }
+      if (d.digest !== item.digest || itemDigest(item) !== item.digest) {
+        this.#note(`ignored ${name}: ${d.item} isn't what the owner decided on`);
+        continue;
+      }
+      if (seconds(item.expires_at) <= nowSeconds()) {
+        this.#note(`ignored ${name}: ${d.item} expired`);
+        continue;
+      }
       await this.#apply(item, d);
     }
   }
 
   async #apply(item: Item, d: Decision) {
-    item.decided = { decision: d.decision, at: d.at, ...(d.reason ? { reason: d.reason } : {}), ...(d.note ? { note: d.note } : {}) };
+    item.decided = { decision: d.decision, at: d.at, ...(d.reason ? { reason: d.reason } : {}) };
     try {
       if (item.direction === "in" && d.decision === "approve") {
-        if (item.type !== "question") await this.#sendReply(item.id, "accept", {});
+        if (item.type !== "question") await this.#sendReply(item.request_id!, "accept", {});
         item.state = "approved";
         item.log.push("approved by the owner");
+      } else if (item.direction === "in" && d.decision === "answer") {
+        if (item.type !== "question") throw new ConnectorError("only a question takes the owner's answer");
+        await this.#sendReply(item.request_id!, "answer", { by: "owner", text: d.text ?? "", ...(d.choice !== undefined ? { choice: d.choice } : {}) });
+        item.state = "replied";
+        item.log.push("answered by the owner, in their own words");
       } else if (item.direction === "in") {
-        await this.#sendReply(item.id, "decline", { reason: d.reason ?? "owner_declined", ...(d.note ? { note: d.note } : {}) });
+        await this.#sendReply(item.request_id!, "decline", { reason: d.reason ?? "owner_declined", ...(d.note ? { note: d.note } : {}) });
         item.state = "declined";
         item.log.push("declined by the owner");
       } else if (d.decision === "approve") {
         const sent = await this.#sendRequest(item);
-        item.request_id = sent.id;
-        item.state = "sent";
+        Object.assign(item, { request_id: sent.id, state: "sent", expires_at: sent.envelope.expires_at });
         item.log.push(`sent with the owner's approval, recorded at seq ${sent.receipt.seq}`);
       } else {
         item.state = "not_sent";
         item.log.push("the owner declined to send it");
       }
     } catch (e) {
-      item.log.push(`the owner's ${d.decision} couldn't be carried out: ${(e as Error).message}`);
+      item.decided = undefined;
+      item.log.push(`the owner's ${d.decision} couldn't be carried out, and the item still waits: ${(e as Error).message}`);
       this.#note(`decision on ${item.id} failed: ${(e as Error).message}`);
     }
     this.#save(item);
@@ -333,27 +394,30 @@ export class Connector {
   // ---------------------------------------------------------------------------------------------
   // Sending.
 
-  /** Checks a body against its action's schema and the rules no schema says, then scans it: throws saying why it can't go. */
-  async #check(type: string, body: JsonObject) {
+  /** Checks a body against its action's schema and the rules no schema says: throws saying why it can't go. */
+  #checkShape(type: string, body: JsonObject) {
     const errors = schemaErrors(`actions/${type}` as SchemaName, body);
     if (errors.length) throw new ConnectorError(`that ${type} doesn't match the protocol: ${errors.join("; ")}`);
     if (type === "result") {
       const problems = resultProblems(body);
       if (problems.length) throw new ConnectorError(`that result contradicts itself: ${problems.join("; ")}`);
     }
+  }
+
+  /** The secret scan (protocol.md section 11, step 8): true when it ran and found nothing. Rules and fields go to the log, never to the agent. */
+  async #scanned(type: string, body: JsonObject): Promise<boolean> {
     const scan = await scanOutgoing(body, {
       ...this.file.scan,
       never: [this.file.key_seed, this.file.seal_private ?? "", this.file.delegation].filter(Boolean),
     });
-    if (scan.error) throw new ConnectorError(`the secret scan couldn't run (${scan.error}): nothing was sent`);
-    if (!scan.ok) {
-      const where = scan.findings.map((f) => `${f.rule} in ${f.field}`).join(", ");
-      throw new ConnectorError(`the secret scan found what may be a secret (${where}): nothing was sent. Take it out and try again.`);
-    }
+    if (scan.ok) return true;
+    this.#note(`the secret scan stopped a ${type}: ${scan.error ?? scan.findings.map((f) => `${f.rule} in ${f.field}`).join(", ")}`);
+    return false;
   }
 
   async #sendReply(requestId: string, type: string, body: JsonObject) {
-    await this.#check(type, body);
+    this.#checkShape(type, body);
+    if (!(await this.#scanned(type, body))) throw new ConnectorError("the secret scan found what may be a secret, or couldn't run: nothing was sent");
     await this.token();
     const sent = await this.member.reply(requestId, type, body);
     this.#saveMemory();
@@ -361,7 +425,8 @@ export class Connector {
   }
 
   async #sendRequest(item: Item) {
-    await this.#check(item.type, item.body);
+    this.#checkShape(item.type, item.body);
+    if (!(await this.#scanned(item.type, item.body))) throw new ConnectorError("the secret scan found what may be a secret, or couldn't run: nothing was sent");
     await this.token();
     const sent = await this.member.request(item.peer, item.type as "question", item.body, item.expires_in ? { expiresIn: item.expires_in } : {});
     this.#saveMemory();
@@ -382,11 +447,16 @@ export class Connector {
       if (peer.status !== "active") throw new ConnectorError(`${to} was revoked`);
       if (!peer.trusted) throw new ConnectorError(`${to} isn't trusted: ${peer.problem}`);
       if (!peer.accepts.includes(type)) throw new ConnectorError(`${to} doesn't accept ${type} (it accepts ${peer.accepts.join(", ")})`);
-      await this.#check(type, body);
+      const busyUntil = this.#state().busy_until[to] ?? 0;
+      const open = this.items().some((i) => i.direction === "out" && i.peer === to && OPEN.includes(i.state));
+      if (busyUntil > nowSeconds() && !open) throw new ConnectorError(`${to} declined as busy: ask it again after ${timestamp(busyUntil)}`);
+      this.#checkShape(type, body);
+      if (!(await this.#scanned(type, body))) throw new ConnectorError("the secret scan found what may be a secret, or couldn't run: nothing was sent");
       const item: Item = {
-        id: crypto.randomUUID(), direction: "out", type, peer: to, peer_owner: peer.owner, state: "waiting_on_owner",
-        created_at: timestamp(nowSeconds()), expires_at: timestamp(nowSeconds() + expiresIn), body, replies: [], expires_in: expiresIn, log: [],
+        id: `out-${crypto.randomUUID()}`, direction: "out", type, peer: to, peer_owner: peer.owner, state: "waiting_on_owner",
+        created_at: timestamp(nowSeconds()), expires_at: timestamp(nowSeconds() + expiresIn), body, digest: "", replies: [], expires_in: expiresIn, log: [],
       };
+      item.digest = itemDigest(item);
       if (allows(await this.rules(), to, type)) {
         const sent = await this.#sendRequest(item);
         Object.assign(item, { request_id: sent.id, state: "sent", expires_at: sent.envelope.expires_at });
@@ -399,8 +469,13 @@ export class Connector {
     });
   }
 
-  /** A reply from the host's agent to an incoming request its owner approved. */
-  async reply(itemId: string, kind: string, args: ReplyArgs): Promise<Item> {
+  /**
+   * A reply from the host's agent to an incoming request its owner approved. When the secret scan
+   * stops what the agent wrote, the request is finished without its words (protocol.md section 11,
+   * step 8): a decline with reason `other` for a question, a `failed` result with no words for a
+   * review or a handoff. Nothing the agent wrote goes out, and it doesn't get to try again.
+   */
+  async reply(itemId: string, kind: string, args: ReplyArgs): Promise<{ item: Item; withheld: boolean }> {
     return this.serial(async () => {
       const item = this.item(itemId);
       if (!item || item.direction !== "in") throw new ConnectorError(`no incoming request ${itemId}`);
@@ -408,13 +483,38 @@ export class Connector {
       if (item.state !== "approved") throw new ConnectorError(`it is ${item.state}: there's nothing more to send`);
       if (seconds(item.expires_at) <= nowSeconds()) throw new ConnectorError("it expired");
       const { type, body } = this.#replyBody(item, kind, args);
-      const sent = await this.#sendReply(item.id, type, body);
-      if (type !== "status") item.state = "replied";
-      item.replies.push({ id: sent.id, type, from: this.file.obi, at: timestamp(nowSeconds()), body });
-      item.log.push(`${type} sent`);
+      this.#checkShape(type, body);
+      let withheld = false;
+      let sent: { type: string; body: JsonObject } = { type, body };
+      if (!(await this.#scanned(type, body))) {
+        withheld = true;
+        sent = type === "status" ? { type: "status", body: { state: "working" } }
+          : item.type === "question" ? { type: "decline", body: { reason: "other" } }
+          : { type: "result", body: this.#failedResult(item) };
+      }
+      const out = await this.#sendReplyChecked(item, sent);
+      if (sent.type !== "status") item.state = "replied";
+      item.replies.push({ id: out.id, type: sent.type, from: this.file.obi, at: timestamp(nowSeconds()), body: sent.body });
+      item.log.push(withheld ? `the scan stopped the agent's ${type}: sent a ${sent.type} without words instead` : `${type} sent`);
       this.#save(item);
-      return item;
+      return { item, withheld };
     });
+  }
+
+  async #sendReplyChecked(item: Item, r: { type: string; body: JsonObject }) {
+    await this.token();
+    const sent = await this.member.reply(item.request_id!, r.type, r.body);
+    this.#saveMemory();
+    return sent;
+  }
+
+  /** A review's or a handoff's `failed` result with no words: every condition not met. */
+  #failedResult(item: Item): JsonObject {
+    const conditions = (item.body.acceptance ?? []) as { kind: string; severity?: string }[];
+    const acceptance = conditions.map((c, index) => ({ index, kind: c.kind, ...(c.severity ? { severity: c.severity } : {}), met: false }));
+    return (item.type === "review_request"
+      ? { for: "review_request", outcome: "failed", repo: item.body.repo, head_sha: item.body.head_sha, findings: [] }
+      : { for: "handoff", outcome: "failed", repo: item.body.repo, acceptance }) as unknown as JsonObject;
   }
 
   #replyBody(item: Item, kind: string, a: ReplyArgs): { type: string; body: JsonObject } {
@@ -429,7 +529,9 @@ export class Connector {
       case "result": {
         if (item.type === "question") throw new ConnectorError("a question takes an answer, not a result");
         const conditions = (req.acceptance ?? []) as { kind: string; severity?: string }[];
-        const findings = (a.findings ?? []).map((f) => ({ id: findingId(f.file, f.line, f.title), ...f }));
+        const findings = (a.findings ?? []).map((f) => ({
+          id: findingId(f.file, f.line, f.title), severity: f.severity, file: f.file, line: f.line, ...(f.end_line !== undefined ? { end_line: f.end_line } : {}), title: f.title, detail: f.detail,
+        }));
         const rank: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
         const outcome = a.outcome ?? "failed";
         const acceptance = conditions.map((c, index) => {
@@ -456,9 +558,10 @@ export class Connector {
         };
       }
       case "decline":
-        if (a.reason === "owner_declined") throw new ConnectorError("only the owner declines as owner_declined");
+        if (!["busy", "out_of_scope", "other"].includes(a.reason ?? "other")) throw new ConnectorError("the agent declines as busy, out_of_scope or other; the other reasons are its owner's or the protocol's");
         return { type: "decline", body: { reason: a.reason ?? "other", ...(a.note ? { note: a.note } : {}) } };
       case "status":
+        if (!["working", "blocked"].includes(a.state ?? "working")) throw new ConnectorError("the agent's status is working or blocked");
         return { type: "status", body: { state: a.state ?? "working", ...(a.note ? { note: a.note } : {}) } };
       default:
         throw new ConnectorError(`kind is answer, result, decline or status, not ${kind}`);
@@ -506,6 +609,6 @@ export interface ReplyArgs {
 }
 
 /** A DataBody back to plain JSON: for keeping in this member's own mailbox, never for an agent. */
-function plainBody(body: unknown): JsonObject {
+export function plainBody(body: unknown): JsonObject {
   return JSON.parse(JSON.stringify(body, (_k, v) => (v && typeof v === "object" && v["x-obi-text"] === "data" ? v.text : v)));
 }

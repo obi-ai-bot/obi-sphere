@@ -24,8 +24,8 @@ export interface SealedOwnerKey {
   key_id: string;
 }
 
-const SCRYPT = { N: 1 << 15, r: 8, p: 1 };
-const MIN_PASSPHRASE = 8;
+const SCRYPT = { N: 1 << 17, r: 8, p: 1 };
+const MIN_PASSPHRASE = 12;
 
 const derive = (passphrase: string, salt: Uint8Array, k: { N: number; r: number; p: number }) =>
   scryptSync(passphrase.normalize("NFC"), salt, 32, { N: k.N, r: k.r, p: k.p, maxmem: 128 * k.N * k.r * 2 });
