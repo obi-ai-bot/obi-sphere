@@ -7,11 +7,12 @@ import { SPHERE_COLUMNS, guardedWrite, requireSphere, withRetries, type KeyRow, 
 import type { Deps, Env } from "../env.ts";
 import { ring, rung } from "../doorbell.ts";
 import { apiError, json, parseBody, readBody } from "../http.ts";
-import { cardParams, type AgentCard } from "../protocol/card.ts";
+import { cardParams, featuresTaken, messageFeatures, type AgentCard } from "../protocol/card.ts";
+import { FEATURES } from "../protocol/features.ts";
 import { entryHash } from "../protocol/chain.ts";
 import { uuid } from "../protocol/crypto.ts";
 import {
-  CLOCK_SKEW_SECONDS, checkEnvelopeShape, exchangeMessage, exchangeProblem, isRequestType, requestRepo, seconds, timestamp, verifyEnvelopeSignature,
+  CLOCK_SKEW_SECONDS, checkEnvelopeShape, exchangeMessage, exchangeProblem, followUpProblem, isRequestType, requestRepo, seconds, timestamp, verifyEnvelopeSignature,
   type Envelope, type ExchangeMessage,
 } from "../protocol/envelope.ts";
 import { canonicalize } from "../protocol/json.ts";
@@ -64,6 +65,9 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
   // withRetries) doesn't check it again unless the sender's current key changed meanwhile.
   const signatureOk = new Map<string, boolean>();
   const reply = request_ ? null : env_.in_reply_to!;
+  // The additions it uses (protocol.md sections 5.17 to 5.19), and the earlier request it follows up.
+  const uses = messageFeatures(env_.type, env_.body);
+  const follows = typeof env_.body.follows === "string" ? env_.body.follows : null;
 
   return withRetries(async () => {
     // Everything the checks read, in one transaction: one consistent snapshot, one round trip.
@@ -79,7 +83,10 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
             env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere0.id, reply),
             env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND in_reply_to = ?2 ORDER BY seq").bind(sphere0.id, reply),
           ]),
+      ...(uses.length === 0 ? [] : [env.DB.prepare("SELECT obi, card FROM members WHERE sphere = ?1 AND status = 'active'").bind(sphere0.id)]),
+      ...(follows === null ? [] : [env.DB.prepare("SELECT * FROM audit WHERE sphere = ?1 AND msg_id = ?2").bind(sphere0.id, follows)]),
     ]);
+    const at = { active: 5 + (reply === null ? 0 : 2), follows: 5 + (reply === null ? 0 : 2) + (uses.length === 0 ? 0 : 1) };
     const rows = <T,>(i: number) => reads[i]!.results as unknown as T[];
     const sphere = rows<SphereRow>(0)[0];
     if (!sphere) throw apiError("not_found", `no Sphere ${sphere0.id}`);
@@ -111,10 +118,28 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     if (!env_.seal && toCard.seal_key_id && cardParams(JSON.parse(rows<MemberRow>(4)[0]!.card) as AgentCard).seal_key_id) {
       throw apiError("not_sealed", `${env_.from} and ${env_.to} both seal: its words go sealed for ${toCard.seal_key_id}`);
     }
+    // A message that uses an addition goes in the chain every member verifies: only when this
+    // Obysphere and every active member take it (sphere-api.md section 6.1, check 11).
+    if (uses.length > 0) {
+      const active = rows<{ obi: string; card: string }>(at.active);
+      for (const feature of uses) {
+        if (!FEATURES.includes(feature)) throw apiError("policy_denied", `this Obysphere doesn't take ${feature}`);
+        const behind = active.find((m) => !featuresTaken(JSON.parse(m.card) as AgentCard).has(feature));
+        if (behind) throw apiError("policy_denied", `${behind.obi}'s card doesn't take ${feature}, and every member verifies the chain`);
+      }
+      // An introduction's member is an active member (protocol.md section 5.18).
+      if (env_.type === "introduction" && !active.some((m) => m.obi === env_.body.member)) throw apiError("not_found", `${String(env_.body.member)} is not an active member`);
+    }
     // 12. The policy for a request; the exchange rules for a reply.
     if (request_) {
       const from = rows<MemberRow>(4)[0]!;
       if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, requestRepo(env_))) throw apiError("policy_denied", "no policy rule allows this request");
+      // A follow-up names an earlier request between the same two members (protocol.md section 5.19).
+      if (follows !== null) {
+        const earlier = rows<AuditRow>(at.follows)[0];
+        const problem = followUpProblem(env_, earlier && { type: earlier.type, from: earlier.from_obi, to: earlier.to_obi });
+        if (problem) throw apiError("bad_reply", problem);
+      }
     } else {
       const req = rows<AuditRow>(5)[0];
       const problem = exchangeProblem(exchangeMessage(env_), req && rowMessage(req), rows<AuditRow>(6).map(rowMessage));

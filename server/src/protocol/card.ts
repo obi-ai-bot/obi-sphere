@@ -29,6 +29,8 @@ export interface CardParams {
   vendors?: string[];
   /** The conformance classes its member claims (identity.md section 2.3). */
   classes?: string[];
+  /** What its member can help with (identity.md section 2.3). */
+  topics?: string[];
 }
 
 export interface AgentCard {
@@ -51,8 +53,20 @@ export const CARD_CLASSES = "card_classes";
 /** The additions a card's own members need its readers to take (identity.md section 2.3). */
 export function featuresUsed(p: CardParams): string[] {
   const used: string[] = [];
-  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined) used.push(CARD_RUNTIME);
+  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined || p.topics !== undefined) used.push(CARD_RUNTIME);
   if (p.classes !== undefined) used.push(CARD_CLASSES);
+  if (p.topics !== undefined) used.push("card_topics");
+  if (p.accepts.includes("introduction")) used.push("introduction");
+  return used;
+}
+
+/** The feature a message uses, when it uses one (protocol.md sections 5.17 to 5.19): readers of
+ *  the chain from before can't verify it, so it goes only where every active member takes it. */
+export function messageFeatures(type: string, body: Record<string, unknown>): string[] {
+  const used: string[] = [];
+  if (type === "cancel") used.push("cancel");
+  if (type === "introduction") used.push("introduction");
+  if (body.follows !== undefined) used.push("follow_up");
   return used;
 }
 

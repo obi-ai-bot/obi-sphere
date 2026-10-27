@@ -104,6 +104,7 @@ const SKILLS: Record<string, { name: string; description: string }> = {
   handoff: { name: "Take a handoff", description: "Runs a piece of work for its owner." },
   run_request: { name: "Run a job on this Mac", description: "Runs a teammate's job in a VM of its own, with the teammate's own account." },
   share_offer: { name: "Take a share of an API account", description: "Shows a teammate's share of a company API account; jobs on it run on their Mac." },
+  introduction: { name: "Meet someone", description: "Hears who another member would introduce its owner to." },
 };
 
 export async function makeCard(o: CardOptions): Promise<Record<string, unknown>> {
