@@ -48,7 +48,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 
 | Method and path | Auth | Scope | Request | Answer |
 |---|---|---|---|---|
-| `GET /v0.1/health` | none | | | `200` [health.response](schemas/v0.1/wire/health.response.schema.json): `seal: true` when the Obysphere takes sealed messages and cards with a seal key ([protocol.md](protocol.md) section 9.1) |
+| `GET /v0.1/health` | none | | | `200` [health.response](schemas/v0.1/wire/health.response.schema.json): `seal: true` when the Obysphere takes sealed messages and cards with a seal key ([protocol.md](protocol.md) section 9.1); `features`, the additions to `obi/0.1` it takes, sorted ([README.md](README.md#versions), "Versions"), of which a client ignores any it doesn't know |
 | `POST /v0.1/spheres` | operator, or a sign-in in the body | | [create-sphere.request](schemas/v0.1/wire/create-sphere.request.schema.json) | `201` [sphere](schemas/v0.1/wire/sphere.schema.json) |
 | `POST /v0.1/signin/google` | none | | [signin.request](schemas/v0.1/wire/signin.request.schema.json) | `201` [signin.response](schemas/v0.1/wire/signin.response.schema.json) |
 | `POST /v0.1/signin/google/callback` | none (Google's form post) | | form | `303` to `obi-sphere://signin?…` |

@@ -495,14 +495,37 @@ export function buildFixtures() {
   cardCase("invalid-card-issued-in-future", "issued_at is ahead of the checker's clock.", signCard(future, OA.privateKey, OA.keyId), "reject", "card_invalid");
   const sameKey = cardFor("obi-a", "owner-a", OA, OA);
   cardCase("invalid-card-obi-key-is-owner-key", "The Obi signs with its owner's key.", signCard(sameKey, OA.privateKey, OA.keyId), "reject", "card_invalid");
-  const withSeal = (over) => {
+  const withParams = (over) => {
     const card = cardFor("obi-a", "owner-a", A, OA);
     Object.assign(card.capabilities.extensions[0].params, over);
     return signCard(card, OA.privateKey, OA.keyId);
   };
-  cardCase("valid-card-with-seal-key", "obi-a's card with the key other Obis seal its words for.", withSeal({ seal_key_id: SA.keyId, seal_public_key: b64url(SA.publicRaw) }), "accept");
-  cardCase("invalid-card-seal-key-id-mismatch", "seal_key_id is not the hash of seal_public_key.", withSeal({ seal_key_id: SB.keyId, seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
-  cardCase("invalid-card-seal-key-without-id", "seal_public_key without seal_key_id.", withSeal({ seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
+  cardCase("valid-card-with-seal-key", "obi-a's card with the key other Obis seal its words for.", withParams({ seal_key_id: SA.keyId, seal_public_key: b64url(SA.publicRaw) }), "accept");
+  cardCase("invalid-card-seal-key-id-mismatch", "seal_key_id is not the hash of seal_public_key.", withParams({ seal_key_id: SB.keyId, seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
+  cardCase("invalid-card-seal-key-without-id", "seal_public_key without seal_key_id.", withParams({ seal_public_key: b64url(SA.publicRaw) }), "reject", "card_invalid");
+
+  // The card's features, runtime and vendors (identity.md section 2.3), behind card_runtime.
+  const runtime = { features: ["card_runtime"], runtime: { id: "claude", version: "2.1.0" }, vendors: ["anthropic"] };
+  cardCase("valid-card-with-runtime-and-vendors", "obi-a's owner declares its runtime and the one vendor it may use.", withParams(runtime), "accept");
+  cardCase("valid-card-with-several-vendors", "A runtime that may use models of three vendors.", withParams({ ...runtime, runtime: { id: "cursor", version: "2026.10.1" }, vendors: ["openai", "anthropic", "google"] }), "accept");
+  cardCase("valid-card-with-features-only", "A card that takes card_runtime and declares neither runtime nor vendors.", withParams({ features: ["card_runtime"] }), "accept");
+  cardCase("valid-card-runtime-nobody-listed", "A runtime and a vendor the spec's lists don't name: any id that matches is valid.", withParams({ ...runtime, runtime: { id: "acme-agent", version: "0.0.1-beta.2" }, vendors: ["acme-models"] }), "accept");
+  cardCase("valid-card-with-an-unknown-feature", "A feature the reader doesn't know means nothing to it.", withParams({ ...runtime, features: ["card_runtime", "some_later_feature"] }), "accept");
+  cardCase("invalid-card-runtime-without-features", "runtime on a card with no features list.", withParams({ runtime: runtime.runtime }), "reject", "card_invalid");
+  cardCase("invalid-card-vendors-without-features", "vendors on a card with no features list.", withParams({ vendors: runtime.vendors }), "reject", "card_invalid");
+  cardCase("invalid-card-features-without-card-runtime", "A features list that doesn't name card_runtime, the feature it comes with.", withParams({ ...runtime, features: ["some_later_feature"] }), "reject", "card_invalid");
+  cardCase("invalid-card-features-empty", "An empty features list.", withParams({ features: [] }), "reject", "card_invalid");
+  cardCase("invalid-card-feature-repeated", "card_runtime twice.", withParams({ ...runtime, features: ["card_runtime", "card_runtime"] }), "reject", "card_invalid");
+  cardCase("invalid-card-feature-not-an-id", "A feature id with a capital and a space.", withParams({ ...runtime, features: ["card_runtime", "Follow ups"] }), "reject", "card_invalid");
+  cardCase("invalid-card-runtime-not-an-id", "A runtime named in words instead of by an id.", withParams({ ...runtime, runtime: { id: "Claude Code", version: "2.1.0" } }), "reject", "card_invalid");
+  cardCase("invalid-card-runtime-without-version", "A runtime with no version.", withParams({ ...runtime, runtime: { id: "claude" } }), "reject", "card_invalid");
+  cardCase("invalid-card-runtime-extra-field", "A runtime that carries a field outside its object.", withParams({ ...runtime, runtime: { id: "claude", version: "2.1.0", model: "the newest" } }), "reject", "card_invalid");
+  cardCase("invalid-card-vendors-empty", "An empty vendors list.", withParams({ ...runtime, vendors: [] }), "reject", "card_invalid");
+  cardCase("invalid-card-vendor-repeated", "The same vendor twice.", withParams({ ...runtime, vendors: ["anthropic", "anthropic"] }), "reject", "card_invalid");
+  cardCase("invalid-card-vendor-not-an-id", "A vendor named with a capital.", withParams({ ...runtime, vendors: ["Anthropic"] }), "reject", "card_invalid");
+  const runtimeTampered = withParams(runtime);
+  runtimeTampered.capabilities.extensions[0].params.vendors = ["anthropic", "openai"];
+  cardCase("invalid-card-vendors-changed-after-signing", "A vendor added after the owner signed.", runtimeTampered, "reject", "bad_signature");
 
   // ---- Audit chains -------------------------------------------------------------------------
   const keyHistory = {
@@ -636,6 +659,11 @@ export function buildFixtures() {
   wireCase("invalid-signin-short-code", "A sign-in whose code isn't 43 base64url characters.", "wire/create-sphere.request", { sphere: SPHERE, name: "Conformance sphere", admin: { owner: "owner-a", owner_key: A.publicKey }, signin: { state: "S".repeat(43), code: "C".repeat(42) } }, "reject");
   const secret = "A".repeat(43);
   wireCase("valid-redeem-with-signin", "A redeem carrying a sign-in, as one for an invitation with a domain must.", "wire/redeem.request", { secret, owner_key: OA.publicKey, card: cardA, signin: { state: "S".repeat(43), code: "C".repeat(43) } }, "accept");
+  // A card that declares its runtime, redeemed and updated (identity.md section 2.3).
+  const cardRuntime = withParams(runtime);
+  wireCase("valid-redeem-card-with-runtime", "Joining with a card that declares its runtime and vendors.", "wire/redeem.request", { secret, owner_key: OA.publicKey, card: cardRuntime }, "accept");
+  wireCase("valid-card-update-with-runtime", "A new card that adds its runtime and vendors.", "wire/card-update.request", { card: cardRuntime }, "accept");
+  wireCase("valid-health-takes-card-runtime", "An Obysphere that takes sealed words and the card's runtime and vendors.", "wire/health.response", { ok: true, protocol: PROTOCOL, seal: true, features: ["card_runtime"] }, "accept");
   wireCase("valid-invitation-response-open", "An open invitation as the Sphere answers it.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, max_uses: 50, secret, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-response-owner-without-obi", "An answer naming an owner but no obi.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, owner: "owner-c", max_uses: 1, secret, expires_at: NOW }, "reject");
   wireCase("valid-invitation-preview-request", "The secret, and nothing else.", "wire/invitation-preview.request", { secret }, "accept");

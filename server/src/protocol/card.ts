@@ -23,6 +23,10 @@ export interface CardParams {
   accepts: string[];
   card_seq: number;
   issued_at: string;
+  /** The additions the agent takes, and what its owner declares runs it (identity.md section 2.3). */
+  features?: string[];
+  runtime?: { id: string; version: string };
+  vendors?: string[];
 }
 
 export interface AgentCard {

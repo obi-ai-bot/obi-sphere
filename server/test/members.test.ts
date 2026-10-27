@@ -389,6 +389,51 @@ describe("rotation", () => {
   });
 });
 
+describe("the card's runtime and vendors (identity.md section 2.3)", () => {
+  const RUNTIME = { features: ["card_runtime"], runtime: { id: "claude", version: "2.1.0" }, vendors: ["anthropic"] };
+
+  it("takes a card that declares them, on redeem and on update, and serves it as the owner signed it", async () => {
+    const w = new World();
+    expect((await w.create()).status).toBe(201);
+    const inv = await w.invite("ernesto", "obi-ernesto");
+    const ownerKey = await w.ownerKey("ernesto");
+    const key = await newKey();
+    const card = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: key, issuedAt: w.clock.ts(), params: RUNTIME });
+    const r = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: ownerKey.publicKey, card } });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.card).toEqual(card);
+    w.obis.set("obi-ernesto", { owner: "ernesto", key, accepts: ["review_request"] });
+    const token = await w.obiToken("obi-ernesto");
+    const next = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: key, cardSeq: 2, issuedAt: w.clock.ts(), params: { ...RUNTIME, runtime: { id: "acme-agent", version: "0.0.1" }, vendors: ["openai", "acme-models"] } });
+    const u = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token, body: { card: next } });
+    expect(u.status, JSON.stringify(u.body)).toBe(200);
+    expectSchema("member", u.body);
+    expect(u.body.card).toEqual(next);
+    const dir = await w.call("GET", "/v0.1/spheres/e2e/members/obi-ernesto", { token });
+    expect(dir.body.card.capabilities.extensions[0].params.vendors).toEqual(["openai", "acme-models"]);
+  });
+
+  it("is 400 bad_request for runtime or vendors without features, or a features list without card_runtime: the body's schema holds the card's", async () => {
+    const w = await team();
+    const token = await w.obiToken("obi-ernesto");
+    const ownerKey = await w.ownerKey("ernesto");
+    const key = w.obis.get("obi-ernesto")!.key;
+    const bad: [string, Record<string, unknown>][] = [
+      ["runtime without features", { runtime: RUNTIME.runtime }],
+      ["vendors without features", { vendors: RUNTIME.vendors }],
+      ["features without card_runtime", { ...RUNTIME, features: ["some_later_feature"] }],
+      ["a vendor twice", { ...RUNTIME, vendors: ["anthropic", "anthropic"] }],
+      ["a runtime named in words", { ...RUNTIME, runtime: { id: "Claude Code", version: "2.1.0" } }],
+    ];
+    for (const [what, params] of bad) {
+      const card = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: key, cardSeq: 2, issuedAt: w.clock.ts(), params });
+      const r = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token, body: { card } });
+      expect(r.status, what).toBe(400);
+      expect(r.body.error.code, what).toBe("bad_request");
+    }
+  });
+});
+
 describe("revocation", () => {
   it("closes the key, marks the member revoked, and answers the same when revoked again", async () => {
     const w = await team();

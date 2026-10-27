@@ -78,6 +78,8 @@ export interface CardOptions {
   issuedAt: string;
   /** The Obi's seal key (protocol.md section 9.1): its id and public key. */
   seal?: SealKey;
+  /** More params, such as `features`, `runtime` and `vendors` (identity.md section 2.3). */
+  params?: Record<string, unknown>;
 }
 
 export interface SealKey {
@@ -122,6 +124,7 @@ export async function makeCard(o: CardOptions): Promise<Record<string, unknown>>
             protocol: "obi/0.1", sphere: o.sphere, obi_id: o.obi, owner: o.owner, owner_key: o.ownerKey.publicKey, key_id: o.obiKey.keyId,
             public_key: o.obiKey.publicKey, accepts, card_seq: o.cardSeq ?? 1, issued_at: o.issuedAt,
             ...(o.seal ? { seal_key_id: o.seal.keyId, seal_public_key: o.seal.publicKey } : {}),
+            ...o.params,
           },
         },
       ],

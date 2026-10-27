@@ -12,7 +12,7 @@ describe("health", () => {
     const call = makeCall(new Clock());
     const r = await call("GET", "/v0.1/health");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ok: true, protocol: "obi/0.1", seal: true });
+    expect(r.body).toEqual({ ok: true, protocol: "obi/0.1", seal: true, features: ["card_runtime"] });
     expectSchema("healthResponse", r.body);
     expect(r.headers.get("Content-Type")).toBe("application/json");
   });

@@ -1,0 +1,17 @@
+{
+  "case": "wire",
+  "name": "valid-health-takes-card-runtime",
+  "description": "An Obysphere that takes sealed words and the card's runtime and vendors.",
+  "expect": "accept",
+  "context": {
+    "schema": "wire/health.response"
+  },
+  "input": {
+    "ok": true,
+    "protocol": "obi/0.1",
+    "seal": true,
+    "features": [
+      "card_runtime"
+    ]
+  }
+}
