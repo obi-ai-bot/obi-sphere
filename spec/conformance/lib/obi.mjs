@@ -17,16 +17,18 @@ export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
 export const ZERO_HASH = "0".repeat(64);
-export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer", "introduction"];
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke", "cancel"];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke"];
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke", "cancel"];
 // The replies that belong only to a run_request's exchange (spec/protocol.md section 4, rule 7).
 export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
 // What a share_offer's exchange takes, and nothing else (spec/protocol.md section 4, rule 8).
 export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
 // The replies a request's own sender sends, to its receiver (spec/protocol.md section 4, rule 1).
-export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke"];
+export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke", "cancel"];
+// The requests a cancel calls off (spec/protocol.md section 4, rule 10).
+export const CANCELLABLE_TYPES = ["review_request", "question", "handoff", "introduction"];
 export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -410,6 +412,10 @@ export function semanticProblems(env) {
   if (REQUEST_TYPES.includes(t) && env.correlation_id !== env.id) problems.push("a request's correlation_id must equal its id");
   if (REPLY_TYPES.includes(t) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
   const body = env.body;
+  // An introduction introduces a third member: neither its sender nor its receiver (section 5.18).
+  if (t === "introduction" && (body.member === env.from || body.member === env.to)) problems.push("an introduction's member is neither its sender nor its receiver");
+  // A follow-up follows an earlier exchange, not its own (section 5.19).
+  if (body.follows !== undefined && body.follows === env.id) problems.push("a request doesn't follow itself up");
   if (t === "result") problems.push(...resultProblems(body));
   problems.push(...refProblems(body));
   for (const finding of body.findings ?? []) {
@@ -582,8 +588,12 @@ export function exchangeProblem(reply, request, earlier) {
   // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
   if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
     return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
+  // A cancel calls off a review_request, a question, a handoff or an introduction (rule 10).
+  if (reply.type === "cancel" && !CANCELLABLE_TYPES.includes(request.type)) return `a cancel calls off a review_request, question, handoff or introduction, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
+  // An introduction's accept ends its exchange: nothing follows it (rule 10).
+  if (request.type === "introduction" && accepted) return "the exchange already ended";
   // At most one accept per exchange; a status may come before it or after it.
   if (reply.type === "accept" && accepted) return "accepted twice";
   if (reply.type === "result") {
@@ -605,6 +615,16 @@ export function exchangeProblem(reply, request, earlier) {
   // Nor whether a rule or its owner in person answered.
   if (request.type === "run_request" && reply.body?.by_rule !== undefined) return "no reply to a run_request names a rule (by_rule)";
   return null;
+}
+
+// What's wrong with a request's `follows` (spec/protocol.md section 5.19), given the earlier
+// request it names (undefined when there is none): it must be a request between the same two
+// members, in either direction.
+export function followUpProblem(request, earlier) {
+  if (request.body?.follows === undefined) return null;
+  if (!earlier || !REQUEST_TYPES.includes(earlier.type)) return "follows no earlier request";
+  const same = (earlier.from === request.from && earlier.to === request.to) || (earlier.from === request.to && earlier.to === request.from);
+  return same ? null : "follows an exchange between other members";
 }
 
 // chain: { sphere, entries }, ctx: { keys: { [key_id]: { obi, public_key, valid_from_seq, valid_until_seq } } }
@@ -639,6 +659,8 @@ export function verifyChain(chain, ctx) {
       const problem = exchangeProblem(env, byId.get(env.in_reply_to), [...byId.values()].filter((e) => REPLY_TYPES.includes(e.type) && e.in_reply_to === env.in_reply_to));
       if (problem) return fail("bad_reply", `${at}: ${problem}`);
     }
+    const followUp = REQUEST_TYPES.includes(env.type) ? followUpProblem(env, byId.get(env.body.follows)) : null;
+    if (followUp) return fail("bad_reply", `${at}: ${followUp}`);
     byId.set(env.id, env);
     prev = entry.hash;
   }
