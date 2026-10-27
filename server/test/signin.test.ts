@@ -2,11 +2,11 @@
 // (spec/sphere-api.md sections 3, 3.1 and 4).
 
 import { env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handle } from "../src/app";
 import { b64url } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
-import { BASE, GOOGLE, GOOGLE_KEY, OPERATOR, World, expectSchema, makeCard, newKey, type Key } from "./helpers";
+import { BASE, GOOGLE_KEY, IDP, IDP_KEY, ISSUERS, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
 
 const CLIENT = env.GOOGLE_CLIENT_ID;
 
@@ -70,7 +70,7 @@ describe("signing in with Google", () => {
   it("is 403 forbidden on a Sphere server with no client id", async () => {
     const w = new World();
     const key = await newKey();
-    const r = await handle(new Request(`${BASE}/v0.1/signin/google`, { method: "POST", body: JSON.stringify({ owner_key: key.publicKey }) }), { ...env, GOOGLE_CLIENT_ID: "" }, { now: w.clock.now, google: GOOGLE });
+    const r = await handle(new Request(`${BASE}/v0.1/signin/google`, { method: "POST", body: JSON.stringify({ owner_key: key.publicKey }) }), { ...env, GOOGLE_CLIENT_ID: "" }, { now: w.clock.now, issuers: ISSUERS });
     expect(r.status).toBe(403);
   });
 });
@@ -127,7 +127,7 @@ describe("how many Spheres an account creates", () => {
     const key = await newKey();
     const s = await signIn(w, key, { sub });
     const body = JSON.stringify(createBody(key, { state: s.state, code: s.code }, sphere));
-    const r = await handle(new Request(`${BASE}/v0.1/spheres`, { method: "POST", body }), e, { now: w.clock.now, google: GOOGLE });
+    const r = await handle(new Request(`${BASE}/v0.1/spheres`, { method: "POST", body }), e, { now: w.clock.now, issuers: ISSUERS });
     return { status: r.status, body: (await r.json()) as any, headers: r.headers, state: s.state };
   };
 
@@ -211,5 +211,150 @@ describe("an invitation for one Workspace", () => {
       { now: w.clock.now },
     );
     expect(r.status).toBe(403);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Any OpenID Connect provider: the test provider (helpers.ts, IDP), with its issuer's discovery
+// document and an ES256 key made for this run.
+
+const ACME = { id: "acme", name: "Acme SSO", issuer: IDP.issuer, client_id: "acme-client", domain: "acme.example" };
+const withProviders = (providers: unknown[], more: Record<string, string> = {}) => ({ ...env, SIGNIN_PROVIDERS: JSON.stringify(providers), ...more });
+
+async function es256(claims: Record<string, unknown>, header: Record<string, unknown> = { alg: "ES256", kid: IDP.kid, typ: "JWT" }): Promise<string> {
+  const head = b64url(utf8(JSON.stringify(header)));
+  const body = b64url(utf8(JSON.stringify(claims)));
+  const signature = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, IDP_KEY.privateKey, utf8(`${head}.${body}`)));
+  return `${head}.${body}.${b64url(signature)}`;
+}
+
+/** Signs in with the test provider `id` (in `e`), finishing at `callback` (its own by default): the callback's Location. */
+async function signInWith(w: World, e: Record<string, unknown>, key: Key, o: { id?: string; returnTo?: string; claims?: Record<string, unknown>; header?: Record<string, unknown>; callback?: string } = {}) {
+  const call = makeCall(w.clock, e as never);
+  const id = o.id ?? "acme";
+  const start = await call("POST", `/v0.1/signin/${id}`, { body: { owner_key: key.publicKey, ...(o.returnTo ? { return_to: o.returnTo } : {}) } });
+  expect(start.status, JSON.stringify(start.body)).toBe(201);
+  expectSchema("signinResponse", start.body);
+  const url = new URL(start.body.url);
+  const token = await es256({ iss: IDP.issuer, aud: "acme-client", sub: "u-7", nonce: url.searchParams.get("nonce"), iat: w.clock.s, exp: w.clock.s + 600, ...o.claims }, o.header);
+  const back = await call("POST", `/v0.1/signin/${o.callback ?? id}/callback`, {
+    raw: new URLSearchParams({ state: start.body.state, id_token: token }).toString(),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  expect(back.status).toBe(303);
+  return { url, state: start.body.state as string, location: back.headers.get("Location")!, call };
+}
+
+describe("signing in with any OpenID Connect provider", () => {
+  it("lists the providers the operator named, Google among them, and none without any", async () => {
+    const w = new World();
+    const listed = await makeCall(w.clock, withProviders([ACME]) as never)("GET", "/v0.1/signin");
+    expect(listed.status).toBe(200);
+    expectSchema("signinProvidersResponse", listed.body);
+    expect(listed.body).toEqual({ providers: [{ id: "google", name: "Google" }, { id: "acme", name: "Acme SSO" }] });
+    const none = await makeCall(w.clock, { ...env, GOOGLE_CLIENT_ID: "" } as never)("GET", "/v0.1/signin");
+    expect(none.body).toEqual({ providers: [] });
+  });
+
+  it("signs in through the issuer's own authorization page, and hands the code back where the client asked", async () => {
+    const w = new World();
+    const key = await newKey();
+    const e = withProviders([ACME]);
+    const s = await signInWith(w, e, key, { returnTo: "http://127.0.0.1:53682/signed-in" });
+    // Where the issuer's discovery document said, for the ID token alone, back to this provider's callback.
+    expect(s.url.origin + s.url.pathname).toBe(IDP.authorize);
+    expect(Object.fromEntries(["client_id", "redirect_uri", "response_type", "response_mode", "scope"].map((k) => [k, s.url.searchParams.get(k)]))).toEqual({
+      client_id: "acme-client", redirect_uri: `${BASE}/v0.1/signin/acme/callback`, response_type: "id_token", response_mode: "form_post", scope: "openid email",
+    });
+    const location = new URL(s.location);
+    expect(location.origin + location.pathname).toBe("http://127.0.0.1:53682/signed-in");
+    expect(location.searchParams.get("state")).toBe(s.state);
+    const code = location.searchParams.get("code")!;
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    // The account is the provider's id and the sub; its domain the provider's own.
+    expect(await env.DB.prepare("SELECT account, workspace FROM sign_ins WHERE state = ?1").bind(s.state).first()).toEqual({ account: "acme:u-7", workspace: "acme.example" });
+    // It creates an Obysphere for a creator domain, as Google's does.
+    const created = await makeCall(w.clock, withProviders([ACME], { CREATOR_WORKSPACES: "acme.example" }) as never)("POST", "/v0.1/spheres", { body: createBody(key, { state: s.state, code }, "acme-team") });
+    expect(created.status, JSON.stringify(created.body)).toBe(201);
+    expect(await env.DB.prepare("SELECT account FROM owners WHERE sphere = 'acme-team'").first()).toEqual({ account: "acme:u-7" });
+  });
+
+  it("goes back to a scheme of the client's own, or to obi-sphere://signin when the client names nowhere", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    expect((await signInWith(w, e, await newKey(), { returnTo: "example-client:/signin" })).location).toMatch(/^example-client:\/signin\?state=[A-Za-z0-9_-]{43}&code=/);
+    expect((await signInWith(w, e, await newKey())).location).toMatch(/^obi-sphere:\/\/signin\?state=/);
+  });
+
+  it("refuses to hand a code to anywhere off the person's machine, or with a query of its own", async () => {
+    const w = new World();
+    const call = makeCall(w.clock, withProviders([ACME]) as never);
+    const key = await newKey();
+    for (const returnTo of ["https://attacker.example/cb", "http://sphere.example/cb", "javascript:alert(1)", "data:text/html,x", "http://127.0.0.1:5000/cb?next=1", "example-client:/x#y", "http://me@127.0.0.1/cb", "no-scheme"]) {
+      const r = await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: returnTo } });
+      expect(r.status, returnTo).toBe(400);
+      expect(r.body.error.code).toBe("bad_request");
+    }
+  });
+
+  it("fails a token that doesn't pass, or a sign-in another provider's callback finishes", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    for (const [why, o] of [
+      ["another issuer", { claims: { iss: "https://other.test" } }],
+      ["another client", { claims: { aud: "other-client" } }],
+      ["several clients, none authorized", { claims: { aud: ["acme-client", "other-client"] } }],
+      ["an unlisted key", { header: { alg: "ES256", kid: "who-knows", typ: "JWT" } }],
+      ["a shared-secret algorithm", { header: { alg: "HS256", kid: "a-shared-secret", typ: "JWT" } }],
+      ["no signature algorithm", { header: { alg: "none", kid: IDP.kid, typ: "JWT" } }],
+      ["RS256 over an EC key", { header: { alg: "RS256", kid: IDP.kid, typ: "JWT" } }],
+      ["Google's callback", { callback: "google" }],
+    ] as const) {
+      const s = await signInWith(w, e, await newKey(), o);
+      expect(s.location, why).toMatch(/error=failed$/);
+      expect(await env.DB.prepare("SELECT account FROM sign_ins WHERE state = ?1").bind(s.state).first(), why).toEqual({ account: null });
+    }
+    // Several audiences, with this client authorized, pass.
+    const ok = await signInWith(w, e, await newKey(), { claims: { aud: ["acme-client", "other-client"], azp: "acme-client" } });
+    expect(ok.location).toMatch(/&code=/);
+  });
+
+  it("takes an account's domain from the claim the operator names, and leaves out a provider set up wrong", async () => {
+    const w = new World();
+    const warned: unknown[] = [];
+    vi.spyOn(console, "warn").mockImplementation((...a) => void warned.push(a.join(" ")));
+    const e = withProviders([
+      { id: "bad", name: "Bad", issuer: "http://idp.example", client_id: "x" },
+      { id: "keycloak", name: "Keycloak", issuer: IDP.issuer, client_id: "acme-client", domain_claim: "org_domain", email_verified: true },
+    ]);
+    expect((await makeCall(w.clock, e as never)("GET", "/v0.1/signin")).body.providers.map((p: { id: string }) => p.id)).toEqual(["google", "keycloak"]);
+    expect(warned.join("\n")).toContain("SIGNIN_PROVIDERS[0] is left out: issuer is an https URL");
+    const s = await signInWith(w, e, await newKey(), { id: "keycloak", claims: { org_domain: "Acme.Example", email_verified: true } });
+    expect(await env.DB.prepare("SELECT account, workspace FROM sign_ins WHERE state = ?1").bind(s.state).first()).toEqual({ account: "keycloak:u-7", workspace: "acme.example" });
+    const unverified = await signInWith(w, e, await newKey(), { id: "keycloak", claims: { org_domain: "acme.example" } });
+    expect(unverified.location).toMatch(/error=failed$/);
+    vi.restoreAllMocks();
+  });
+
+  it("is 403 forbidden for a provider the server doesn't have", async () => {
+    const w = new World();
+    const r = await makeCall(w.clock, withProviders([ACME]) as never)("POST", "/v0.1/signin/okta", { body: { owner_key: (await newKey()).publicKey } });
+    expect(r.status).toBe(403);
+  });
+
+  it("limits an invitation to a domain on a server whose only provider isn't Google, and lets in its people", async () => {
+    const w = new World();
+    expect((await w.create()).status).toBe(201);
+    const e = withProviders([ACME], { GOOGLE_CLIENT_ID: "" });
+    const call = makeCall(w.clock, e as never);
+    const inv = await call("POST", "/v0.1/spheres/e2e/invitations", { token: await w.ownerToken(), body: { expires_in: 3600, max_uses: 10, domain: "acme.example" } });
+    expect(inv.status, JSON.stringify(inv.body)).toBe(201);
+    const k = await w.ownerKey("ernesto");
+    const s = await signInWith(w, e, k, { returnTo: "http://127.0.0.1:53682/cb" });
+    const code = new URL(s.location).searchParams.get("code")!;
+    const card = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey: k, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    const r = await call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: k.publicKey, card, signin: { state: s.state, code } } });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(await env.DB.prepare("SELECT account FROM owners WHERE sphere = 'e2e' AND owner = 'ernesto'").first()).toEqual({ account: "acme:u-7" });
   });
 });

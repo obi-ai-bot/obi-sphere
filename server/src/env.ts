@@ -12,9 +12,15 @@ export interface Env {
   SPHERE_OPERATOR_TOKEN?: string;
   /** Only the operator token's SHA-256, lower-case hex: a self-hosted Sphere's, kept from its claim (node/main.ts). SPHERE_OPERATOR_TOKEN wins when both are set. */
   SPHERE_OPERATOR_TOKEN_SHA256?: string;
-  /** The Google OAuth client whose ID tokens sign people in (src/signin.ts). Empty: no sign-in, every sign-in call is 403. */
+  /** The Google OAuth client whose ID tokens sign people in (src/signin.ts): Google as one provider, `google`. Empty: no Google. */
   GOOGLE_CLIENT_ID?: string;
-  /** The Google Workspaces, comma-separated, whose people may create a Sphere with a sign-in. Empty: only the operator creates. */
+  /**
+   * The other OpenID Connect providers that sign people in, a JSON list of
+   * `{"id", "name", "issuer", "client_id", "domain" or "domain_claim", "email_verified"}` (src/signin.ts).
+   * No provider at all: no sign-in, and every sign-in call is 403.
+   */
+  SIGNIN_PROVIDERS?: string | unknown[];
+  /** The domains, comma-separated, whose people may create a Sphere with a sign-in (a Google Workspace, or a provider's `domain`). Empty: only the operator creates. */
   CREATOR_WORKSPACES?: string;
   /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */
   SPHERE_CREATE_LIMIT?: string;
@@ -28,6 +34,6 @@ export interface Deps {
   now(): number;
   /** How long a write keeps retrying against concurrent writes before `429 rate_limited`, in milliseconds (src/db.ts). */
   retryBudgetMs?: number;
-  /** Google's public keys (src/signin.ts); the tests pass their own. */
-  google?: import("./signin.ts").KeyCache;
+  /** Every sign-in provider's discovery document and keys (src/signin.ts); the tests pass their own issuers. */
+  issuers?: import("./signin.ts").Issuers;
 }

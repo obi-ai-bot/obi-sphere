@@ -1,8 +1,9 @@
-// Signing in with Google (spec/sphere-api.md section 3.1): what lets a Sphere be created without
-// the operator token, and an invitation be for one Workspace's people. Google's ID token is checked
-// here (RS256, Google's keys, its issuer, the client id, the nonce) the way Oby's control plane
-// checks it (obi-ai-bot/oby, cloud/control-plane/src/signin.ts). Only the account (`google:<sub>`)
-// and its Workspace (`hd`) are kept, never the email or the token.
+// Signing in (spec/sphere-api.md section 3.1) with any OpenID Connect provider the operator names:
+// what lets an Obysphere be created without the operator token, and an invitation be for one
+// domain's people. Google is one provider (GOOGLE_CLIENT_ID); any other comes from SIGNIN_PROVIDERS
+// and its issuer's discovery document. The ID token is checked here (its issuer's keys, the
+// issuer, the client id, the nonce). Only the account (`<provider>:<sub>`) and its domain are
+// kept, never the email or the token.
 
 import type { Deps, Env } from "./env.ts";
 import { apiError, json, rateLimited, readJson } from "./http.ts";
@@ -10,155 +11,355 @@ import { constantTimeEqual, fromB64url, randomToken, sha256, sha256Hex } from ".
 import { utf8 } from "./protocol/json.ts";
 import { schemaErrors } from "./protocol/schemas.ts";
 
-const AUTHORIZE = "https://accounts.google.com/o/oauth2/v2/auth";
-/// Google issues its tokens under either spelling.
-const ISSUERS = ["https://accounts.google.com", "accounts.google.com"];
-const KEYS_URL = "https://www.googleapis.com/oauth2/v3/certs";
 const SIGN_IN_SECONDS = 10 * 60;
 const TOKEN_SKEW_SECONDS = 60;
 const MAX_WAITING = 1000;
-/// Where the browser goes back to: the client's own scheme.
+/// Where the browser goes back to when the client names nowhere: Oby's scheme, from before `return_to`.
 const BACK = "obi-sphere://signin";
+const DAY_S = 24 * 3600;
 
-type Jwk = JsonWebKey & { kid?: string };
+const SLUG = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
+const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+/** Hosts an issuer, or a `return_to`, may name over plain http: this machine only. */
+const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+/** Schemes a `return_to` may not use: the web's, where a code would leave the person's machine, and those a browser runs. */
+const NOT_RETURN = new Set(["http", "https", "ws", "wss", "ftp", "file", "data", "javascript", "vbscript", "about", "blob", "mailto", "tel"]);
 
-/// Google's keys, kept for a day and fetched again for a `kid` not among them, at most once a
+// ---------------------------------------------------------------------------------------------
+// The providers
+
+/** One identity provider an Obysphere server trusts. */
+export interface Provider {
+  /** Its id: the sign-in's path (`/v0.1/signin/<id>`) and its accounts' prefix (`<id>:<sub>`). */
+  id: string;
+  /** Its name, for a client to show. */
+  name: string;
+  /** Its issuer, whose discovery document says where to sign in and its keys; and the `iss` of its ID tokens. */
+  issuer: string;
+  /** Every `iss` its ID tokens may carry (Google issues under two spellings). */
+  issuers: string[];
+  client_id: string;
+  /** Where to sign in and its keys, when fixed rather than discovered (Google). */
+  authorize?: string;
+  jwks?: string;
+  /** Every account's domain: for an issuer that signs in no one but one organisation's people. */
+  domain?: string;
+  /** Or the claim that names an account's domain, which the issuer itself sets (Google: `hd`). */
+  domain_claim?: string;
+  /** Whether an ID token must say `email_verified: true`. */
+  email_verified: boolean;
+}
+
+const google = (client: string): Provider => ({
+  id: "google",
+  name: "Google",
+  issuer: "https://accounts.google.com",
+  issuers: ["https://accounts.google.com", "accounts.google.com"],
+  client_id: client,
+  authorize: "https://accounts.google.com/o/oauth2/v2/auth",
+  jwks: "https://www.googleapis.com/oauth2/v3/certs",
+  domain_claim: "hd",
+  email_verified: true,
+});
+
+/** An https URL, or http to this machine; no user name, query or fragment. */
+function webUrl(text: unknown): URL | null {
+  if (typeof text !== "string" || text.length > 300) return null;
+  let url: URL;
+  try {
+    url = new URL(text);
+  } catch {
+    return null;
+  }
+  const ok = url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+  return ok && !url.username && !url.password && !url.search && !url.hash ? url : null;
+}
+
+/** Why `entry` isn't a provider SIGNIN_PROVIDERS may name, or the provider. */
+function provider(entry: unknown): Provider | string {
+  if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return "not an object";
+  const e = entry as Record<string, unknown>;
+  const known = ["id", "name", "issuer", "client_id", "domain", "domain_claim", "email_verified"];
+  const unknown = Object.keys(e).find((k) => !known.includes(k));
+  if (unknown) return `an unknown setting, ${unknown}`;
+  if (typeof e.id !== "string" || !SLUG.test(e.id)) return "id is 1 to 32 lower-case letters, digits and inner hyphens";
+  if (typeof e.name !== "string" || !/^[^\u0000-\u001f\u007f]{1,100}$/.test(e.name)) return "name is 1 to 100 characters on one line";
+  if (!webUrl(e.issuer)) return "issuer is an https URL";
+  if (typeof e.client_id !== "string" || !/^[\x21-\x7e]{1,512}$/.test(e.client_id)) return "client_id is 1 to 512 printable characters";
+  if (e.domain !== undefined && (typeof e.domain !== "string" || !DOMAIN.test(e.domain))) return "domain is a lower-case domain";
+  if (e.domain_claim !== undefined && (typeof e.domain_claim !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(e.domain_claim))) return "domain_claim names a claim";
+  if (e.domain !== undefined && e.domain_claim !== undefined) return "domain and domain_claim don't go together";
+  if (e.email_verified !== undefined && typeof e.email_verified !== "boolean") return "email_verified is true or false";
+  return {
+    id: e.id, name: e.name, issuer: e.issuer as string, issuers: [e.issuer as string], client_id: e.client_id,
+    ...(e.domain !== undefined ? { domain: e.domain as string } : {}),
+    ...(e.domain_claim !== undefined ? { domain_claim: e.domain_claim as string } : {}),
+    email_verified: e.email_verified === true,
+  };
+}
+
+/** SIGNIN_PROVIDERS, a JSON list (wrangler may hand it over parsed), and Google for GOOGLE_CLIENT_ID. A malformed entry is left out, and the log says why. */
+export function providers(env: Env): Provider[] {
+  let entries: unknown = env.SIGNIN_PROVIDERS ?? [];
+  if (typeof entries === "string") {
+    try {
+      entries = entries.trim() ? JSON.parse(entries) : [];
+    } catch {
+      console.warn("sign-in: SIGNIN_PROVIDERS isn't JSON; no provider is taken from it");
+      entries = [];
+    }
+  }
+  const list: Provider[] = [];
+  for (const [i, entry] of (Array.isArray(entries) ? entries : []).entries()) {
+    const p = provider(entry);
+    if (typeof p === "string") console.warn(`sign-in: SIGNIN_PROVIDERS[${i}] is left out: ${p}`);
+    else if (list.some((q) => q.id === p.id)) console.warn(`sign-in: SIGNIN_PROVIDERS[${i}] is left out: its id is taken`);
+    else list.push(p);
+  }
+  const client = env.GOOGLE_CLIENT_ID?.trim();
+  if (client && !list.some((p) => p.id === "google")) list.unshift(google(client));
+  return list;
+}
+
+/** Whether this Obysphere server signs anyone in (an invitation with a `domain` needs it). */
+export const signsIn = (env: Env): boolean => providers(env).length > 0;
+
+const named = (env: Env, id: string): Provider => {
+  const p = providers(env).find((q) => q.id === id);
+  if (!p) throw apiError("forbidden", `this Obysphere server has no sign-in ${id}`);
+  return p;
+};
+
+/** CREATOR_WORKSPACES, lower case: the domains whose people may create an Obysphere by signing in. */
+export const creatorWorkspaces = (env: Env): string[] =>
+  (env.CREATOR_WORKSPACES ?? "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+
+// ---------------------------------------------------------------------------------------------
+// Each issuer's discovery document and keys, kept for a day
+
+type Jwk = JsonWebKey & { kid?: string; use?: string };
+
+/** What an ID token may be signed with, and how WebCrypto checks each. */
+const ALGORITHMS: Record<string, { kty: string; crv?: string; importAs: { name: string; hash?: string; namedCurve?: string }; verifyAs: { name: string; hash?: string } }> = {
+  RS256: { kty: "RSA", importAs: { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, verifyAs: { name: "RSASSA-PKCS1-v1_5" } },
+  ES256: { kty: "EC", crv: "P-256", importAs: { name: "ECDSA", namedCurve: "P-256" }, verifyAs: { name: "ECDSA", hash: "SHA-256" } },
+  EdDSA: { kty: "OKP", crv: "Ed25519", importAs: { name: "Ed25519" }, verifyAs: { name: "Ed25519" } },
+};
+
+const usable = (k: Jwk): boolean =>
+  typeof k.kid === "string" && (k.use === undefined || k.use === "sig") &&
+  Object.values(ALGORITHMS).some((a) => a.kty === k.kty && (a.crv === undefined || a.crv === k.crv));
+
+/// One issuer's keys, kept for a day and fetched again for a `kid` not among them, at most once a
 /// minute. A fetch that fails keeps the keys there are.
 export class KeyCache {
   private keys: Jwk[] = [];
   private fetchedAt = Number.NEGATIVE_INFINITY;
   private readonly fetchKeys: () => Promise<Jwk[]>;
 
-  constructor(fetchKeys: () => Promise<Jwk[]> = googleKeys) {
+  constructor(fetchKeys: () => Promise<Jwk[]>) {
     this.fetchKeys = fetchKeys;
   }
 
   async key(kid: string, nowS: number): Promise<Jwk | undefined> {
-    const stale = nowS - this.fetchedAt > 24 * 3600;
+    const stale = nowS - this.fetchedAt > DAY_S;
     const unknown = !this.keys.some((k) => k.kid === kid) && nowS - this.fetchedAt > 60;
     if (stale || unknown) {
       try {
-        const keys = await this.fetchKeys();
-        if (Array.isArray(keys) && keys.length && keys.every((k) => k.kty === "RSA" && typeof k.kid === "string")) {
+        const keys = (await this.fetchKeys()).filter(usable);
+        if (keys.length) {
           this.keys = keys;
           this.fetchedAt = nowS;
         }
       } catch {
-        console.warn("sign-in: Google's keys couldn't be read");
+        console.warn("sign-in: an issuer's keys couldn't be read");
       }
     }
     return this.keys.find((k) => k.kid === kid);
   }
 }
 
-async function googleKeys(): Promise<Jwk[]> {
-  const response = await fetch(KEYS_URL);
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return ((await response.json()) as { keys: Jwk[] }).keys;
+interface Endpoints {
+  authorize: string;
+  jwks: string;
 }
 
-const shared = new KeyCache();
+/** Every issuer's discovery document and keys, fetched with `get` (the tests give their own issuer). */
+export class Issuers {
+  private readonly get: (url: string) => Promise<Response>;
+  private readonly discovered = new Map<string, { at: number; endpoints: Endpoints }>();
+  private readonly keyCaches = new Map<string, KeyCache>();
 
-const configured = (env: Env): string => {
-  const client = env.GOOGLE_CLIENT_ID?.trim();
-  if (!client) throw apiError("forbidden", "this Sphere server has no sign-in configured");
-  return client;
-};
+  constructor(get: (url: string) => Promise<Response> = (url) => fetch(url)) {
+    this.get = get;
+  }
 
-/** CREATOR_WORKSPACES, lower case. */
-export const creatorWorkspaces = (env: Env): string[] =>
-  (env.CREATOR_WORKSPACES ?? "").split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
+  /** Where to sign in with `p`, and its keys: fixed, or from `<issuer>/.well-known/openid-configuration`. Null when it can't be read. */
+  async endpoints(p: Provider, nowS: number): Promise<Endpoints | null> {
+    if (p.authorize && p.jwks) return { authorize: p.authorize, jwks: p.jwks };
+    const kept = this.discovered.get(p.issuer);
+    if (kept && nowS - kept.at < DAY_S) return kept.endpoints;
+    try {
+      const r = await this.get(`${p.issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const doc = (await r.json()) as Record<string, unknown>;
+      if (doc.issuer !== p.issuer) throw new Error("its issuer is another");
+      const authorize = webUrl(doc.authorization_endpoint), jwks = webUrl(doc.jwks_uri);
+      if (!authorize || !jwks) throw new Error("no authorization endpoint or keys");
+      const modes = doc.response_modes_supported, types = doc.response_types_supported;
+      if (Array.isArray(modes) && !modes.includes("form_post")) throw new Error("no form_post");
+      if (Array.isArray(types) && !types.includes("id_token")) throw new Error("no id_token response");
+      const endpoints = { authorize: authorize.href, jwks: jwks.href };
+      this.discovered.set(p.issuer, { at: nowS, endpoints });
+      return endpoints;
+    } catch (e) {
+      console.warn(`sign-in: ${p.id}'s discovery couldn't be read: ${e instanceof Error ? e.message : "refused"}`);
+      return kept?.endpoints ?? null;
+    }
+  }
+
+  keys(jwks: string): KeyCache {
+    let cache = this.keyCaches.get(jwks);
+    if (!cache) {
+      cache = new KeyCache(async () => {
+        const r = await this.get(jwks);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const keys = ((await r.json()) as { keys?: unknown }).keys;
+        return Array.isArray(keys) ? (keys as Jwk[]) : [];
+      });
+      this.keyCaches.set(jwks, cache);
+    }
+    return cache;
+  }
+}
+
+const shared = new Issuers();
 
 // ---------------------------------------------------------------------------------------------
-// POST /v0.1/signin/google
+// GET /v0.1/signin
 
-export async function startSignIn(request: Request, env: Env, deps: Deps): Promise<Response> {
-  const client = configured(env);
+export function listSignIns(_request: Request, env: Env): Response {
+  return json(200, { providers: providers(env).map((p) => ({ id: p.id, name: p.name })) });
+}
+
+// ---------------------------------------------------------------------------------------------
+// POST /v0.1/signin/{provider}
+
+/** Where a sign-in's code may go back to: a loopback http URL, or a scheme of the client's own; no query or fragment. Null when it may not. */
+export function returnTo(text: string): string | null {
+  if (text.length > 300 || /[\s#?]/.test(text)) return null;
+  const scheme = /^([a-z][a-z0-9+.-]*):/.exec(text)?.[1];
+  if (!scheme) return null;
+  if (scheme === "http") {
+    const url = webUrl(text);
+    return url && LOOPBACK.has(url.hostname) ? text : null;
+  }
+  return NOT_RETURN.has(scheme) ? null : text;
+}
+
+export async function startSignIn(request: Request, env: Env, deps: Deps, providerId: string): Promise<Response> {
+  const p = named(env, providerId);
   const body = await readJson(request);
   const errors = schemaErrors("signinRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match signin.request", errors);
-  const ownerKey = (body as unknown as { owner_key: string }).owner_key;
+  const req = body as unknown as { owner_key: string; return_to?: string };
+  const back = req.return_to === undefined ? null : returnTo(req.return_to);
+  if (req.return_to !== undefined && !back) throw apiError("bad_request", "return_to is an http URL on this machine (127.0.0.1, localhost or [::1]) or a scheme of the client's own, with no query");
   const nowS = Math.floor(deps.now() / 1000);
+  const endpoints = await (deps.issuers ?? shared).endpoints(p, nowS);
+  if (!endpoints) throw rateLimited(`${p.name} can't be reached now`, 60);
   await env.DB.prepare("DELETE FROM sign_ins WHERE expires_at_s <= ?1").bind(nowS).run();
   const waiting = await env.DB.prepare("SELECT COUNT(*) AS n FROM sign_ins WHERE account IS NULL").first<{ n: number }>();
   if ((waiting?.n ?? 0) >= MAX_WAITING) throw rateLimited("too many sign-ins are waiting", 60);
   const state = randomToken(32);
   const nonce = randomToken(32);
-  await env.DB.prepare("INSERT INTO sign_ins (state, owner_key, nonce_sha256, expires_at_s) VALUES (?1, ?2, ?3, ?4)")
-    .bind(state, ownerKey, await sha256Hex(utf8(nonce)), nowS + SIGN_IN_SECONDS)
+  await env.DB.prepare("INSERT INTO sign_ins (state, owner_key, nonce_sha256, expires_at_s, provider, return_to) VALUES (?1, ?2, ?3, ?4, ?5, ?6)")
+    .bind(state, req.owner_key, await sha256Hex(utf8(nonce)), nowS + SIGN_IN_SECONDS, p.id, back)
     .run();
-  const url = new URL(AUTHORIZE);
-  url.search = new URLSearchParams({
-    client_id: client,
-    redirect_uri: `${new URL(request.url).origin}/v0.1/signin/google/callback`,
+  const url = new URL(endpoints.authorize);
+  for (const [k, v] of Object.entries({
+    client_id: p.client_id,
+    redirect_uri: `${new URL(request.url).origin}/v0.1/signin/${p.id}/callback`,
     response_type: "id_token",
     response_mode: "form_post",
     scope: "openid email",
     prompt: "select_account",
     state,
     nonce,
-  }).toString();
+  })) url.searchParams.set(k, v);
   return json(201, { url: url.toString(), state });
 }
 
 // ---------------------------------------------------------------------------------------------
-// POST /v0.1/signin/google/callback: Google's form post.
+// POST /v0.1/signin/{provider}/callback: the provider's form post.
 
-export async function finishSignIn(request: Request, env: Env, deps: Deps): Promise<Response> {
-  const client = configured(env);
-  const back = (state: string, query: string) =>
-    new Response(null, { status: 303, headers: { Location: `${BACK}?state=${encodeURIComponent(state)}&${query}`, "Cache-Control": "no-store" } });
+export async function finishSignIn(request: Request, env: Env, deps: Deps, providerId: string): Promise<Response> {
+  const p = named(env, providerId);
+  const to = (where: string, state: string, query: string) =>
+    new Response(null, { status: 303, headers: { Location: `${where}?state=${encodeURIComponent(state)}&${query}`, "Cache-Control": "no-store" } });
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    throw apiError("bad_request", "send Google's form");
+    throw apiError("bad_request", "send the provider's form");
   }
   const state = String(form.get("state") ?? "");
   const token = String(form.get("id_token") ?? "");
-  if (!/^[A-Za-z0-9_-]{43}$/.test(state)) throw apiError("bad_request", "that sign-in isn't this Sphere's");
+  if (!/^[A-Za-z0-9_-]{43}$/.test(state)) throw apiError("bad_request", "that sign-in isn't this Obysphere's");
   const nowS = Math.floor(deps.now() / 1000);
-  const waiting = await env.DB.prepare("SELECT nonce_sha256 FROM sign_ins WHERE state = ?1 AND account IS NULL AND expires_at_s > ?2")
-    .bind(state, nowS)
-    .first<{ nonce_sha256: string }>();
-  if (!waiting || !token) return back(state, "error=failed");
+  const row = await env.DB.prepare("SELECT nonce_sha256, provider, return_to, account, expires_at_s FROM sign_ins WHERE state = ?1")
+    .bind(state)
+    .first<{ nonce_sha256: string; provider: string; return_to: string | null; account: string | null; expires_at_s: number }>();
+  // A sign-in another provider's callback finishes, or one not waiting, fails; its code goes nowhere.
+  const where = row?.provider === p.id ? (row.return_to ?? BACK) : BACK;
+  if (!row || row.provider !== p.id || row.account !== null || row.expires_at_s <= nowS || !token) return to(where, state, "error=failed");
   let account: { sub: string; workspace: string | null };
   try {
-    account = await verifyGoogleToken(token, deps.google ?? shared, client, waiting.nonce_sha256, nowS);
+    const issuers = deps.issuers ?? shared;
+    const endpoints = await issuers.endpoints(p, nowS);
+    if (!endpoints) throw new Error(`${p.id} can't be reached`);
+    account = await verifyIdToken(token, p, issuers.keys(endpoints.jwks), row.nonce_sha256, nowS);
   } catch (e) {
     console.warn(`sign-in: ${e instanceof Error ? e.message : "refused"}`);
-    return back(state, "error=failed");
+    return to(where, state, "error=failed");
   }
   const code = randomToken(32);
   await env.DB.prepare("UPDATE sign_ins SET account = ?2, workspace = ?3, code_sha256 = ?4 WHERE state = ?1 AND account IS NULL")
-    .bind(state, `google:${account.sub}`, account.workspace, await sha256Hex(utf8(code)))
+    .bind(state, `${p.id}:${account.sub}`, account.workspace, await sha256Hex(utf8(code)))
     .run();
-  return back(state, `code=${code}`);
+  return to(where, state, `code=${code}`);
 }
 
-/// Google's ID token for `audience`: its `sub`, and its Workspace (`hd`), or null for a personal
-/// account. Throws with a line for the log, never the token.
-export async function verifyGoogleToken(token: string, cache: KeyCache, audience: string, nonceHash: string, nowS: number): Promise<{ sub: string; workspace: string | null }> {
+/// `p`'s ID token for its client: its `sub`, and its domain (the provider's own, the one its claim
+/// names, or null). Throws with a line for the log, never the token.
+export async function verifyIdToken(token: string, p: Provider, cache: KeyCache, nonceHash: string, nowS: number): Promise<{ sub: string; workspace: string | null }> {
   const parts = token.split(".");
-  if (parts.length !== 3 || !parts.every((p) => /^[A-Za-z0-9_-]+$/.test(p))) throw new Error("not a JWT");
+  if (parts.length !== 3 || !parts.every((part) => /^[A-Za-z0-9_-]+$/.test(part))) throw new Error("not a JWT");
   const [head, body, signature] = parts as [string, string, string];
   const header = decode(head) as { alg?: unknown; kid?: unknown };
-  if (header.alg !== "RS256" || typeof header.kid !== "string") throw new Error("not RS256 with a kid");
+  const alg = typeof header.alg === "string" && Object.hasOwn(ALGORITHMS, header.alg) ? ALGORITHMS[header.alg]! : null;
+  if (!alg || typeof header.kid !== "string") throw new Error("not RS256, ES256 or EdDSA with a kid");
   const jwk = await cache.key(header.kid, nowS);
-  if (!jwk) throw new Error("signed by a key Google doesn't list");
-  const key = await crypto.subtle.importKey("jwk", { kty: "RSA", n: jwk.n, e: jwk.e }, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
-  if (!(await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, fromB64url(signature), utf8(`${head}.${body}`)))) throw new Error("bad signature");
+  if (!jwk) throw new Error(`signed by a key ${p.id} doesn't list`);
+  if (jwk.kty !== alg.kty || (alg.crv !== undefined && jwk.crv !== alg.crv) || (jwk.alg !== undefined && jwk.alg !== header.alg)) throw new Error("signed with another kind of key");
+  const publicJwk: JsonWebKey = jwk.kty === "RSA" ? { kty: "RSA", n: jwk.n, e: jwk.e } : jwk.kty === "EC" ? { kty: "EC", crv: jwk.crv, x: jwk.x, y: jwk.y } : { kty: "OKP", crv: jwk.crv, x: jwk.x };
+  const key = await crypto.subtle.importKey("jwk", publicJwk, alg.importAs, false, ["verify"]);
+  if (!(await crypto.subtle.verify(alg.verifyAs, key, fromB64url(signature), utf8(`${head}.${body}`)))) throw new Error("bad signature");
   const claims = decode(body) as Record<string, unknown>;
-  if (typeof claims.iss !== "string" || !ISSUERS.includes(claims.iss)) throw new Error("not issued by Google");
-  if (!(Array.isArray(claims.aud) ? claims.aud : [claims.aud]).includes(audience)) throw new Error("for another client");
+  if (typeof claims.iss !== "string" || !p.issuers.includes(claims.iss)) throw new Error(`not issued by ${p.id}`);
+  const audiences = Array.isArray(claims.aud) ? claims.aud : [claims.aud];
+  if (!audiences.includes(p.client_id)) throw new Error("for another client");
+  if (audiences.length > 1 && claims.azp !== p.client_id) throw new Error("for several clients, and not authorized for this one");
   if (typeof claims.exp !== "number" || claims.exp <= nowS) throw new Error("expired");
   if (typeof claims.iat !== "number" || claims.iat > nowS + TOKEN_SKEW_SECONDS || claims.iat < nowS - SIGN_IN_SECONDS) throw new Error("issued at the wrong time");
   if (typeof claims.nonce !== "string" || (await sha256Hex(utf8(claims.nonce))) !== nonceHash) throw new Error("for another sign-in");
-  if (typeof claims.sub !== "string" || !/^[A-Za-z0-9._-]{1,255}$/.test(claims.sub)) throw new Error("no account");
-  if (claims.email_verified !== true) throw new Error("no verified email");
-  const hd = claims.hd === undefined ? null : typeof claims.hd === "string" ? claims.hd.toLowerCase() : "";
-  if (hd !== null && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/.test(hd)) throw new Error("an hd that isn't a domain");
-  return { sub: claims.sub, workspace: hd };
+  if (typeof claims.sub !== "string" || !/^[\x21-\x7e]{1,255}$/.test(claims.sub)) throw new Error("no account");
+  if (p.email_verified && claims.email_verified !== true) throw new Error("no verified email");
+  if (p.domain) return { sub: claims.sub, workspace: p.domain };
+  const said = p.domain_claim === undefined ? undefined : claims[p.domain_claim];
+  const domain = said === undefined ? null : typeof said === "string" ? said.toLowerCase() : "";
+  if (domain !== null && !DOMAIN.test(domain)) throw new Error(`a ${p.domain_claim} that isn't a domain`);
+  return { sub: claims.sub, workspace: domain };
 }
 
 function decode(part: string): unknown {

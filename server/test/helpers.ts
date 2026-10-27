@@ -10,19 +10,33 @@ import { canonicalBytes, utf8 } from "../src/protocol/json";
 import { envelopeSigningInput, timestamp } from "../src/protocol/envelope";
 import { cardSigningInput } from "../src/protocol/card";
 import * as validators from "../src/protocol/validators.generated.js";
-import { KeyCache } from "../src/signin";
+import { Issuers } from "../src/signin";
 
 export const BASE = "http://sphere.test";
 export const OPERATOR = env.SPHERE_OPERATOR_TOKEN;
 
-/** Google, as the tests play it: one RSA key that signs every ID token (test/signin.test.ts). */
+/** Google, as the tests play it: one RSA key, made for this run, that signs every ID token (test/signin.test.ts). */
 export const GOOGLE_KEY = (await crypto.subtle.generateKey(
   { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
   true,
   ["sign", "verify"],
 )) as CryptoKeyPair;
 const googleJwk = { ...((await crypto.subtle.exportKey("jwk", GOOGLE_KEY.publicKey)) as JsonWebKey), kid: "test-google-key" };
-export const GOOGLE = new KeyCache(async () => [googleJwk]);
+
+/** Another OpenID Connect provider, as the tests play it: its issuer, its discovery document, and an ES256 key made for this run. */
+export const IDP = { issuer: "https://idp.test", authorize: "https://idp.test/authorize", jwks: "https://idp.test/keys", kid: "test-idp-key" };
+export const IDP_KEY = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+const idpJwk = { ...((await crypto.subtle.exportKey("jwk", IDP_KEY.publicKey)) as JsonWebKey), kid: IDP.kid, use: "sig", alg: "ES256" };
+
+/** What the Sphere fetches from issuers, answered here: Google's keys, and the test provider's discovery and keys. */
+export const ISSUERS = new Issuers(async (url) => {
+  if (url === "https://www.googleapis.com/oauth2/v3/certs") return Response.json({ keys: [googleJwk] });
+  if (url === `${IDP.issuer}/.well-known/openid-configuration`) {
+    return Response.json({ issuer: IDP.issuer, authorization_endpoint: IDP.authorize, jwks_uri: IDP.jwks, response_types_supported: ["code", "id_token"], response_modes_supported: ["query", "fragment", "form_post"], id_token_signing_alg_values_supported: ["ES256"] });
+  }
+  if (url === IDP.jwks) return Response.json({ keys: [idpJwk, { kty: "oct", kid: "a-shared-secret", k: "c2VjcmV0" }] });
+  return new Response("not found", { status: 404 });
+});
 
 /** The Sphere's clock in the tests: starts at 2026-10-14T12:00:00Z, moves only when told. */
 export class Clock {
@@ -163,7 +177,7 @@ export function makeCall(clock: Clock, workerEnv: Cloudflare.Env = env) {
       body = JSON.stringify(o.body);
       headers["Content-Type"] ??= "application/json";
     }
-    const res = await handle(new Request(BASE + path, { method, headers, body }), workerEnv, { now: clock.now, google: GOOGLE });
+    const res = await handle(new Request(BASE + path, { method, headers, body }), workerEnv, { now: clock.now, issuers: ISSUERS });
     const text = await res.text();
     let parsed: unknown = text;
     try {

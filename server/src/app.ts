@@ -11,7 +11,7 @@ import { getMemberRoute, invite, listInvitations, listMembers, previewInvitation
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
 import { createSphere, deleteAdmin, deleteImage, deleteSphere, features, getImage, getSphereRoute, health, joinPage, putAdmin, putImage, updateSphere } from "./routes/spheres.ts";
-import { finishSignIn, startSignIn } from "./signin.ts";
+import { finishSignIn, listSignIns, startSignIn } from "./signin.ts";
 
 type Handler = (request: Request, env: Env, deps: Deps, ...params: string[]) => Promise<Response> | Response;
 
@@ -22,8 +22,9 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["GET", /^\/join$/, joinPage],
   ["POST", /^\/v0\.1\/spheres$/, createSphere],
   ["POST", /^\/v0\.1\/oauth\/token$/, tokenEndpoint],
-  ["POST", /^\/v0\.1\/signin\/google$/, startSignIn],
-  ["POST", /^\/v0\.1\/signin\/google\/callback$/, finishSignIn],
+  ["GET", /^\/v0\.1\/signin$/, listSignIns],
+  ["POST", new RegExp(`^/v0\\.1/signin/${SEGMENT}$`), startSignIn],
+  ["POST", new RegExp(`^/v0\\.1/signin/${SEGMENT}/callback$`), finishSignIn],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), getSphereRoute],
   ["PATCH", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), updateSphere],
   ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}$`), deleteSphere],
