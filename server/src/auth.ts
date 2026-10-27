@@ -4,6 +4,7 @@
 import { apiError } from "./http.ts";
 import type { Env } from "./env.ts";
 import type { SphereRow } from "./db.ts";
+import { checkProof } from "./dpop.ts";
 import { constantTimeEqual, sha256Hex } from "./protocol/crypto.ts";
 import { utf8 } from "./protocol/json.ts";
 
@@ -28,9 +29,15 @@ export interface Caller {
   scopes: Set<string>;
 }
 
-const BEARER = /^Bearer ([A-Za-z0-9._~-]{1,512})$/;
+const PRESENTED = /^(Bearer|DPoP) ([A-Za-z0-9._~-]{1,512})$/;
 
 export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(token));
+
+/** The access token in `Authorization`, as `Bearer <token>` or, for a token bound to a key, `DPoP <token>`; null for neither. */
+export function presented(request: Request): { scheme: "Bearer" | "DPoP"; token: string } | null {
+  const m = PRESENTED.exec(request.headers.get("Authorization") ?? "");
+  return m ? { scheme: m[1] as "Bearer" | "DPoP", token: m[2]! } : null;
+}
 
 /**
  * The caller behind `Authorization: Bearer <access token>`, for `sphere` (which exists), or for
@@ -39,16 +46,25 @@ export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(toke
  * 401 unauthorized.
  */
 export async function bearer(request: Request, env: Env, sphere: SphereRow | null, nowS: number): Promise<Caller> {
-  const m = BEARER.exec(request.headers.get("Authorization") ?? "");
-  if (!m) throw apiError("unauthorized", "an access token is needed: Authorization: Bearer <token>");
+  const given = presented(request);
+  if (!given) throw apiError("unauthorized", "an access token is needed: Authorization: Bearer <token>");
   const row = await env.DB.prepare(
-    `SELECT t.subject, t.actor, t.scope, t.expires_at_s, t.revoked, t.sphere, m.status AS actor_status
+    `SELECT t.subject, t.actor, t.scope, t.expires_at_s, t.revoked, t.sphere, t.jkt, m.status AS actor_status
        FROM tokens t LEFT JOIN members m ON m.sphere = t.sphere AND m.obi = t.actor
       WHERE t.sha256 = ?1`,
   )
-    .bind(await tokenHash(m[1]!))
-    .first<{ subject: string; actor: string | null; scope: string; expires_at_s: number; revoked: number; sphere: string; actor_status: string | null }>();
+    .bind(await tokenHash(given.token))
+    .first<{ subject: string; actor: string | null; scope: string; expires_at_s: number; revoked: number; sphere: string; jkt: string | null; actor_status: string | null }>();
   if (!row || row.revoked || row.expires_at_s <= nowS) throw apiError("unauthorized", "the access token is unknown, expired or revoked");
+  // A token bound to a key (identity.md 4.6) works only with a new proof from that key; a bearer
+  // token only as Bearer.
+  if (row.jkt === null && given.scheme === "DPoP") throw apiError("unauthorized", "this access token isn't bound to a key: Authorization: Bearer <token>");
+  if (row.jkt !== null) {
+    if (given.scheme !== "DPoP") throw apiError("unauthorized", "this access token is bound to a key: Authorization: DPoP <token>, with a DPoP proof");
+    const proof = await checkProof(request.headers.get("DPoP"), request.method, request.url, nowS, given.token);
+    if (typeof proof === "string") throw apiError("unauthorized", proof);
+    if (proof.jkt !== row.jkt) throw apiError("unauthorized", "the DPoP proof is signed by another key than the token's");
+  }
   if (sphere && row.sphere !== sphere.id) throw apiError("unauthorized", "the access token is for another Sphere");
   if (row.actor !== null && row.actor_status !== "active") throw apiError("unauthorized", "the token's Obi is no longer an active member");
   return { sphere: row.sphere, subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
