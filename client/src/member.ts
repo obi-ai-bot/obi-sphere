@@ -2,21 +2,26 @@
 // token it exchanges them for, and the protocol's rules for what it sends and what it receives.
 //
 // - Joining: redeem an invitation with a card its owner signed (sphere-api.md section 4).
-// - Sending: a request to a member whose card it trusts and that accepts the type, a reply that
-//   keeps the exchange rules; sealed for the receiver when its card has a seal key (protocol.md 9.1).
-// - Receiving: each delivery checked as protocol.md section 10 says, from a sender whose card it
-//   trusts (identity.md section 3, "Pinning"), its words opened and handed over as DataText.
+// - The directory: each card checked, each owner's key pinned the first time it is seen, each
+//   member's highest card_seq kept, and the signing keys its trusted cards named remembered
+//   (identity.md section 3, "Pinning"). The Sphere's own claims (its key lists, its key ids) are
+//   never trusted on their own.
+// - Sending: a request to a member whose card it trusts and that accepts the type, a reply to a
+//   trusted member that keeps the exchange rules; sealed whenever the receiver's trusted card has a
+//   seal key (protocol.md 9.1). Each receipt is kept, checked against the envelope sent.
+// - Receiving: each delivery checked as protocol.md section 10 says, signed with a key a trusted
+//   card of its sender named, its words opened and handed over as DataText.
 // - The chain: verified from seq 1 with every member's key history, and against the head and the
-//   receipts this member kept (sphere-api.md section 7.1).
+//   own sends this member kept (sphere-api.md section 7.1).
 //
 // Nothing here acts on what a message says: the words are data, for the caller to show or quote.
 
 import { verifyCard, cardParams, type AgentCard } from "./card.ts";
 import { rollbackProblem, verifyChain, type AuditEntry, type ChainMemory } from "./chain.ts";
-import type { SigningKey } from "./crypto.ts";
+import { keyIdOf, type SigningKey } from "./crypto.ts";
 import {
-  REQUEST_TYPES, exchangeMessage, exchangeProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
-  type DirectoryKey, type Envelope, type RequestType, type UnsignedEnvelope, type Verdict,
+  CLOCK_SKEW_SECONDS, REQUEST_TYPES, exchangeMessage, exchangeProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
+  type DirectoryKey, type Envelope, type RequestType, type UnsignedEnvelope,
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
 import type { JsonObject } from "./json.ts";
@@ -24,19 +29,21 @@ import { actorAssertion } from "./jws.ts";
 import type { Owner } from "./owner.ts";
 import { SealKey, sealEnvelope, verifyAndOpen } from "./seal.ts";
 import { SphereApi, SphereError, type Delivery, type Fetch, type Member as DirectoryMember, type SendReceipt } from "./sphere.ts";
-import { cardWords, wrapWords, type DataBody } from "./text.ts";
+import { DataText, cardWords, wrapWords, type DataBody } from "./text.ts";
 
 /** A member of the directory as this member sees it: trusted only when its card verifies and its owner key is the one pinned. */
 export interface Peer {
   obi: string;
   owner: string;
   status: "active" | "revoked";
-  /** The owner key's id: the fingerprint to compare with that person out of band. */
+  /** The key id of the owner key that signed its card: the fingerprint to compare with that person out of band. */
   fingerprint: string;
   accepts: string[];
   keyId: string;
   sealPublicKey?: string;
   cardSeq: number;
+  /** Its card's issued_at. */
+  issuedAt: string;
   trusted: boolean;
   /** Why it isn't trusted. */
   problem?: string;
@@ -50,14 +57,18 @@ export interface MemberMemory {
   owners: Record<string, string>;
   /** The highest card_seq trusted for each member. */
   cardSeq: Record<string, number>;
+  /** The signing key ids each member's trusted cards named: only these sign what this member accepts from it. */
+  cardKeys: Record<string, string[]>;
   chain: ChainMemory;
   /** Message ids seen, with when each expires (after that a repeat fails on expiry anyway). */
   seen: Record<string, string>;
+  /** Deliveries checked and not acknowledged yet, by delivery id: the message id each carried. */
+  delivered: Record<string, string>;
   /** Each exchange this member is a party to: its request and the replies so far, as sent or delivered. */
   exchanges: Record<string, { request: Envelope; replies: Envelope[] }>;
 }
 
-export const emptyMemory = (): MemberMemory => ({ owners: {}, cardSeq: {}, chain: { head: null, sends: [] }, seen: {}, exchanges: {} });
+export const emptyMemory = (): MemberMemory => ({ owners: {}, cardSeq: {}, cardKeys: {}, chain: { head: null, sends: [] }, seen: {}, delivered: {}, exchanges: {} });
 
 /** A delivered message that passed every check: its words as DataText. */
 export interface ReceivedMessage {
@@ -70,7 +81,7 @@ export interface ReceivedMessage {
   in_reply_to?: string;
   created_at: string;
   expires_at: string;
-  /** The sender's owner, from the directory (never from the message). */
+  /** The sender's owner, from its trusted card (never from the message). */
   owner: string;
   /** The body, every text value a DataText. */
   body: DataBody;
@@ -84,10 +95,27 @@ export interface Received {
   seq: number;
   relayed_at: string;
   message?: ReceivedMessage;
-  problem?: { code: string; message: string };
+  /** The library's own words, with the check's code; `detail` says more and may hold what the sender chose, so it is data. */
+  problem?: { code: string; message: string; detail: DataText };
   /** The envelope exactly as delivered, for keeping: its words may be bare strings, never give them to an agent. */
   raw(): Envelope;
 }
+
+const PROBLEMS: Record<string, string> = {
+  payload_too_large: "it is larger than a message may be",
+  invalid_envelope: "it doesn't match the protocol's schema or rules",
+  wrong_sphere: "it is for another Sphere",
+  wrong_recipient: "it is addressed to another member",
+  unknown_key: "it isn't signed with a key its sender's trusted card named",
+  bad_signature: "its signature doesn't verify",
+  expired: "it expired",
+  clock_skew: "it was made in the future",
+  duplicate: "a message with its id was handled before",
+  seal_invalid: "its sealed words don't open for this member",
+  not_sealed: "its words should have been sealed",
+  untrusted_sender: "its sender's card isn't trusted",
+  bad_reply: "it breaks the exchange rules, or replies to no request of this member",
+};
 
 export interface MemberOptions {
   api: SphereApi;
@@ -139,7 +167,8 @@ export class Member {
     this.key = o.key;
     this.sealKey = o.sealKey;
     this.delegation = o.delegation;
-    this.memory = o.memory ?? emptyMemory();
+    // A memory kept by an earlier version lacks the newer parts: they start empty.
+    this.memory = { ...emptyMemory(), ...(o.memory ?? {}) };
   }
 
   /** Joins with an invitation: the owner signs the card and the delegation, the member redeems it (sphere-api.md section 4). */
@@ -158,6 +187,7 @@ export class Member {
     const memory = emptyMemory();
     memory.owners[o.owner.id] = o.owner.key.publicKey;
     memory.cardSeq[o.obi] = 1;
+    memory.cardKeys[o.obi] = [o.key.keyId];
     const delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
     return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
   }
@@ -183,23 +213,25 @@ export class Member {
 
   async #judge(m: DirectoryMember, now: number): Promise<Peer> {
     const card = m.card as AgentCard;
-    const params = cardParams(card);
-    const peer: Peer = {
-      obi: m.obi, owner: m.owner, status: m.status, fingerprint: m.owner_key_id, accepts: params.accepts, keyId: params.key_id,
-      ...(params.seal_public_key ? { sealPublicKey: params.seal_public_key } : {}), cardSeq: params.card_seq, trusted: false,
-      words: cardWords(card, { from: m.obi, owner: m.owner }),
-    };
     const verdict = await verifyCard(card, { now, bound_owner_key: m.owner_key });
+    const params = verdict.ok ? cardParams(card) : undefined;
+    const peer: Peer = {
+      obi: m.obi, owner: m.owner, status: m.status, fingerprint: params ? await keyIdOf(params.owner_key) : "", accepts: params?.accepts ?? [],
+      keyId: params?.key_id ?? "", ...(params?.seal_public_key ? { sealPublicKey: params.seal_public_key } : {}), cardSeq: params?.card_seq ?? 0,
+      issuedAt: params?.issued_at ?? "", trusted: false, words: cardWords(card, { from: m.obi, owner: m.owner }),
+    };
     const untrusted = (problem: string): Peer => ({ ...peer, problem });
-    if (!verdict.ok) return untrusted(`its card fails: ${verdict.message}`);
+    if (!verdict.ok || !params) return untrusted(`its card fails: ${verdict.ok ? "" : verdict.code}`);
     if (params.obi_id !== m.obi || params.owner !== m.owner || params.sphere !== this.sphere) return untrusted("its card names another member");
-    if (!m.keys.some((k) => k.key_id === params.key_id && k.valid_until_seq === null) && m.status === "active") return untrusted("its card's key is not its current key");
+    if (m.status === "active" && !m.keys.some((k) => k.key_id === params.key_id && k.valid_until_seq === null)) return untrusted("its card's key is not its current key");
     const pinned = this.memory.owners[m.owner];
     if (pinned !== undefined && pinned !== params.owner_key) return untrusted(`its owner ${m.owner}'s key changed: compare fingerprints with them before trusting it`);
     const kept = this.memory.cardSeq[m.obi];
     if (kept !== undefined && params.card_seq < kept) return untrusted(`its card is older (card_seq ${params.card_seq}) than one trusted before (${kept})`);
     this.memory.owners[m.owner] = params.owner_key;
     this.memory.cardSeq[m.obi] = params.card_seq;
+    const named = this.memory.cardKeys[m.obi] ?? [];
+    if (!named.includes(params.key_id)) this.memory.cardKeys[m.obi] = [...named, params.key_id];
     return { ...peer, trusted: true };
   }
 
@@ -208,18 +240,26 @@ export class Member {
     return this.#peers!.get(obi);
   }
 
-  /** Every member's keys, as the verifiers take them. */
-  #keys(): Record<string, DirectoryKey> {
+  /** Every member's keys from the directory, as the chain's verifier takes them (sphere-api.md section 7.1). */
+  #directoryKeys(): Record<string, DirectoryKey> {
     const keys: Record<string, DirectoryKey> = {};
     for (const m of this.#directory) for (const k of m.keys) keys[k.key_id] = { obi: m.obi, public_key: k.public_key, valid_from_seq: k.valid_from_seq, valid_until_seq: k.valid_until_seq };
     return keys;
   }
 
+  /** The directory's keys that a trusted card of their member named: what a delivery may be signed with. */
+  #trustedKeys(): Record<string, DirectoryKey> {
+    const all = this.#directoryKeys();
+    return Object.fromEntries(Object.entries(all).filter(([id, k]) => this.memory.cardKeys[k.obi]?.includes(id)));
+  }
+
   async #sendSigned(unsigned: UnsignedEnvelope, recipient: Peer): Promise<{ envelope: Envelope; receipt: SendReceipt }> {
+    if (!recipient.trusted) throw new Error(`${recipient.obi} is not trusted: ${recipient.problem}`);
     const sealed = recipient.sealPublicKey ? await sealEnvelope(unsigned, recipient.sealPublicKey) : unsigned;
     const envelope = await signEnvelope(sealed, this.key);
     const receipt = await this.api.send(await this.accessToken(), envelope);
-    this.memory.chain.sends = [...(this.memory.chain.sends ?? []), { seq: receipt.seq, hash: receipt.entry_hash }];
+    if (receipt.id !== envelope.id) throw new SphereError(202, "bad_response", "the Sphere's receipt names another message than the one sent");
+    this.memory.chain.sends = [...(this.memory.chain.sends ?? []), { seq: receipt.seq, hash: receipt.entry_hash, id: envelope.id }];
     return { envelope, receipt };
   }
 
@@ -250,14 +290,14 @@ export class Member {
     return this.request(to, "handoff", body, o);
   }
 
-  /** Replies to a request this member received (or, for the sender's own replies, sent), keeping the exchange rules. */
+  /** Replies to a request this member received (or, for the sender's own replies, sent): to a trusted member, keeping the exchange rules. */
   async reply(requestId: string, type: string, body: JsonObject, o: { expiresIn?: number } = {}): Promise<{ id: string; envelope: Envelope; receipt: SendReceipt }> {
     const exchange = this.memory.exchanges[requestId];
     if (!exchange) throw new Error(`no exchange ${requestId}`);
     const unsigned = newReply(exchange.request, { from: this.id, type, body, keyId: this.key.keyId, ...(o.expiresIn ? { expiresIn: o.expiresIn } : {}) });
     const problem = exchangeProblem(exchangeMessage(unsigned as Envelope), exchangeMessage(exchange.request), exchange.replies.map(exchangeMessage));
     if (problem) throw new Error(`that reply breaks the exchange rules: ${problem}`);
-    const peer = await this.#peer(unsigned.to);
+    const peer = await this.#peer(unsigned.to, true);
     if (!peer) throw new Error(`${unsigned.to} is not a member`);
     const sent = await this.#sendSigned(unsigned, peer);
     exchange.replies.push(sent.envelope);
@@ -273,8 +313,10 @@ export class Member {
     return this.reply(requestId, "decline", { reason, ...(o.note ? { note: o.note } : {}), ...(o.byRule ? { by_rule: o.byRule } : {}) });
   }
 
-  answer(requestId: string, a: { text: string; by?: "obi" | "owner"; refs?: JsonObject[]; choice?: number; by_rule?: string }) {
-    return this.reply(requestId, "answer", { by: a.by ?? "obi", ...a } as JsonObject);
+  answer(requestId: string, a: { text: string; by?: "obi" | "owner"; refs?: JsonObject[]; choice?: number; byRule?: string }) {
+    return this.reply(requestId, "answer", {
+      by: a.by ?? "obi", text: a.text, ...(a.refs ? { refs: a.refs } : {}), ...(a.choice !== undefined ? { choice: a.choice } : {}), ...(a.byRule ? { by_rule: a.byRule } : {}),
+    });
   }
 
   #remember(env: Envelope) {
@@ -282,10 +324,11 @@ export class Member {
   }
 
   /**
-   * The deliveries waiting (sphere-api.md section 6.2), each checked: section 10 with the
-   * directory's keys at the delivery's seq, its words opened, from a trusted sender, and for a
-   * reply the exchange rules against the request this member sent. Acknowledge each with `ack`
-   * once you have recorded what you decided.
+   * The deliveries waiting (sphere-api.md section 6.2), each checked: section 10 with the keys its
+   * sender's trusted cards named, valid at the delivery's seq; its words opened; from a trusted
+   * sender; and for a reply, the exchange rules against the request this member sent. A delivery
+   * checked before and not acknowledged comes back the same (at least once, as the Sphere delivers).
+   * Acknowledge each with `ack` once you have recorded what you decided.
    */
   async receive(o: { wait?: number; limit?: number } = {}): Promise<Received[]> {
     const deliveries = await this.api.deliveries(await this.accessToken(), this.sphere, o);
@@ -298,18 +341,25 @@ export class Member {
   async #check(d: Delivery): Promise<Received> {
     const raw = structuredClone(d.envelope);
     const base = { delivery_id: d.delivery_id, seq: d.seq, relayed_at: d.relayed_at, raw: () => structuredClone(raw) };
-    const reject = (code: string, message: string): Received => ({ ...base, problem: { code, message } });
     const env = d.envelope;
     const from = typeof env?.from === "string" ? env.from : "";
-    let keyKnown = Object.hasOwn(this.#keys(), env?.key_id ?? "");
-    let sender = await this.#peer(from, !keyKnown);
-    if (!keyKnown) keyKnown = Object.hasOwn(this.#keys(), env?.key_id ?? "");
-    const seen = typeof env?.id === "string" && Object.hasOwn(this.memory.seen, env.id) ? [env.id] : [];
-    const verdict = await verifyAndOpen(env, {
-      now: nowSeconds(), sphere: this.sphere, receiver: this.id, keys: this.#keys(), seq: d.seq, seen_ids: seen,
-      seal_keys: this.sealKey ? { [this.sealKey.keyId]: this.sealKey } : {}, sender_seals: !!sender?.sealPublicKey,
+    const reject = (code: string, detail: string): Received => ({
+      ...base, problem: { code, message: PROBLEMS[code] ?? "it fails a check", detail: new DataText(detail, { from: from || "unknown", type: "verdict", field: "/" }) },
     });
-    if (!verdict.ok) return reject((verdict as Verdict & { ok: false }).code, (verdict as Verdict & { ok: false }).message);
+    // A delivery this member checked already and didn't acknowledge: the same message again.
+    const again = typeof env?.id === "string" && this.memory.delivered[d.delivery_id] === env.id && Object.hasOwn(this.memory.seen, env.id);
+    const keyId = typeof env?.key_id === "string" ? env.key_id : "";
+    const sender = await this.#peer(from, !Object.hasOwn(this.#trustedKeys(), keyId));
+    const own = this.#peers?.get(this.id);
+    // Check 11's "both seal": the sender's trusted card and this member's own card had a seal key when it was written.
+    const bothSealed = !!sender?.trusted && !!sender.sealPublicKey && !!own?.sealPublicKey &&
+      seconds(typeof env?.created_at === "string" ? env.created_at : "") >= Math.max(seconds(sender.issuedAt), seconds(own.issuedAt)) + CLOCK_SKEW_SECONDS;
+    const verdict = await verifyAndOpen(env, {
+      now: nowSeconds(), sphere: this.sphere, receiver: this.id, keys: this.#trustedKeys(), seq: d.seq,
+      seen_ids: !again && typeof env?.id === "string" && Object.hasOwn(this.memory.seen, env.id) ? [env.id] : [],
+      seal_keys: this.sealKey ? { [this.sealKey.keyId]: this.sealKey } : {}, sender_seals: bothSealed,
+    });
+    if (!verdict.ok) return reject(verdict.code, verdict.message);
     if (!sender || !sender.trusted) return reject("untrusted_sender", sender ? sender.problem ?? "not trusted" : `${from} is not in the directory`);
     const message: ReceivedMessage = {
       id: env.id, type: env.type, from: env.from, to: env.to, sphere: env.sphere, correlation_id: env.correlation_id,
@@ -319,18 +369,21 @@ export class Member {
     if (isReplyType(env.type)) {
       const exchange = this.memory.exchanges[env.in_reply_to!];
       if (!exchange) return reject("bad_reply", "it replies to no request this member knows");
-      const problem = exchangeProblem(exchangeMessage(env), exchangeMessage(exchange.request), exchange.replies.map(exchangeMessage));
-      if (problem) return reject("bad_reply", problem);
-      if (env.type === "answer" && typeof verdict.body.choice === "number") {
-        const count = (exchange.request.body.choices as unknown[] | undefined)?.length;
-        if (count === undefined || verdict.body.choice >= count) return reject("bad_reply", "its choice is not one of the question's choices");
+      if (!again) {
+        const problem = exchangeProblem(exchangeMessage(env), exchangeMessage(exchange.request), exchange.replies.map(exchangeMessage));
+        if (problem) return reject("bad_reply", problem);
+        if (env.type === "answer" && typeof verdict.body.choice === "number") {
+          const count = (exchange.request.body.choices as unknown[] | undefined)?.length;
+          if (count === undefined || verdict.body.choice >= count) return reject("bad_reply", "its choice is not one of the question's choices");
+        }
+        exchange.replies.push(env);
       }
-      exchange.replies.push(env);
       message.request = { id: exchange.request.id, type: exchange.request.type, to: exchange.request.to };
-    } else if ((REQUEST_TYPES as readonly string[]).includes(env.type)) {
+    } else if ((REQUEST_TYPES as readonly string[]).includes(env.type) && !again) {
       this.memory.exchanges[env.id] = { request: env, replies: [] };
     }
     this.memory.seen[env.id] = env.expires_at;
+    this.memory.delivered[d.delivery_id] = env.id;
     return { ...base, message };
   }
 
@@ -342,12 +395,17 @@ export class Member {
       const last = [x.request, ...x.replies].reduce((t, e) => Math.max(t, seconds(e.expires_at)), 0);
       if (last < cutoff) delete this.memory.exchanges[id];
     }
+    for (const [delivery, id] of Object.entries(this.memory.delivered)) if (!Object.hasOwn(this.memory.seen, id)) delete this.memory.delivered[delivery];
   }
 
   /** Acknowledges deliveries (sphere-api.md section 6.2): only once what was decided about each is recorded. */
   async ack(deliveryIds: string[]): Promise<number> {
     let acked = 0;
-    for (let i = 0; i < deliveryIds.length; i += 100) acked += await this.api.ack(await this.accessToken(), this.sphere, deliveryIds.slice(i, i + 100));
+    for (let i = 0; i < deliveryIds.length; i += 100) {
+      const batch = deliveryIds.slice(i, i + 100);
+      acked += await this.api.ack(await this.accessToken(), this.sphere, batch);
+      for (const id of batch) delete this.memory.delivered[id];
+    }
     return acked;
   }
 
@@ -360,7 +418,7 @@ export class Member {
     const token = await this.accessToken();
     const page = await this.api.auditAll(token, this.sphere);
     this.#directory = await this.api.members(token, this.sphere);
-    const verdict = await verifyChain({ sphere: page.sphere, entries: page.entries }, { keys: this.#keys() });
+    const verdict = await verifyChain({ sphere: page.sphere, entries: page.entries }, { keys: this.#directoryKeys() });
     if (!verdict.ok) return verdict as { ok: false; code: string; message: string };
     const problem = rollbackProblem(page.entries, this.memory.chain);
     if (problem) return { ok: false, code: "conflict", message: problem };

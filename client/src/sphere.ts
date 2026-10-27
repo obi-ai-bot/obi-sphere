@@ -1,33 +1,45 @@
-// An Obysphere's HTTP API (spec/sphere-api.md): one method per call, each answer checked against
-// its wire schema before it is returned, so a client never acts on a body the spec doesn't allow.
-// The `message` and `details` of an error are the server's words: data, kept on the error as they came.
+// An Obysphere's HTTP API (spec/sphere-api.md): one method per call, each answer read with the
+// protocol's strict JSON rules and checked against its wire schema before it is returned, so a
+// client never acts on a body the spec doesn't allow. This is the raw layer: what it returns is
+// the protocol's documents as they are (a card's name, a delivery's envelope); Member hands their
+// words over as DataText. An error's message is the library's own words; the server's message is
+// kept as a DataText.
 
 import type { AgentCard } from "./card.ts";
 import type { Envelope } from "./envelope.ts";
 import type { AuditEntry } from "./chain.ts";
-import { schemaErrors, type SchemaName } from "./schemas.ts";
+import { parseStrict } from "./json.ts";
+import { matches, type SchemaName } from "./schemas.ts";
 import { sphereBase } from "./invite.ts";
+import { DataText } from "./text.ts";
 
 export const TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange";
 export const JWT_TYPE = "urn:ietf:params:oauth:token-type:jwt";
 
-/** A failed call: the HTTP status and the error code the API answered (`bad_response` when the answer itself broke its schema). */
+/**
+ * A failed call: the HTTP status and the error code the API answered (`bad_response` when the
+ * answer itself broke the protocol, `unreachable` when there was none). `message` is the library's
+ * own words; what the server wrote is `serverMessage`, data.
+ */
 export class SphereError extends Error {
   readonly status: number;
   readonly code: string;
-  readonly details: unknown;
+  readonly serverMessage: DataText | undefined;
   /** Seconds to wait, from `Retry-After`, when the server sent one. */
   readonly retryAfter: number | undefined;
 
-  constructor(status: number, code: string, message: string, details?: unknown, retryAfter?: number) {
+  constructor(status: number, code: string, message: string, serverMessage?: string, retryAfter?: number) {
     super(`${status} ${code}: ${message}`);
     this.name = "SphereError";
     this.status = status;
     this.code = code;
-    this.details = details;
+    this.serverMessage = serverMessage === undefined ? undefined : new DataText(serverMessage, { from: "the Sphere", type: "error", field: "/error/message" });
     this.retryAfter = retryAfter;
   }
 }
+
+/** An error code as the API writes one: snake_case, short. Anything else is reported as `http_error`. */
+const errorCode = (c: unknown): string | undefined => (typeof c === "string" && /^[a-z_]{1,40}$/.test(c) ? c : undefined);
 
 export interface Health {
   status?: string;
@@ -150,33 +162,34 @@ export class SphereApi {
       headers["Content-Type"] = "application/json";
       body = JSON.stringify(o.json);
     }
+    const what = `${method} ${path.replace(/\?.*$/, "")}`;
     let res: Response;
     try {
       res = await this.#fetch(this.base + path, { method, headers, body, redirect: "error" });
-    } catch (e) {
-      throw new SphereError(0, "unreachable", `${method} ${path}: ${(e as Error).message}`);
+    } catch {
+      throw new SphereError(0, "unreachable", `${what}: no answer from ${this.base}`);
     }
     const text = await res.text();
     let parsed: unknown = undefined;
+    let strict = true;
     if (text) {
       try {
-        parsed = JSON.parse(text);
+        parsed = parseStrict(text);
       } catch {
-        parsed = undefined;
+        strict = false;
       }
     }
     if (!(o.ok ?? [200]).includes(res.status)) {
       const retry = res.headers.get("Retry-After");
-      const retryAfter = retry && /^[0-9]+$/.test(retry) ? Number(retry) : undefined;
+      const retryAfter = retry && /^[0-9]{1,6}$/.test(retry) ? Number(retry) : undefined;
       const err = (parsed as { error?: unknown; error_description?: unknown } | undefined) ?? {};
-      if (typeof err.error === "string") throw new SphereError(res.status, err.error, typeof err.error_description === "string" ? err.error_description : "", undefined, retryAfter);
-      const e = err.error as { code?: unknown; message?: unknown; details?: unknown } | undefined;
-      throw new SphereError(res.status, typeof e?.code === "string" ? e.code : "http_error", typeof e?.message === "string" ? e.message : `${method} ${path}`, e?.details, retryAfter);
+      const oauth = errorCode(err.error);
+      if (oauth) throw new SphereError(res.status, oauth, what, typeof err.error_description === "string" ? err.error_description : undefined, retryAfter);
+      const e = err.error as { code?: unknown; message?: unknown } | undefined;
+      throw new SphereError(res.status, errorCode(e?.code) ?? "http_error", what, typeof e?.message === "string" ? e.message : undefined, retryAfter);
     }
-    if (o.schema) {
-      const errors = schemaErrors(o.schema, parsed);
-      if (errors.length) throw new SphereError(res.status, "bad_response", `${method} ${path}: the answer is not ${o.schema}: ${errors.join("; ")}`);
-    }
+    if (!strict) throw new SphereError(res.status, "bad_response", `${what}: the answer isn't JSON as the protocol writes it (a repeated member name, a fraction or a negative number)`);
+    if (o.schema && !matches(o.schema, parsed)) throw new SphereError(res.status, "bad_response", `${what}: the answer doesn't match ${o.schema}`);
     return parsed as T;
   }
 
@@ -278,8 +291,9 @@ export class SphereApi {
     const entries = [...first.entries];
     while (entries.length < first.head.seq) {
       const page = await this.audit(token, sphere, { fromSeq: entries.length + 1, limit: 1000 });
-      if (!page.entries.length) throw new SphereError(200, "bad_response", `the chain stops at ${entries.length}, short of its head ${first.head.seq}`);
-      entries.push(...page.entries.filter((e) => e.seq <= first.head.seq));
+      const fresh = page.entries.filter((e) => e.seq <= first.head.seq);
+      if (!fresh.length || fresh[0]!.seq !== entries.length + 1) throw new SphereError(200, "bad_response", `the chain stops at ${entries.length}, short of its head ${first.head.seq}`);
+      entries.push(...fresh);
     }
     return { sphere: first.sphere, entries, head: first.head };
   }

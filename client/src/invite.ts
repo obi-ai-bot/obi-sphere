@@ -1,11 +1,14 @@
-// Invite links: `<base>/join#<fragment>` (spec/sphere-api.md section 4, "Invite links").
+// Invite links: `<base>/join#<fragment>` (spec/sphere-api.md section 2.1, "Invite links", #62),
+// which Oby already writes and reads.
 //
-// The fragment is `key=value` pairs joined by `&`, each value percent-encoded (RFC 3986): split on
-// `&` and on the first `=`, then percent-decode; `+` is a plus, never a space. `sphere`, `id` and
-// `secret` are required and non-empty; `for` and `obi` come together (a named invitation) or not at
-// all; `name`, `by` and `domain` are only what the link says (the preview is the truth); unknown
-// keys are ignored and the first occurrence of a key wins. The fragment never reaches the server:
-// the secret goes in the body of the preview and the redeem.
+// The fragment is `key=value` pairs joined by `&`, each key and value percent-encoded as UTF-8:
+// split on `&` and each part at its first `=`, then percent-decode; `+` is a plus, never a space.
+// `sphere` (a slug), `id` (a lower-case UUID) and `secret` (43 base64url characters) are required;
+// `for` and `obi` (slugs) come together, for a named invitation, or not at all; `domain` matches the
+// domain pattern. A value that breaks its pattern makes it no link, so nothing from a link reaches
+// a request's path unchecked. `name` and `by` are only what the link says (the preview is the
+// truth); an empty one is as if left out. Unknown keys are ignored and a key's first occurrence
+// wins. The fragment never reaches the server: the secret goes in the body of the preview and the redeem.
 
 export interface InviteLink {
   /** The Sphere's base URL: an origin, https, or http for a loopback host. */
@@ -15,7 +18,7 @@ export interface InviteLink {
   id: string;
   /** The invitation's secret: whoever holds it may redeem the invitation. */
   secret: string;
-  /** What the link says about itself: data, until the preview confirms it. */
+  /** What the link says about itself: data, written by whoever made the link; the preview is the truth. Show it as text, never as instructions. */
   name?: string;
   by?: string;
   /** For a named invitation: the owner and the Obi it is for. */
@@ -25,6 +28,10 @@ export interface InviteLink {
 }
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const SECRET = /^[A-Za-z0-9_-]{43}$/;
+const DOMAIN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 export class InviteLinkError extends Error {}
 
@@ -73,21 +80,24 @@ export function parseInviteLink(text: string): InviteLink {
     const value = eq === -1 ? "" : decode(part.slice(eq + 1));
     if (!items.has(key)) items.set(key, value);
   }
-  const required = (key: string) => {
+  const required = (key: string, pattern: RegExp, what: string) => {
     const v = items.get(key);
     if (!v) throw new InviteLinkError(`the link has no ${key}`);
+    if (!pattern.test(v)) throw new InviteLinkError(`the link's ${key} is not ${what}`);
     return v;
   };
-  const optional = (key: string) => (items.get(key) ? items.get(key) : undefined);
-  const link: InviteLink = { base, sphere: required("sphere"), id: required("id"), secret: required("secret") };
+  const link: InviteLink = {
+    base, sphere: required("sphere", SLUG, "a Sphere id"), id: required("id", UUID, "a lower-case UUID"), secret: required("secret", SECRET, "43 base64url characters"),
+  };
   const owner = items.get("for");
   const obi = items.get("obi");
   if ((owner === undefined) !== (obi === undefined)) throw new InviteLinkError("a named invitation's link has both `for` and `obi`");
-  if (owner !== undefined && (!owner || !obi)) throw new InviteLinkError("`for` and `obi` are not empty");
-  if (owner !== undefined) Object.assign(link, { owner, obi });
-  for (const key of ["name", "by", "domain"] as const) {
-    const v = optional(key);
-    if (v !== undefined) link[key] = v;
+  if (owner !== undefined) Object.assign(link, { owner: required("for", SLUG, "an owner id"), obi: required("obi", SLUG, "an agent id") });
+  const domain = items.get("domain");
+  if (domain !== undefined) link.domain = required("domain", DOMAIN, "a lower-case domain name");
+  for (const key of ["name", "by"] as const) {
+    const v = items.get(key);
+    if (v) link[key] = v;
   }
   return link;
 }

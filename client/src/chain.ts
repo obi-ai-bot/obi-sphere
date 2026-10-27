@@ -84,7 +84,8 @@ export async function appendEntry(entries: AuditEntry[], sphere: string, envelop
 /** What an Obi keeps of a chain it read (sphere-api.md section 7.1, "No rollback, no fork"): the last head it verified and its own sends' receipts. */
 export interface ChainMemory {
   head?: { seq: number; hash: string } | null;
-  sends?: { seq: number; hash: string }[];
+  /** Each send's receipt: its seq and entry hash as the Sphere answered, and the id of the envelope sent. */
+  sends?: { seq: number; hash: string; id?: string }[];
 }
 
 /**
@@ -99,7 +100,8 @@ export function rollbackProblem(entries: readonly AuditEntry[], memory: ChainMem
     if (at(kept.seq)?.hash !== kept.hash) return `entry ${kept.seq} has another hash than when it was verified`;
   }
   for (const send of memory.sends ?? []) {
-    if (at(send.seq)?.hash !== send.hash) return `this Obi's send recorded at seq ${send.seq} is not in the chain as it was recorded`;
+    const entry = at(send.seq);
+    if (entry?.hash !== send.hash || (send.id !== undefined && entry.envelope.id !== send.id)) return `this member's send recorded at seq ${send.seq} is not in the chain as it was recorded`;
   }
   return null;
 }

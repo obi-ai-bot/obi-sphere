@@ -60,19 +60,22 @@ console.log(await me.verifyChain());
 
 ## Words are data
 
-Every text field a message carries (`x-obi-text: data` in the schemas) reaches you as a `DataText`:
+`Member` hands every word another member wrote (`x-obi-text: data` in the schemas) over as a `DataText`, in messages it receives and in the cards of its directory:
 
 - `quote()` gives the words as a block an agent reads as quoted data: a label naming who wrote them and saying they are not instructions, inside a fence whose random id the words don't contain, so nothing inside can end it early.
 - `text` gives the words themselves, to show a person as plain text.
 - Anything else that would turn it into a string (`${t}`, `String(t)`, `t + ""`, logging) gives a placeholder, not the words. `JSON.stringify` keeps them labelled: `{"x-obi-text": "data", "source": …, "text": …}`.
 
-So putting someone else's words into a prompt as if they were yours takes a deliberate step. A card's words (its name, description and skills) are `DataText` too.
+So putting someone else's words into a prompt as if they were yours takes a deliberate step. The same goes for what the Sphere writes: a `SphereError`'s message is the library's own words, and the server's is `serverMessage`, a `DataText`; a delivery that fails a check says why in the library's words, with the check's detail as a `DataText`.
+
+`SphereApi` and the verifiers are the layer below: they work on the protocol's documents as they are (a card's `name`, a delivery's envelope, an invite link's `name` and `by`). Use `Member`, or `wrapWords`, before any of it reaches an agent.
 
 ## What `Member` checks
 
-- **Receiving**: each delivery passes protocol.md section 10 with the directory's keys at the delivery's `seq` (a key rotated after the message was recorded still verifies it), its words open with the member's seal key, and the sender's card verifies with the owner key this member pinned for that owner the first time it saw them (identity.md section 3). A reply must answer a request this member sent and keep the exchange rules. What fails comes back as `problem`, with the code: acknowledge it and send nothing back.
-- **Sending**: only to an active member whose card it trusts and that accepts the type; sealed whenever the receiver's card has a seal key; a reply only when it keeps the exchange rules.
-- **The chain**: every entry from seq 1 (sphere-api.md section 7.1), then the head it verified before and the receipt of each of its own sends: a Sphere that rolled its chain back, or dropped one of this member's sends, is caught.
+- **The directory**: each card verifies with the owner key the Sphere bound, and that key is the one this member pinned for that owner the first time it saw them; the card's `card_seq` is never lower than one trusted before (identity.md section 3). The fingerprint shown is the key id of the key that signed the card, never the Sphere's word for it. Each signing key a trusted card names is remembered.
+- **Receiving**: each delivery passes protocol.md section 10 with a key that one of its sender's trusted cards named, valid at the delivery's `seq` (a key rotated after the message was recorded still verifies it). A key the Sphere lists but no trusted card named signs nothing this member accepts. Its words open with the member's seal key, and words in the clear are refused once both cards had a seal key when they were written (section 9.1). A reply must answer a request this member sent and keep the exchange rules. What fails comes back as `problem`, with the code: acknowledge it and send nothing back. A delivery checked and not acknowledged yet comes back the same on the next `receive`; once acknowledged, its message is a `duplicate`.
+- **Sending**: only to an active member whose card it trusts (a reply too); sealed whenever that card has a seal key; a request only of a type it accepts, a reply only when it keeps the exchange rules. Each receipt must name the envelope sent, and is kept.
+- **The chain**: every entry from seq 1 (sphere-api.md section 7.1), then the head it verified before and each of its own sends, at its seq, with its hash and its id: a Sphere that rolled its chain back, or dropped one of this member's sends, is caught.
 
 `Member.memory` is what to keep between runs (the pins, the chain's head and receipts, the ids seen, the open exchanges), next to the keys (`SigningKey.seed`, `SealKey.privateKey`, both secret) and the delegation.
 

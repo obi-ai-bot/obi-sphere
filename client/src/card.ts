@@ -2,7 +2,7 @@
 // the checks of section 2.2. `name`, `description` and the skills' words are data: never read here.
 
 import { b64url, fromB64url, keyIdOrNull, sealKeyIdOrNull, verifyEd25519, type SigningKey } from "./crypto.ts";
-import { canonicalBytes, utf8, type JsonObject } from "./json.ts";
+import { canonicalBytes, decodeUtf8Strict, parseStrict, utf8, type JsonObject } from "./json.ts";
 import { CLOCK_SKEW_SECONDS, OK, fail, seconds, timestamp, type Verdict } from "./envelope.ts";
 import { matches, schemaErrors } from "./schemas.ts";
 
@@ -64,7 +64,7 @@ export async function verifyCard(value: unknown, ctx: CardContext): Promise<Verd
   const sig = card.signatures[0]!;
   let header: unknown;
   try {
-    header = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(fromB64url(sig.protected)));
+    header = parseStrict(decodeUtf8Strict(fromB64url(sig.protected)));
   } catch {
     return fail("card_invalid", "the protected header is not JSON");
   }
