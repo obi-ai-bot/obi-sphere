@@ -1,6 +1,8 @@
 // An Obysphere's HTTP API (spec/sphere-api.md): one method per call, each answer read with the
 // protocol's strict JSON rules and checked against its wire schema before it is returned, so a
-// client never acts on a body the spec doesn't allow. This is the raw layer: what it returns is
+// client never acts on a body the spec doesn't allow. Two answers are checked part by part: the
+// directory (an entry that breaks the member schema is left out) and the deliveries (each one's own
+// fields; its envelope is the receiver's to judge, so it comes back unchecked). This is the raw layer: what it returns is
 // the protocol's documents as they are (a card's name, a delivery's envelope); Member hands their
 // words over as DataText. An error's message is the library's own words; the server's message is
 // kept as a DataText.
@@ -303,7 +305,8 @@ export class SphereApi {
       const x = d as Record<string, unknown>;
       return !!x && typeof x === "object" && Object.keys(x).sort().join(",") === "delivery_id,envelope,relayed_at,seq" &&
         typeof x.delivery_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(x.delivery_id) &&
-        Number.isSafeInteger(x.seq) && (x.seq as number) >= 1 && typeof x.relayed_at === "string" && !!x.envelope && typeof x.envelope === "object" && !Array.isArray(x.envelope);
+        Number.isSafeInteger(x.seq) && (x.seq as number) >= 1 && typeof x.relayed_at === "string" && /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/.test(x.relayed_at) &&
+        !!x.envelope && typeof x.envelope === "object" && !Array.isArray(x.envelope);
     };
     if (!(answer.deliveries as unknown[]).every(shaped)) throw new SphereError(200, "bad_response", "a delivery's own fields don't match the protocol");
     return answer.deliveries as Delivery[];

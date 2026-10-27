@@ -53,7 +53,7 @@ console.log(await me.verifyChain());
 | `seal` | Seal keys, sealing and opening the words, check 11 (protocol.md section 9.1) | Node (`node:crypto`: WebCrypto has no ChaCha20-Poly1305) |
 | `text` | `DataText` and the body wrapper (protocol.md section 8) | anywhere |
 | `invite` | Reading and writing invite links | anywhere |
-| `sphere` | `SphereApi`: every call a member or an owner makes, each answer checked against its schema | anywhere with `fetch` |
+| `sphere` | `SphereApi`: every call a member or an owner makes, each answer checked against its schema (a delivery's envelope is left to the receiver, a directory entry that breaks the schema left out) | anywhere with `fetch` |
 | `owner`, `member` | `Owner` (cards, delegations, admin calls) and `Member` (join, send, receive, reply, the directory with pinned owner keys, the chain) | Node |
 
 `@obysphere/client/protocol` is the part that needs only WebCrypto, for a Worker or a browser.
@@ -77,9 +77,9 @@ So putting someone else's words into a prompt as if they were yours takes a deli
 - **Sending**: only to an active member whose card it trusts (a reply too); its body checked against its action's schema first, so no field travels unsealed; sealed whenever that card has a seal key; a request only of a type it accepts, a reply only when it keeps the exchange rules, and to an expired request only a `decline` with reason `expired`. Each receipt must name the envelope sent, and is kept.
 - **The chain**: every entry from seq 1 of this member's Sphere (sphere-api.md section 7.1), then the head it verified before and each of its own sends, at its seq, with its hash and its id: a Sphere that rolled its chain back, or dropped one of this member's sends, is caught. The keys it checks with are the directory's history, as 7.1 says; a key from before this member saw a card naming it can't be checked against an owner's signature, so the answer lists the entries signed with a key no trusted card named (`unvouched`). Its entries say what each message is, never what it says; `raw()` gives them as recorded, for keeping or another verifier.
 - **Its own card**: when its card started carrying a seal key is kept at join (`memory.sealedSince`), so the Sphere can't switch `not_sealed` off by showing it an older card. A member that rotates its seal key keeps the old one (`previousSealKeys`) until what was sealed for it expires.
-- **Its owner's key** is pinned at join, or with `ownerKey` when a member is made from what was kept; a changed owner key is trusted only through `acceptOwnerKey`, after the people compared fingerprints.
+- **Its owner's key** is pinned at join, or with `ownerKey` when a member is made from what was kept; a changed owner key is trusted only through `acceptOwnerKey`, after the people compared fingerprints. Each member's owner is kept as first seen too: a card that gives it another owner isn't trusted until `acceptMemberOwner`.
 
-`Member.memory` is what to keep between runs (the pins, the chain's head and receipts, the ids seen, the open exchanges), next to the keys (`SigningKey.seed`, `SealKey.privateKey`, both secret) and the delegation.
+`Member.memory` holds the envelopes of open exchanges as they came, words in the clear included: keep it, never hand it to an agent. It is what to keep between runs (the pins, the chain's head and receipts, the ids seen, the open exchanges), next to the keys (`SigningKey.seed`, `SealKey.privateKey`, both secret) and the delegation.
 
 ## Checks
 

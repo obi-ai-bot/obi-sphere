@@ -57,6 +57,8 @@ export interface Peer {
 export interface MemberMemory {
   /** The owner key first seen for each owner (trust on first use). */
   owners: Record<string, string>;
+  /** The owner and owner key first seen for each member: a member doesn't change owners silently. */
+  memberOwners: Record<string, { owner: string; owner_key: string }>;
   /** The highest card_seq trusted for each member. */
   cardSeq: Record<string, number>;
   /** The signing key ids each member's trusted cards named: only these sign what this member accepts from it. */
@@ -72,7 +74,11 @@ export interface MemberMemory {
   exchanges: Record<string, { request: Envelope; replies: Envelope[] }>;
 }
 
-export const emptyMemory = (): MemberMemory => ({ owners: {}, cardSeq: {}, cardKeys: {}, chain: { head: null, sends: [] }, seen: {}, delivered: {}, exchanges: {} });
+export const emptyMemory = (): MemberMemory => ({ owners: {}, memberOwners: {}, cardSeq: {}, cardKeys: {}, chain: { head: null, sends: [] }, seen: {}, delivered: {}, exchanges: {} });
+
+/** A member's or an owner's entry in a memory map: its own property only, so an id like `constructor` is just an id. */
+const own = <T>(map: Record<string, T>, key: string): T | undefined => (Object.hasOwn(map, key) ? map[key] : undefined);
+const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /** A delivered message that passed every check: its words as DataText. */
 export interface ReceivedMessage {
@@ -182,7 +188,8 @@ export class Member {
     this.#delegation = o.delegation;
     // A memory kept by an earlier version lacks the newer parts: they start empty.
     this.memory = { ...emptyMemory(), ...(o.memory ?? {}) };
-    if (o.ownerKey && this.memory.owners[o.owner] === undefined) this.memory.owners[o.owner] = o.ownerKey;
+    if (o.ownerKey && own(this.memory.owners, o.owner) === undefined) this.memory.owners[o.owner] = o.ownerKey;
+    if (o.ownerKey && own(this.memory.memberOwners, o.obi) === undefined) this.memory.memberOwners[o.obi] = { owner: o.owner, owner_key: o.ownerKey };
   }
 
   /** The owner's delegation: secret like a key, so it is never enumerable or serialized. */
@@ -205,6 +212,13 @@ export class Member {
    */
   acceptOwnerKey(owner: string, publicKey: string): void {
     this.memory.owners[owner] = publicKey;
+    for (const [obi, m] of Object.entries(this.memory.memberOwners)) if (m.owner === owner) this.memory.memberOwners[obi] = { owner, owner_key: publicKey };
+  }
+
+  /** Trusts `obi` acting for another owner than the one first seen, after the people involved confirmed it out of band. */
+  acceptMemberOwner(obi: string, owner: string, publicKey: string): void {
+    this.memory.memberOwners[obi] = { owner, owner_key: publicKey };
+    this.memory.owners[owner] = publicKey;
   }
 
   /** Joins with an invitation: the owner signs the card and the delegation, the member redeems it (sphere-api.md section 4). */
@@ -223,6 +237,7 @@ export class Member {
     const memory = emptyMemory();
     if (o.sealKey) memory.sealedSince = cardParams(card).issued_at;
     memory.owners[o.owner.id] = o.owner.key.publicKey;
+    memory.memberOwners[o.obi] = { owner: o.owner.id, owner_key: o.owner.key.publicKey };
     memory.cardSeq[o.obi] = 1;
     memory.cardKeys[o.obi] = [o.key.keyId];
     const delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
@@ -261,13 +276,16 @@ export class Member {
     if (!verdict.ok || !params) return untrusted(`its card fails: ${verdict.ok ? "" : verdict.code}`);
     if (params.obi_id !== m.obi || params.owner !== m.owner || params.sphere !== this.sphere) return untrusted("its card names another member");
     if (m.status === "active" && !m.keys.some((k) => k.key_id === params.key_id && k.valid_until_seq === null)) return untrusted("its card's key is not its current key");
-    const pinned = this.memory.owners[m.owner];
+    const first = own(this.memory.memberOwners, m.obi);
+    if (first && (first.owner !== params.owner || first.owner_key !== params.owner_key)) return untrusted(`its owner changed since it was first seen (from ${first.owner}): confirm it with them before trusting it`);
+    const pinned = own(this.memory.owners, m.owner);
     if (pinned !== undefined && pinned !== params.owner_key) return untrusted(`its owner ${m.owner}'s key changed: compare fingerprints with them before trusting it`);
-    const kept = this.memory.cardSeq[m.obi];
+    const kept = own(this.memory.cardSeq, m.obi);
     if (kept !== undefined && params.card_seq < kept) return untrusted(`its card is older (card_seq ${params.card_seq}) than one trusted before (${kept})`);
     this.memory.owners[m.owner] = params.owner_key;
+    this.memory.memberOwners[m.obi] = { owner: params.owner, owner_key: params.owner_key };
     this.memory.cardSeq[m.obi] = params.card_seq;
-    const named = this.memory.cardKeys[m.obi] ?? [];
+    const named = own(this.memory.cardKeys, m.obi) ?? [];
     if (!named.includes(params.key_id)) this.memory.cardKeys[m.obi] = [...named, params.key_id];
     return { ...peer, trusted: true };
   }
@@ -287,7 +305,7 @@ export class Member {
   /** The directory's keys that a trusted card of their member named: what a delivery may be signed with. */
   #trustedKeys(): Record<string, DirectoryKey> {
     const all = this.#directoryKeys();
-    return Object.fromEntries(Object.entries(all).filter(([id, k]) => this.memory.cardKeys[k.obi]?.includes(id)));
+    return Object.fromEntries(Object.entries(all).filter(([id, k]) => own(this.memory.cardKeys, k.obi)?.includes(id)));
   }
 
   async #sendSigned(unsigned: UnsignedEnvelope, recipient: Peer): Promise<{ envelope: Envelope; receipt: SendReceipt }> {
@@ -333,7 +351,7 @@ export class Member {
 
   /** Replies to a request this member received (or, for the sender's own replies, sent): to a trusted member, keeping the exchange rules. */
   async reply(requestId: string, type: string, body: JsonObject, o: { expiresIn?: number } = {}): Promise<{ id: string; envelope: Envelope; receipt: SendReceipt }> {
-    const exchange = this.memory.exchanges[requestId];
+    const exchange = own(this.memory.exchanges, requestId);
     if (!exchange) throw new Error(`no exchange ${requestId}`);
     // After a request expires its receiver acts on it no more: at most a decline saying so (protocol.md 3, 11 step 6).
     const expired = exchange.request.from !== this.id && seconds(exchange.request.expires_at) <= nowSeconds();
@@ -388,18 +406,18 @@ export class Member {
     const env = d.envelope;
     const from = typeof env?.from === "string" ? env.from : "";
     const reject = (code: string, detail: string): Received => ({
-      ...base, problem: { code, message: PROBLEMS[code] ?? "it fails a check", detail: new DataText(detail, { from: from || "unknown", type: "verdict", field: "/" }) },
+      ...base, problem: { code, message: own(PROBLEMS, code) ?? "it fails a check", detail: new DataText(detail, { from: SLUG.test(from) ? from : "an unknown sender", type: "verdict", field: "/" }) },
     });
     // A delivery this member checked already and didn't acknowledge: the same message again.
     // Only the very same envelope, byte for byte (its signature covers every other member): another with the same id is a duplicate.
-    const before = this.memory.delivered[d.delivery_id];
+    const before = own(this.memory.delivered, d.delivery_id);
     const again = typeof env?.id === "string" && before?.id === env.id && before.signature === env.signature && Object.hasOwn(this.memory.seen, env.id);
     const keyId = typeof env?.key_id === "string" ? env.key_id : "";
     const sender = await this.#peer(from, !Object.hasOwn(this.#trustedKeys(), keyId));
     // Check 11's "both seal": the sender's trusted card and this member's own card, as it published
     // it (never as the Sphere shows it), had a seal key when the message was written.
-    const own = this.#peers?.get(this.id);
-    const ownSince = this.memory.sealedSince ?? (own?.trusted && own.sealPublicKey ? own.issuedAt : undefined);
+    const self = this.#peers?.get(this.id);
+    const ownSince = this.memory.sealedSince ?? (self?.trusted && self.sealPublicKey ? self.issuedAt : undefined);
     const bothSealed = !!sender?.trusted && !!sender.sealPublicKey && ownSince !== undefined &&
       seconds(typeof env?.created_at === "string" ? env.created_at : "") >= Math.max(seconds(sender.issuedAt), seconds(ownSince)) + CLOCK_SKEW_SECONDS;
     const verdict = await verifyAndOpen(env, {
@@ -415,7 +433,7 @@ export class Member {
       owner: sender.owner, body: wrapWords(env.type, verdict.body, { from: env.from, owner: sender.owner }),
     };
     if (isReplyType(env.type)) {
-      const exchange = this.memory.exchanges[env.in_reply_to!];
+      const exchange = own(this.memory.exchanges, env.in_reply_to!);
       if (!exchange) return reject("bad_reply", "it replies to no request this member knows");
       if (!again) {
         const problem = exchangeProblem(exchangeMessage(env), exchangeMessage(exchange.request), exchange.replies.map(exchangeMessage));
@@ -482,7 +500,7 @@ export class Member {
     const last = page.entries[page.entries.length - 1];
     const head = last ? { seq: last.seq, hash: last.hash } : { seq: 0, hash: "0".repeat(64) };
     this.memory.chain.head = head;
-    const vouched = (e: AuditEntry) => this.memory.cardKeys[e.envelope.from]?.includes(e.envelope.key_id) ?? false;
+    const vouched = (e: AuditEntry) => own(this.memory.cardKeys, e.envelope.from)?.includes(e.envelope.key_id) ?? false;
     const entries = page.entries.map((e): ChainEntry => ({
       seq: e.seq, hash: e.hash, recorded_at: e.recorded_at, id: e.envelope.id, type: e.envelope.type, from: e.envelope.from, to: e.envelope.to,
       key_id: e.envelope.key_id, sealed: e.envelope.seal !== undefined,
