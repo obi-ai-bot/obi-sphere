@@ -523,6 +523,15 @@ export function buildFixtures() {
   cardCase("invalid-card-vendors-empty", "An empty vendors list.", withParams({ ...runtime, vendors: [] }), "reject", "card_invalid");
   cardCase("invalid-card-vendor-repeated", "The same vendor twice.", withParams({ ...runtime, vendors: ["anthropic", "anthropic"] }), "reject", "card_invalid");
   cardCase("invalid-card-vendor-not-an-id", "A vendor named with a capital.", withParams({ ...runtime, vendors: ["Anthropic"] }), "reject", "card_invalid");
+  // The bounds (common.schema.json): 16 vendors, 64 features, 64-character ids, a version without spaces.
+  const ids = (n, prefix) => Array.from({ length: n }, (_, i) => `${prefix}${String(i).padStart(2, "0")}`);
+  cardCase("valid-card-sixteen-vendors", "As many vendors as a card may list.", withParams({ ...runtime, vendors: ids(16, "vendor-") }), "accept");
+  cardCase("invalid-card-seventeen-vendors", "One vendor more than a card may list.", withParams({ ...runtime, vendors: ids(17, "vendor-") }), "reject", "card_invalid");
+  cardCase("invalid-card-sixty-five-features", "One feature more than a card may list.", withParams({ ...runtime, features: ["card_runtime", ...ids(64, "feature_")] }), "reject", "card_invalid");
+  cardCase("valid-card-runtime-id-sixty-four", "A runtime id as long as an id may be.", withParams({ ...runtime, runtime: { id: "a".repeat(64), version: "1.0.0" } }), "accept");
+  cardCase("invalid-card-runtime-id-sixty-five", "A runtime id one character too long.", withParams({ ...runtime, runtime: { id: "a".repeat(65), version: "1.0.0" } }), "reject", "card_invalid");
+  cardCase("invalid-card-runtime-version-with-a-space", "A runtime version with a space in it.", withParams({ ...runtime, runtime: { id: "claude", version: "2.1.0 beta" } }), "reject", "card_invalid");
+  cardCase("valid-card-version-says-card-runtime", "A card from before features that says, in its version's build metadata, that it takes card_runtime.", (() => { const c = cardFor("obi-a", "owner-a", A, OA, { version: "1.4.0+card-runtime" }); return signCard(c, OA.privateKey, OA.keyId); })(), "accept");
   const runtimeTampered = withParams(runtime);
   runtimeTampered.capabilities.extensions[0].params.vendors = ["anthropic", "openai"];
   cardCase("invalid-card-vendors-changed-after-signing", "A vendor added after the owner signed.", runtimeTampered, "reject", "bad_signature");
@@ -663,7 +672,15 @@ export function buildFixtures() {
   const cardRuntime = withParams(runtime);
   wireCase("valid-redeem-card-with-runtime", "Joining with a card that declares its runtime and vendors.", "wire/redeem.request", { secret, owner_key: OA.publicKey, card: cardRuntime }, "accept");
   wireCase("valid-card-update-with-runtime", "A new card that adds its runtime and vendors.", "wire/card-update.request", { card: cardRuntime }, "accept");
-  wireCase("valid-health-takes-card-runtime", "An Obysphere that takes sealed words and the card's runtime and vendors.", "wire/health.response", { ok: true, protocol: PROTOCOL, seal: true, features: ["card_runtime"] }, "accept");
+  // The additions an Obysphere takes (sphere-api.md section 2): GET /v0.1/features, never in health.
+  const FEAT = "wire/features.response";
+  wireCase("valid-features-card-runtime", "An Obysphere that takes the card's runtime and vendors.", FEAT, { features: ["card_runtime"] }, "accept");
+  wireCase("valid-features-none", "An Obysphere that takes no addition.", FEAT, { features: [] }, "accept");
+  wireCase("valid-features-unknown", "A feature the client doesn't know: it ignores it.", FEAT, { features: ["card_runtime", "some_later_feature"] }, "accept");
+  wireCase("invalid-features-repeated", "card_runtime twice.", FEAT, { features: ["card_runtime", "card_runtime"] }, "reject");
+  wireCase("invalid-features-not-an-id", "A feature named in words.", FEAT, { features: ["Card runtime"] }, "reject");
+  wireCase("invalid-features-missing", "An answer without the list.", FEAT, {}, "reject");
+  wireCase("invalid-health-with-features", "The features in health: health stays as it was, for implementations from before.", "wire/health.response", { ok: true, protocol: PROTOCOL, seal: true, features: ["card_runtime"] }, "reject");
   wireCase("valid-invitation-response-open", "An open invitation as the Sphere answers it.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, max_uses: 50, secret, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-response-owner-without-obi", "An answer naming an owner but no obi.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, owner: "owner-c", max_uses: 1, secret, expires_at: NOW }, "reject");
   wireCase("valid-invitation-preview-request", "The secret, and nothing else.", "wire/invitation-preview.request", { secret }, "accept");

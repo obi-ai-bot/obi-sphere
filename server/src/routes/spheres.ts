@@ -12,7 +12,11 @@ import { ZERO_HASH } from "../protocol/chain.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
 import { checkSignIn, creatorWorkspaces, useSignIn, type SignIn } from "../signin.ts";
 
-export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true, features: [...FEATURES].sort() });
+export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
+
+/** `GET /v0.1/features`: the additions to obi/0.1 this server takes, in code-point order. Not in
+ *  health, which implementations from before check against its closed schema. */
+export const features = (): Response => json(200, { features: [...FEATURES].sort() });
 
 /** Where someone without Oby gets it: its README, whose first lines link the latest download. */
 const OBY_DOWNLOAD = "https://github.com/obi-ai-bot/oby#readme";

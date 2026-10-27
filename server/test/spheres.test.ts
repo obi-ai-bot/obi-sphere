@@ -12,9 +12,17 @@ describe("health", () => {
     const call = makeCall(new Clock());
     const r = await call("GET", "/v0.1/health");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ ok: true, protocol: "obi/0.1", seal: true, features: ["card_runtime"] });
+    expect(r.body).toEqual({ ok: true, protocol: "obi/0.1", seal: true });
     expectSchema("healthResponse", r.body);
     expect(r.headers.get("Content-Type")).toBe("application/json");
+  });
+
+  it("lists the additions it takes at /v0.1/features, never in health (spec/README.md, Versions)", async () => {
+    const call = makeCall(new Clock());
+    const r = await call("GET", "/v0.1/features");
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ features: ["card_runtime"] });
+    expectSchema("featuresResponse", r.body);
   });
 
   it("tells someone who opens an invite link in a browser what to do with it", async () => {

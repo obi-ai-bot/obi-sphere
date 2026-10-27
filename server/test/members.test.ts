@@ -434,6 +434,51 @@ describe("the card's runtime and vendors (identity.md section 2.3)", () => {
   });
 });
 
+describe("publishing a card with an addition (identity.md section 2.3)", () => {
+  const RUNTIME = { features: ["card_runtime"], runtime: { id: "claude", version: "2.1.0" }, vendors: ["anthropic"] };
+
+  it("is 409 conflict while another active member's card doesn't take card_runtime, and takes it once every one does", async () => {
+    const w = await team();
+    const token = await w.obiToken("obi-ernesto");
+    const ownerKey = await w.ownerKey("ernesto");
+    const key = w.obis.get("obi-ernesto")!.key;
+    const early = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: key, cardSeq: 2, issuedAt: w.clock.ts(), params: RUNTIME });
+    const refused = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token, body: { card: early } });
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("conflict");
+    expect(refused.body.error.message).toContain("obi-wellington");
+    // obi-wellington's owner signs it a card whose version says it takes card_runtime.
+    const wToken = await w.obiToken("obi-wellington");
+    const wKey = w.obis.get("obi-wellington")!.key;
+    const tagged = await makeCard({ sphere: "e2e", obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, cardSeq: 2, issuedAt: w.clock.ts(), version: "0.3.0+card-runtime" });
+    expect((await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken, body: { card: tagged } })).status).toBe(200);
+    const now = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token, body: { card: early } });
+    expect(now.status, JSON.stringify(now.body)).toBe(200);
+    // A newcomer from before can still join (its card carries none), and holds back the next card that would.
+    const inv = await w.invite("sangam", "obi-sangam");
+    const sKey = await w.ownerKey("sangam");
+    const plain = await makeCard({ sphere: "e2e", obi: "obi-sangam", owner: "sangam", ownerKey: sKey, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    expect((await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card: plain } })).status).toBe(201);
+    const later = await makeCard({ sphere: "e2e", obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, cardSeq: 3, issuedAt: w.clock.ts(), params: RUNTIME });
+    expect((await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken, body: { card: later } })).body.error.code).toBe("conflict");
+  });
+
+  it("is 409 conflict at redeem too, and counts only active members", async () => {
+    const w = await team();
+    const inv = await w.invite("sangam", "obi-sangam");
+    const sKey = await w.ownerKey("sangam");
+    const card = await makeCard({ sphere: "e2e", obi: "obi-sangam", owner: "sangam", ownerKey: sKey, obiKey: await newKey(), issuedAt: w.clock.ts(), params: RUNTIME });
+    const r = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card } });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe("conflict");
+    // With both other members revoked, nothing holds it back.
+    const admin = await w.ownerToken();
+    for (const obi of ["obi-wellington", "obi-ernesto"]) expect((await w.call("DELETE", `/v0.1/spheres/e2e/members/${obi}`, { token: admin })).status).toBe(200);
+    const again = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card } });
+    expect(again.status, JSON.stringify(again.body)).toBe(201);
+  });
+});
+
 describe("revocation", () => {
   it("closes the key, marks the member revoked, and answers the same when revoked again", async () => {
     const w = await team();

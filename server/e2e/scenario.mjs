@@ -211,10 +211,7 @@ const steps = [
         await sleep(250);
       }
       // A Sphere that takes sealed words says `seal: true` (protocol.md section 9.1); one deployed before doesn't.
-      // `features` lists the additions it takes (spec/README.md, "Versions"), when it takes any.
-      const { features, ...rest } = health.body;
-      assert(same({ seal: true, ...rest }, { ok: true, protocol: "obi/0.1", seal: true }), `health: ${show(health.body)}`);
-      assert(features === undefined || (Array.isArray(features) && features.every((f) => typeof f === "string")), `health's features: ${show(features)}`);
+      assert(same({ seal: true, ...health.body }, { ok: true, protocol: "obi/0.1", seal: true }), `health: ${show(health.body)}`);
       // 1.1b Nothing on the port reaches the D1 around the Sphere's checks: wrangler's Local
       // Explorer and local observability (on by default, no token, any SQL) are off, so their
       // paths are the Sphere's own 404.

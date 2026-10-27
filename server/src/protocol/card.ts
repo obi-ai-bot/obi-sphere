@@ -40,6 +40,34 @@ export interface AgentCard {
 /** The Obi extension's params of a card that matched the schema. */
 export const cardParams = (card: AgentCard): CardParams => card.capabilities.extensions[0]!.params;
 
+/** The feature a card's `features`, `runtime` and `vendors` come with (identity.md section 2.3). */
+export const CARD_RUNTIME = "card_runtime";
+
+/** The additions a card's own members need its readers to take (identity.md section 2.3). */
+export function featuresUsed(p: CardParams): string[] {
+  return p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined ? [CARD_RUNTIME] : [];
+}
+
+/** The additions a card says its agent takes: its `features`, and `card_runtime` when its
+ *  `version`'s build metadata (after the first `+`, split at `.`) has `card-runtime`. */
+export function featuresTaken(card: AgentCard): Set<string> {
+  const taken = new Set(cardParams(card).features ?? []);
+  const version = typeof card.version === "string" ? card.version : "";
+  const plus = version.indexOf("+");
+  if (plus >= 0 && version.slice(plus + 1).split(".").includes("card-runtime")) taken.add(CARD_RUNTIME);
+  return taken;
+}
+
+/** Why a card can't be published yet ("Publishing a card with an addition"): the first member of
+ *  `others` (the other active members' cards, by agent id) that doesn't take an addition it uses. */
+export function publishingProblem(p: CardParams, others: { obi: string; card: AgentCard }[]): string | null {
+  for (const feature of featuresUsed(p)) {
+    const behind = others.find((o) => !featuresTaken(o.card).has(feature));
+    if (behind) return `${behind.obi}'s card doesn't take ${feature}: a card with its members waits until every active member's does`;
+  }
+  return null;
+}
+
 export function cardSigningInput(card: Record<string, unknown>, protectedHeader: string): Uint8Array {
   const { signatures: _signatures, ...unsigned } = card;
   return utf8(`${protectedHeader}.${b64url(canonicalBytes(unsigned))}`);

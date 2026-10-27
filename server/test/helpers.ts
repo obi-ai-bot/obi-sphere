@@ -80,6 +80,8 @@ export interface CardOptions {
   seal?: SealKey;
   /** More params, such as `features`, `runtime` and `vendors` (identity.md section 2.3). */
   params?: Record<string, unknown>;
+  /** The card's `version`, when not 0.1.0. */
+  version?: string;
 }
 
 export interface SealKey {
@@ -112,7 +114,7 @@ export async function makeCard(o: CardOptions): Promise<Record<string, unknown>>
     description: "A personal delegate for an engineer.",
     url: `${BASE}/v0.1/spheres/${o.sphere}/members/${o.obi}`,
     preferredTransport: "HTTP+JSON",
-    version: "0.1.0",
+    version: o.version ?? "0.1.0",
     capabilities: {
       streaming: false,
       pushNotifications: false,

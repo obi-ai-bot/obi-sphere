@@ -10,7 +10,7 @@ import { deleteRunner, putRunner } from "./routes/runner.ts";
 import { getMemberRoute, invite, listInvitations, listMembers, previewInvitation, redeem, revoke, updateCard, withdrawInvitation } from "./routes/members.ts";
 import { ack, deliveries, send } from "./routes/messages.ts";
 import { getPolicy, putPolicy } from "./routes/policy.ts";
-import { createSphere, deleteAdmin, deleteImage, deleteSphere, getImage, getSphereRoute, health, joinPage, putAdmin, putImage, updateSphere } from "./routes/spheres.ts";
+import { createSphere, deleteAdmin, deleteImage, deleteSphere, features, getImage, getSphereRoute, health, joinPage, putAdmin, putImage, updateSphere } from "./routes/spheres.ts";
 import { finishSignIn, startSignIn } from "./signin.ts";
 
 type Handler = (request: Request, env: Env, deps: Deps, ...params: string[]) => Promise<Response> | Response;
@@ -18,6 +18,7 @@ type Handler = (request: Request, env: Env, deps: Deps, ...params: string[]) => 
 const SEGMENT = "([^/]+)";
 const ROUTES: [string, RegExp, Handler][] = [
   ["GET", /^\/v0\.1\/health$/, health],
+  ["GET", /^\/v0\.1\/features$/, features],
   ["GET", /^\/join$/, joinPage],
   ["POST", /^\/v0\.1\/spheres$/, createSphere],
   ["POST", /^\/v0\.1\/oauth\/token$/, tokenEndpoint],

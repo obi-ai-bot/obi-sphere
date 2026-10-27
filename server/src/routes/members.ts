@@ -7,7 +7,7 @@ import {
 } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
-import { cardParams, verifyCard, type AgentCard } from "../protocol/card.ts";
+import { cardParams, featuresUsed, publishingProblem, verifyCard, type AgentCard } from "../protocol/card.ts";
 import { constantTimeEqual, keyIdOf, randomToken, sha256, sha256Hex, uuid } from "../protocol/crypto.ts";
 import { timestamp } from "../protocol/envelope.ts";
 import { canonicalize, utf8 } from "../protocol/json.ts";
@@ -21,6 +21,16 @@ const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
 const obiTaken = async (db: D1Database, sphere: string, obi: string) => (await getMember(db, sphere, obi)) !== null;
 const keyTaken = async (db: D1Database, sphere: string, keyId: string) =>
   (await db.prepare("SELECT 1 AS taken FROM member_keys WHERE sphere = ?1 AND key_id = ?2").bind(sphere, keyId).first()) !== null;
+
+/** 409 conflict for a card that publishes an addition another active member doesn't take yet
+ *  (identity.md section 2.3, "Publishing a card with an addition"). */
+async function requirePublishable(db: D1Database, sphere: string, obi: string, card: AgentCard): Promise<void> {
+  const p = cardParams(card);
+  if (featuresUsed(p).length === 0) return;
+  const rows = await db.prepare("SELECT obi, card FROM members WHERE sphere = ?1 AND status = 'active' AND obi != ?2").bind(sphere, obi).all<{ obi: string; card: string }>();
+  const problem = publishingProblem(p, rows.results.map((r) => ({ obi: r.obi, card: JSON.parse(r.card) as AgentCard })));
+  if (problem) throw apiError("conflict", problem);
+}
 
 // ---------------------------------------------------------------------------------------------
 // POST /v0.1/spheres/{sphere}/invitations
@@ -186,6 +196,8 @@ export async function redeem(request: Request, env: Env, deps: Deps, sphereId: s
     // 6 and 7. Ids are never reused.
     if (await keyTaken(env.DB, sphere.id, p.key_id)) throw apiError("conflict", "another member uses this key_id");
     if (await obiTaken(env.DB, sphere.id, p.obi_id)) throw apiError("conflict", `${p.obi_id} is or was a member: Obi ids are never reused`);
+    // 8. No addition another active member doesn't take.
+    await requirePublishable(env.DB, sphere.id, p.obi_id, req.card);
 
     const joinedAt = timestamp(now);
     const owner: OwnerRow = bound ?? { sphere: sphere.id, owner: p.owner, owner_key: req.owner_key, owner_key_id: await keyIdOf(req.owner_key) };
@@ -275,6 +287,7 @@ export async function updateCard(request: Request, env: Env, deps: Deps, sphereI
     const current = keys.find((k) => k.valid_until_seq === null);
     const rotate = current?.key_id !== p.key_id;
     if (rotate && (await keyTaken(env.DB, sphere.id, p.key_id))) throw apiError("conflict", "this key_id is in use");
+    await requirePublishable(env.DB, sphere.id, obi, card);
     const h = sphere.head_seq;
     const statements = [env.DB.prepare("UPDATE members SET card = ?1, card_seq = ?2 WHERE sphere = ?3 AND obi = ?4").bind(canonicalize(card), p.card_seq, sphere.id, obi)];
     let newKeys = keys;
