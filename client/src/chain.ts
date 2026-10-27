@@ -4,7 +4,7 @@ import { keyIdOrNull, sha256Hex } from "./crypto.ts";
 import { canonicalBytes, utf8 } from "./json.ts";
 import { schemaErrors } from "./schemas.ts";
 import {
-  CLOCK_SKEW_SECONDS, OK, exchangeMessage, exchangeProblem, fail, isReplyType, keyValidAt, seconds, semanticProblems,
+  CLOCK_SKEW_SECONDS, OK, exchangeMessage, exchangeProblem, followUpProblem, fail, isReplyType, isRequestType, keyValidAt, seconds, semanticProblems,
   verifyEnvelopeSignature, type DirectoryKey, type Envelope, type Verdict,
 } from "./envelope.ts";
 
@@ -68,6 +68,8 @@ export async function verifyChain(chain: unknown, ctx: { keys: Record<string, Di
       const problem = exchangeProblem(exchangeMessage(env), request && exchangeMessage(request), earlier.map(exchangeMessage));
       if (problem) return fail("bad_reply", `${at}: ${problem}`);
     }
+    const followUp = isRequestType(env.type) ? followUpProblem(env, byId.get(env.body.follows as string)) : null;
+    if (followUp) return fail("bad_reply", `${at}: ${followUp}`);
     byId.set(env.id, env);
     prev = entry.hash;
   }

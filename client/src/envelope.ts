@@ -10,15 +10,17 @@ export const ENVELOPE_SIGNING_PREFIX = "obi/0.1 envelope\n";
 export const MAX_ENVELOPE_BYTES = 65536;
 export const MAX_LIFETIME_SECONDS = 2592000;
 export const CLOCK_SKEW_SECONDS = 300;
-export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer"] as const;
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke"] as const;
-export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke"];
+export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer", "introduction"] as const;
+export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke", "cancel"] as const;
+export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke", "cancel"];
 /** The replies that belong only to a run_request's exchange (protocol.md section 4, rule 7). */
 export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
 /** What a share_offer's exchange takes, and nothing else (protocol.md section 4, rule 8). */
 export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
 /** The replies a request's own sender sends, to its receiver (protocol.md section 4, rule 1). */
-export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke"];
+export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke", "cancel"];
+/** The requests a cancel calls off (protocol.md section 4, rule 10). */
+export const CANCELLABLE_TYPES = ["review_request", "question", "handoff", "introduction"];
 export const SEVERITY_RANK: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
 
 export type RequestType = (typeof REQUEST_TYPES)[number];
@@ -135,6 +137,9 @@ export function semanticProblems(env: Envelope): string[] {
   if (env.from === env.to) problems.push("from and to must differ");
   if (isRequestType(env.type) && env.correlation_id !== env.id) problems.push("a request's correlation_id must equal its id");
   if (isReplyType(env.type) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
+  // An introduction introduces a third member (section 5.18); a follow-up follows an earlier exchange (5.19).
+  if (env.type === "introduction" && (env.body.member === env.from || env.body.member === env.to)) problems.push("an introduction's member is neither its sender nor its receiver");
+  if (env.body.follows !== undefined && env.body.follows === env.id) problems.push("a request doesn't follow itself up");
   if (env.type === "result") problems.push(...resultProblems(env.body));
   problems.push(...refProblems(env.body));
   for (const f of (env.body.findings ?? []) as unknown as Finding[]) {
@@ -247,8 +252,12 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
   // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
   if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
     return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
+  // A cancel calls off a review_request, a question, a handoff or an introduction (rule 10).
+  if (reply.type === "cancel" && !CANCELLABLE_TYPES.includes(request.type)) return `a cancel calls off a review_request, question, handoff or introduction, not a ${request.type}`;
   if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
   const accepted = earlier.some((e) => e.type === "accept");
+  // An introduction's accept ends its exchange: nothing follows it (rule 10).
+  if (request.type === "introduction" && accepted) return "the exchange already ended";
   if (reply.type === "accept" && accepted) return "accepted twice";
   if (reply.type === "result") {
     if (reply.result_for !== request.type) return `a result for ${reply.result_for} answers a ${request.type}`;
@@ -276,10 +285,22 @@ export function exchangeProblem(reply: ExchangeMessage, request: ExchangeMessage
  * when it has none: a question about nothing, or about more than one repository.
  */
 export function requestRepo(env: Envelope): string | undefined {
-  if (env.type !== "question") return typeof env.body.repo === "string" ? env.body.repo : undefined;
+  if (env.type !== "question" && env.type !== "introduction") return typeof env.body.repo === "string" ? env.body.repo : undefined;
   const repos = (Array.isArray(env.body.about) ? env.body.about : []).map((ref) => (ref as JsonObject).repo as string);
   const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
   return repos.length > 0 && repos.every((r) => lower(r) === lower(repos[0]!)) ? repos[0] : undefined;
+}
+
+/**
+ * What's wrong with a request's `follows` (protocol.md section 5.19), given the earlier message it
+ * names (undefined when there is none): it must be a request between the same two members, in
+ * either direction. Null when it has none, or names one.
+ */
+export function followUpProblem(request: Pick<Envelope, "from" | "to" | "body">, earlier: Pick<Envelope, "type" | "from" | "to"> | undefined): string | null {
+  if (request.body.follows === undefined) return null;
+  if (!earlier || !isRequestType(earlier.type)) return "follows no earlier request";
+  const same = (earlier.from === request.from && earlier.to === request.to) || (earlier.from === request.to && earlier.to === request.from);
+  return same ? null : "follows an exchange between other members";
 }
 
 export const exchangeMessage = (env: Envelope): ExchangeMessage => ({
