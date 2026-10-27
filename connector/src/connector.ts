@@ -1,0 +1,511 @@
+// The connector: one member of one Sphere, its keys and mailbox in its folder (home.ts), built on
+// the client library. It receives and checks every delivery, puts every request in its owner's
+// mailbox to wait for their decision, applies the decisions the owner signs (signed.ts), sends
+// what the host's agent asks for within the owner's rules (or holds it for the owner), and scans
+// everything outgoing for secrets first (scan.ts). The host's agent sees others' words only as
+// quoted data (render.ts), and a request's words only once the owner has approved it.
+
+import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
+import { appendFileSync } from "node:fs";
+import {
+  Member, SealKey, SigningKey, SphereApi, SphereError, emptyMemory, fromB64url, nowSeconds, resultProblems, schemaErrors, seconds, timestamp,
+  type JsonObject, type MemberMemory, type Peer, type Received, type ReceivedMessage, type SchemaName,
+} from "@obysphere/client";
+import { Home } from "./home.ts";
+import { scanOutgoing, type ScanOptions } from "./scan.ts";
+import { allows, isDecision, verifyStatement, type Decision, type Rules } from "./signed.ts";
+
+export const VERSION = "0.1.0";
+/** How many requests from one owner may wait for this member's owner at once (protocol.md section 11, "Rate limits"). */
+export const INBOX_LIMIT = 5;
+/** How long an owner's signed decision stays good to apply. */
+export const DECISION_FRESH_SECONDS = 900;
+
+/** member.json: the membership. `key_seed` and `seal_private` are secret. */
+export interface MemberFile {
+  v: 1;
+  base: string;
+  sphere: string;
+  obi: string;
+  owner: string;
+  /** The owner's public key: the one the Sphere bound. */
+  owner_key: string;
+  key_seed: string;
+  seal_private?: string;
+  delegation: string;
+  delegation_expires_at: string;
+  accepts: string[];
+  name: string;
+  description: string;
+  joined_at: string;
+  /** Options for the outgoing scan. */
+  scan?: Pick<ScanOptions, "gitleaks" | "gitleaksPath">;
+}
+
+export type ItemState =
+  | "waiting_on_owner" // in: the owner hasn't decided; out: held until the owner approves sending it
+  | "approved" // in: the owner said yes; the agent may reply
+  | "declined" // in: the owner said no (a decline was sent); out: the other member declined
+  | "replied" // in: the agent's answer or result went out
+  | "not_sent" // out: the owner declined to send it
+  | "sent" // out: recorded by the Sphere, no reply yet
+  | "accepted" // out: the other member accepted
+  | "answered" // out: an answer or a result came back
+  | "expired";
+
+export interface Reply {
+  id: string;
+  type: string;
+  from: string;
+  at: string;
+  body: JsonObject;
+}
+
+export interface Item {
+  /** The item's id: an incoming request's id, or a local id for an outgoing one. */
+  id: string;
+  direction: "in" | "out";
+  type: string;
+  peer: string;
+  peer_owner?: string;
+  state: ItemState;
+  created_at: string;
+  expires_at: string;
+  /** The request's body, its words in plain text: in this member's folder only. */
+  body: JsonObject;
+  replies: Reply[];
+  /** Out: the id of the request as sent. */
+  request_id?: string;
+  /** Out: its lifetime in seconds, to send it with. */
+  expires_in?: number;
+  decided?: { decision: "approve" | "decline"; at: string; reason?: string; note?: string };
+  /** The connector's own words about what happened: never another member's. */
+  log: string[];
+}
+
+export class ConnectorError extends Error {}
+
+const findingId = (file: string, line: number, title: string) =>
+  "f-" + createHash("sha256").update(`${file}\n${line}\n${title}`, "utf8").digest("hex").slice(0, 16);
+
+export class Connector {
+  readonly home: Home;
+  file: MemberFile;
+  readonly member: Member;
+  readonly events = new EventEmitter();
+  #boundOwnerKey: string | null = null;
+  #queue: Promise<unknown> = Promise.resolve();
+
+  private constructor(home: Home, file: MemberFile, member: Member) {
+    this.home = home;
+    this.file = file;
+    this.member = member;
+  }
+
+  static async open(home: Home): Promise<Connector> {
+    if (!home.exists("member.json")) throw new ConnectorError(`no membership in ${home.dir}: join first (obysphere-connector join <invite link>)`);
+    const loose = home.looseModes();
+    if (loose.length) throw new ConnectorError(`others can read ${loose.join(", ")}: make them this user's only (chmod go-rwx)`);
+    const file = home.readJson<MemberFile>("member.json");
+    const memory = home.readJsonOr<MemberMemory>("memory.json", emptyMemory());
+    const member = new Member({
+      api: new SphereApi(file.base), sphere: file.sphere, obi: file.obi, owner: file.owner,
+      key: await SigningKey.fromSeed(fromB64url(file.key_seed)),
+      ...(file.seal_private ? { sealKey: await SealKey.fromPrivate(fromB64url(file.seal_private)) } : {}),
+      delegation: file.delegation, memory,
+    });
+    return new Connector(home, file, member);
+  }
+
+  /** Runs `fn` after every earlier call has finished: one change to the mailbox at a time. */
+  serial<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.#queue.then(fn, fn);
+    this.#queue = next.catch(() => {});
+    return next;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // State on disk.
+
+  items(): Item[] {
+    return this.home.list("items").map((n) => this.home.readJson<Item>(`items/${n}`));
+  }
+
+  item(id: string): Item | undefined {
+    if (!/^[0-9a-f-]{36}$/.test(id)) return undefined;
+    return this.home.exists(`items/${id}.json`) ? this.home.readJson<Item>(`items/${id}.json`) : undefined;
+  }
+
+  #save(item: Item) {
+    this.home.writeJson(`items/${item.id}.json`, item);
+    this.events.emit("changed", item.id);
+  }
+
+  #saveMemory() {
+    this.home.writeJson("memory.json", this.member.memory);
+  }
+
+  #note(what: string) {
+    try {
+      appendFileSync(this.home.path("connector.log"), `${new Date().toISOString()} ${what}\n`, { mode: 0o600 });
+    } catch {}
+  }
+
+  /** The owner key the Sphere bound for this member's owner: what owner-signed statements must verify with. */
+  async boundOwnerKey(): Promise<string> {
+    if (this.#boundOwnerKey) return this.#boundOwnerKey;
+    const me = await this.member.api.member(await this.token(), this.file.sphere, this.file.obi);
+    if (me.owner_key !== this.file.owner_key) throw new ConnectorError("the Sphere's bound owner key isn't the one this connector joined with: refusing to act on any decision");
+    this.#boundOwnerKey = me.owner_key;
+    return me.owner_key;
+  }
+
+  async token(): Promise<string> {
+    try {
+      return await this.member.accessToken();
+    } catch (e) {
+      if (e instanceof SphereError && e.code === "invalid_grant") {
+        // The owner may have renewed the delegation since this connector started.
+        const fresh = this.home.readJson<MemberFile>("member.json");
+        if (fresh.delegation !== this.member.delegation) {
+          this.file = fresh;
+          this.member.delegation = fresh.delegation;
+          return this.member.accessToken();
+        }
+        if (seconds(this.file.delegation_expires_at) <= nowSeconds()) throw new ConnectorError("the owner's delegation expired: the owner renews it with `obysphere-connector renew`");
+      }
+      throw e;
+    }
+  }
+
+  async rules(): Promise<Rules | null> {
+    const rules = this.home.readJsonOr<Rules | null>("rules.json", null);
+    if (!rules || rules.kind !== "rules" || rules.sphere !== this.file.sphere || rules.obi !== this.file.obi) return null;
+    return (await verifyStatement(rules, await this.boundOwnerKey())) ? rules : null;
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Receiving.
+
+  /** One round: the owner's decisions applied, expired items settled, the deliveries waiting checked and recorded. */
+  async poll(wait = 0): Promise<number> {
+    await this.serial(() => this.applyDecisions());
+    await this.serial(async () => this.#expire());
+    const received = await this.member.receive({ wait });
+    if (!received.length) return 0;
+    await this.serial(async () => {
+      for (const r of received) await this.#handle(r);
+      this.#saveMemory();
+      // Acknowledged only once what was decided is on disk (protocol.md section 11).
+      await this.member.ack(received.map((r) => r.delivery_id));
+    });
+    return received.length;
+  }
+
+  async #handle(r: Received) {
+    if (r.problem) {
+      this.#note(`refused delivery ${r.delivery_id} at seq ${r.seq}: ${r.problem.code} ${r.problem.message}`);
+      return;
+    }
+    const m = r.message!;
+    if (m.in_reply_to) return this.#handleReply(m, r);
+    return this.#handleRequest(m, r);
+  }
+
+  async #handleRequest(m: ReceivedMessage, r: Received) {
+    const item: Item = {
+      id: m.id, direction: "in", type: m.type, peer: m.from, peer_owner: m.owner, state: "waiting_on_owner",
+      created_at: timestamp(nowSeconds()), expires_at: m.expires_at, body: plainBody(m.body), replies: [], log: [`received at seq ${r.seq}`],
+    };
+    if (!this.file.accepts.includes(m.type)) {
+      item.state = "declined";
+      item.log.push("declined: out_of_scope (this member doesn't accept it)");
+      this.#save(item);
+      await this.#sendReply(m.id, "decline", { reason: "out_of_scope" }).catch((e) => item.log.push(`the decline didn't go out: ${(e as Error).message}`));
+      return this.#save(item);
+    }
+    const waiting = this.items().filter((i) => i.direction === "in" && i.state === "waiting_on_owner" && i.peer_owner === m.owner).length;
+    if (waiting >= INBOX_LIMIT) {
+      item.state = "declined";
+      item.log.push(`declined: busy (${waiting} requests from ${m.owner} already wait for the owner)`);
+      this.#save(item);
+      await this.#sendReply(m.id, "decline", { reason: "busy" }).catch((e) => item.log.push(`the decline didn't go out: ${(e as Error).message}`));
+      return this.#save(item);
+    }
+    this.#save(item);
+    await this.#sendReply(m.id, "status", { state: "waiting_on_owner" }).catch((e) => this.#note(`status for ${m.id} didn't go out: ${(e as Error).message}`));
+  }
+
+  async #handleReply(m: ReceivedMessage, r: Received) {
+    const item = this.items().find((i) => i.direction === "out" && i.request_id === m.in_reply_to);
+    if (!item) {
+      this.#note(`a ${m.type} to ${m.in_reply_to}, which no item of this mailbox sent`);
+      return;
+    }
+    item.replies.push({ id: m.id, type: m.type, from: m.from, at: timestamp(nowSeconds()), body: plainBody(m.body) });
+    if (m.type === "accept") item.state = "accepted";
+    else if (m.type === "answer" || m.type === "result") item.state = "answered";
+    else if (m.type === "decline") item.state = "declined";
+    item.log.push(`${m.type} received at seq ${r.seq}`);
+    this.#save(item);
+  }
+
+  #expire() {
+    const now = nowSeconds();
+    for (const item of this.items()) {
+      const open = item.state === "waiting_on_owner" || item.state === "approved" || item.state === "sent" || item.state === "accepted";
+      if (open && seconds(item.expires_at) <= now) {
+        item.state = "expired";
+        item.log.push("expired");
+        this.#save(item);
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The owner's decisions.
+
+  /** Applies every decision waiting in decisions/ that the owner signed, for an item that waits for one. */
+  async applyDecisions(): Promise<void> {
+    const names = this.home.list("decisions");
+    if (!names.length) return;
+    const ownerKey = await this.boundOwnerKey();
+    for (const name of names) {
+      const path = `decisions/${name}`;
+      let d: unknown;
+      try {
+        d = this.home.readJson(path);
+      } catch {
+        this.home.remove(path);
+        continue;
+      }
+      this.home.remove(path);
+      if (!isDecision(d) || d.sphere !== this.file.sphere || d.obi !== this.file.obi) {
+        this.#note(`ignored ${name}: not a decision for this member`);
+        continue;
+      }
+      if (!(await verifyStatement(d, ownerKey))) {
+        this.#note(`ignored ${name}: not signed by the owner's key`);
+        continue;
+      }
+      const age = nowSeconds() - seconds(d.at);
+      if (!(age <= DECISION_FRESH_SECONDS && age >= -300)) {
+        this.#note(`ignored ${name}: signed at ${d.at}, not within ${DECISION_FRESH_SECONDS} seconds`);
+        continue;
+      }
+      const item = this.item(d.item);
+      if (!item || item.state !== "waiting_on_owner") {
+        this.#note(`ignored ${name}: ${d.item} doesn't wait for a decision`);
+        continue;
+      }
+      await this.#apply(item, d);
+    }
+  }
+
+  async #apply(item: Item, d: Decision) {
+    item.decided = { decision: d.decision, at: d.at, ...(d.reason ? { reason: d.reason } : {}), ...(d.note ? { note: d.note } : {}) };
+    try {
+      if (item.direction === "in" && d.decision === "approve") {
+        if (item.type !== "question") await this.#sendReply(item.id, "accept", {});
+        item.state = "approved";
+        item.log.push("approved by the owner");
+      } else if (item.direction === "in") {
+        await this.#sendReply(item.id, "decline", { reason: d.reason ?? "owner_declined", ...(d.note ? { note: d.note } : {}) });
+        item.state = "declined";
+        item.log.push("declined by the owner");
+      } else if (d.decision === "approve") {
+        const sent = await this.#sendRequest(item);
+        item.request_id = sent.id;
+        item.state = "sent";
+        item.log.push(`sent with the owner's approval, recorded at seq ${sent.receipt.seq}`);
+      } else {
+        item.state = "not_sent";
+        item.log.push("the owner declined to send it");
+      }
+    } catch (e) {
+      item.log.push(`the owner's ${d.decision} couldn't be carried out: ${(e as Error).message}`);
+      this.#note(`decision on ${item.id} failed: ${(e as Error).message}`);
+    }
+    this.#save(item);
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // Sending.
+
+  /** Checks a body against its action's schema and the rules no schema says, then scans it: throws saying why it can't go. */
+  async #check(type: string, body: JsonObject) {
+    const errors = schemaErrors(`actions/${type}` as SchemaName, body);
+    if (errors.length) throw new ConnectorError(`that ${type} doesn't match the protocol: ${errors.join("; ")}`);
+    if (type === "result") {
+      const problems = resultProblems(body);
+      if (problems.length) throw new ConnectorError(`that result contradicts itself: ${problems.join("; ")}`);
+    }
+    const scan = await scanOutgoing(body, {
+      ...this.file.scan,
+      never: [this.file.key_seed, this.file.seal_private ?? "", this.file.delegation].filter(Boolean),
+    });
+    if (scan.error) throw new ConnectorError(`the secret scan couldn't run (${scan.error}): nothing was sent`);
+    if (!scan.ok) {
+      const where = scan.findings.map((f) => `${f.rule} in ${f.field}`).join(", ");
+      throw new ConnectorError(`the secret scan found what may be a secret (${where}): nothing was sent. Take it out and try again.`);
+    }
+  }
+
+  async #sendReply(requestId: string, type: string, body: JsonObject) {
+    await this.#check(type, body);
+    await this.token();
+    const sent = await this.member.reply(requestId, type, body);
+    this.#saveMemory();
+    return sent;
+  }
+
+  async #sendRequest(item: Item) {
+    await this.#check(item.type, item.body);
+    await this.token();
+    const sent = await this.member.request(item.peer, item.type as "question", item.body, item.expires_in ? { expiresIn: item.expires_in } : {});
+    this.#saveMemory();
+    return sent;
+  }
+
+  /**
+   * A request from the host's agent: sent now when the owner's rules let it go to `to`, otherwise
+   * kept in the mailbox until the owner approves sending it.
+   */
+  async request(type: "question" | "review_request" | "handoff", to: string, body: JsonObject, expiresIn = 86400): Promise<Item> {
+    return this.serial(async () => {
+      const peers = await this.member.directory();
+      this.#saveMemory();
+      const peer = peers.find((p) => p.obi === to);
+      if (!peer) throw new ConnectorError(`${to} is not a member of this Sphere`);
+      if (to === this.file.obi) throw new ConnectorError("that's this member itself");
+      if (peer.status !== "active") throw new ConnectorError(`${to} was revoked`);
+      if (!peer.trusted) throw new ConnectorError(`${to} isn't trusted: ${peer.problem}`);
+      if (!peer.accepts.includes(type)) throw new ConnectorError(`${to} doesn't accept ${type} (it accepts ${peer.accepts.join(", ")})`);
+      await this.#check(type, body);
+      const item: Item = {
+        id: crypto.randomUUID(), direction: "out", type, peer: to, peer_owner: peer.owner, state: "waiting_on_owner",
+        created_at: timestamp(nowSeconds()), expires_at: timestamp(nowSeconds() + expiresIn), body, replies: [], expires_in: expiresIn, log: [],
+      };
+      if (allows(await this.rules(), to, type)) {
+        const sent = await this.#sendRequest(item);
+        Object.assign(item, { request_id: sent.id, state: "sent", expires_at: sent.envelope.expires_at });
+        item.log.push(`sent under the owner's rules, recorded at seq ${sent.receipt.seq}`);
+      } else {
+        item.log.push("held: the owner's rules don't let it go without asking; it waits for the owner to approve sending it");
+      }
+      this.#save(item);
+      return item;
+    });
+  }
+
+  /** A reply from the host's agent to an incoming request its owner approved. */
+  async reply(itemId: string, kind: string, args: ReplyArgs): Promise<Item> {
+    return this.serial(async () => {
+      const item = this.item(itemId);
+      if (!item || item.direction !== "in") throw new ConnectorError(`no incoming request ${itemId}`);
+      if (item.state === "waiting_on_owner") throw new ConnectorError("its owner hasn't decided yet: only an approved request can be replied to");
+      if (item.state !== "approved") throw new ConnectorError(`it is ${item.state}: there's nothing more to send`);
+      if (seconds(item.expires_at) <= nowSeconds()) throw new ConnectorError("it expired");
+      const { type, body } = this.#replyBody(item, kind, args);
+      const sent = await this.#sendReply(item.id, type, body);
+      if (type !== "status") item.state = "replied";
+      item.replies.push({ id: sent.id, type, from: this.file.obi, at: timestamp(nowSeconds()), body });
+      item.log.push(`${type} sent`);
+      this.#save(item);
+      return item;
+    });
+  }
+
+  #replyBody(item: Item, kind: string, a: ReplyArgs): { type: string; body: JsonObject } {
+    const req = item.body;
+    switch (kind) {
+      case "answer": {
+        if (item.type !== "question") throw new ConnectorError(`an answer answers a question; this is a ${item.type}: reply with a result`);
+        const choices = (req.choices as unknown[] | undefined)?.length;
+        if (a.choice !== undefined && (choices === undefined || a.choice >= choices)) throw new ConnectorError(`choice is the index of one of the question's ${choices ?? 0} choices`);
+        return { type: "answer", body: { by: "obi", text: a.text ?? "", ...(a.refs ? { refs: a.refs } : {}), ...(a.choice !== undefined ? { choice: a.choice } : {}) } as JsonObject };
+      }
+      case "result": {
+        if (item.type === "question") throw new ConnectorError("a question takes an answer, not a result");
+        const conditions = (req.acceptance ?? []) as { kind: string; severity?: string }[];
+        const findings = (a.findings ?? []).map((f) => ({ id: findingId(f.file, f.line, f.title), ...f }));
+        const rank: Record<string, number> = { nit: 1, minor: 2, major: 3, blocker: 4 };
+        const outcome = a.outcome ?? "failed";
+        const acceptance = conditions.map((c, index) => {
+          let met = a.met?.[index] ?? false;
+          if (item.type === "review_request" && c.kind === "no_blocker_findings") met = !findings.some((f) => f.severity === "blocker");
+          if (item.type === "review_request" && c.kind === "no_findings_at_or_above") met = !findings.some((f) => rank[f.severity]! >= rank[c.severity!]!);
+          return { index, kind: c.kind, ...(c.severity ? { severity: c.severity } : {}), met };
+        });
+        if (item.type === "review_request") {
+          return {
+            type: "result",
+            body: {
+              for: "review_request", outcome, repo: req.repo as string, head_sha: req.head_sha as string, findings,
+              ...(outcome !== "failed" || a.met ? { acceptance } : {}), ...(a.summary ? { summary: a.summary } : {}),
+            } as unknown as JsonObject,
+          };
+        }
+        return {
+          type: "result",
+          body: {
+            for: "handoff", outcome, repo: req.repo as string, acceptance, ...(a.head_branch ? { head_branch: a.head_branch } : {}),
+            ...(a.head_sha ? { head_sha: a.head_sha } : {}), ...(a.pr ? { pr: a.pr } : {}), ...(a.summary ? { summary: a.summary } : {}),
+          } as unknown as JsonObject,
+        };
+      }
+      case "decline":
+        if (a.reason === "owner_declined") throw new ConnectorError("only the owner declines as owner_declined");
+        return { type: "decline", body: { reason: a.reason ?? "other", ...(a.note ? { note: a.note } : {}) } };
+      case "status":
+        return { type: "status", body: { state: a.state ?? "working", ...(a.note ? { note: a.note } : {}) } };
+      default:
+        throw new ConnectorError(`kind is answer, result, decline or status, not ${kind}`);
+    }
+  }
+
+  async members(): Promise<Peer[]> {
+    return this.serial(async () => {
+      const peers = await this.member.directory();
+      this.#saveMemory();
+      return peers;
+    });
+  }
+
+  /** Receives until `signal` aborts: long polls, applying decisions between them, backing off on errors. */
+  async run(signal: AbortSignal, o: { wait?: number } = {}): Promise<void> {
+    let backoff = 1;
+    while (!signal.aborted) {
+      try {
+        await this.poll(o.wait ?? 10);
+        backoff = 1;
+      } catch (e) {
+        this.#note(`receiving failed: ${(e as Error).message}`);
+        await new Promise((r) => setTimeout(r, Math.min(backoff, 60) * 1000));
+        backoff *= 2;
+      }
+    }
+  }
+}
+
+export interface ReplyArgs {
+  text?: string;
+  choice?: number;
+  refs?: JsonObject[];
+  outcome?: string;
+  findings?: { severity: string; file: string; line: number; end_line?: number; title: string; detail: string }[];
+  met?: boolean[];
+  summary?: string;
+  head_branch?: string;
+  head_sha?: string;
+  pr?: number;
+  reason?: string;
+  note?: string;
+  state?: string;
+}
+
+/** A DataBody back to plain JSON: for keeping in this member's own mailbox, never for an agent. */
+function plainBody(body: unknown): JsonObject {
+  return JSON.parse(JSON.stringify(body, (_k, v) => (v && typeof v === "object" && v["x-obi-text"] === "data" ? v.text : v)));
+}
