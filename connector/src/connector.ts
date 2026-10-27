@@ -89,6 +89,8 @@ export interface Item {
   /** SHA-256 of what the owner decides on (type, peer, body): a decision names it. */
   digest: string;
   replies: Reply[];
+  /** Ids of every reply seen on it, a status dropped since included: a redelivery adds nothing. */
+  seen_replies?: string[];
   /** In: the request's id. Out: the id of the request as sent. */
   request_id?: string;
   /** Out: its lifetime in seconds, to send it with. */
@@ -108,6 +110,8 @@ const findingId = (file: string, line: number, title: string) =>
 
 const ITEM_ID = /^(in|out)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const OPEN: ItemState[] = ["waiting_on_owner", "approved", "sent", "accepted"];
+/** An outgoing request the other member has and hasn't finished. */
+const SENT_OPEN: ItemState[] = ["sent", "accepted"];
 
 export class Connector {
   readonly home: Home;
@@ -285,7 +289,8 @@ export class Connector {
       this.#note(`a ${m.type} to ${m.in_reply_to}, which no item of this mailbox sent`);
       return;
     }
-    if (item.replies.some((x) => x.id === m.id)) return;
+    if (item.replies.some((x) => x.id === m.id) || item.seen_replies?.includes(m.id)) return;
+    item.seen_replies = [...(item.seen_replies ?? []), m.id];
     // Only the latest status is kept: a member can send any number, and each would be shown again.
     if (m.type === "status") item.replies = item.replies.filter((x) => x.type !== "status");
     item.replies.push({ id: m.id, type: m.type, from: m.from, at: timestamp(nowSeconds()), body: plainBody(m.body) });
@@ -295,7 +300,8 @@ export class Connector {
       item.state = "declined";
       if ((m.body as JsonObject).reason === "busy") {
         const state = this.#state();
-        const open = this.items().filter((i) => i.direction === "out" && i.peer === item.peer && i.id !== item.id && OPEN.includes(i.state)).map((i) => i.id);
+        // Only requests that reached it count: one its owner still holds was never sent.
+        const open = this.items().filter((i) => i.direction === "out" && i.peer === item.peer && i.id !== item.id && SENT_OPEN.includes(i.state)).map((i) => i.id);
         this.#saveState({ ...state, busy: { ...state.busy, [item.peer]: { at: nowSeconds(), open } } });
       }
     }
@@ -455,7 +461,7 @@ export class Connector {
       // After a busy: not again until one of the requests open to it then has ended, or, with none open then, for an hour.
       const busy = Object.hasOwn(this.#state().busy, to) ? this.#state().busy[to] : undefined;
       if (busy) {
-        const stillOpen = (id: string) => OPEN.includes(this.item(id)?.state ?? "expired");
+        const stillOpen = (id: string) => SENT_OPEN.includes(this.item(id)?.state ?? "expired");
         const waiting = busy.open.length ? busy.open.every(stillOpen) : busy.at + BUSY_BACKOFF_SECONDS > nowSeconds();
         if (waiting) throw new ConnectorError(busy.open.length ? `${to} declined as busy: ask it again once one of your open requests to it has ended` : `${to} declined as busy: ask it again after ${timestamp(busy.at + BUSY_BACKOFF_SECONDS)}`);
       }

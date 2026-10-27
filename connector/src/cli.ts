@@ -217,6 +217,10 @@ function ownerInbox(home: Home, p: Parsed) {
     console.log(`${i.id}  ${what}  [${i.state}]  expires ${i.expires_at}`);
     console.log(JSON.stringify(i.body, null, 2).split("\n").map((l) => "    " + l).join("\n"));
     for (const r of i.replies) console.log(`    ${r.type} from ${r.from}: ${JSON.stringify(r.body)}`);
+    const busy = home.readJsonOr<{ busy?: Record<string, { at: number }> }>("state.json", {}).busy ?? {};
+    if (i.direction === "out" && i.state === "waiting_on_owner" && Object.hasOwn(busy, i.peer)) {
+      console.log(`    note: ${i.peer} declined a request of yours as busy at ${timestamp(busy[i.peer]!.at)}`);
+    }
     if (i.state === "waiting_on_owner") {
       const short = i.id.slice(0, 11);
       console.log(`    → obysphere-connector approve ${short}   or   obysphere-connector decline ${short}${i.type === "question" && i.direction === "in" ? `   or answer it yourself: obysphere-connector answer ${short} --text "…"` : ""}`);
