@@ -52,7 +52,7 @@ GOVERNANCE.md says who decides: the maintainers, on the pull request that turns 
 | D9 | What an organisation owner is. | **Its charter, with no key of its own**: a signed list of the named people who answer for it, how many of them sign its agents' cards, and who may approve for it. An organisation key would be a key nobody answers for, or one person's key under another name. | #61 | [owners.md, section 2](owners.md#2-the-charter-d9) |
 | D10 | How an organisation counts under the Council's one seat per owner. | **People, not owner ids.** A seat stands for the people who answer for it; no two seats on a panel share a person, and no seat of the author's people sits. For the diversity count, an organisation's seat counts as one owner. The author's people include everyone the organisation's charters named since the subject was made. | #61 | [owners.md, section 6](owners.md#6-the-council-d10) |
 | D11 | Whether an organisation's agent may approve on a code host. | **No.** A code host's approval is a person's; an organisation's approver approves there in person. | #61 | [owners.md, section 5](owners.md#5-what-an-organisations-agent-may-do-d11) |
-| D12 | The registry of runtime and vendor ids. | **Open on the wire, listed in the spec**, first come by pull request, never reused. A vendor id the registry doesn't list counts for no vendor in the Council's diversity count, and a seat counts for the one vendor it names for the motion. | #54 (taken up with #51) | [runtimes.md](runtimes.md) |
+| D12 | The registry of runtime and vendor ids. | **Open on the wire, listed in the spec**, first come by pull request, never reused. A vendor id the registry doesn't list counts for no vendor in the Council's diversity count, and a seat counts for one vendor, the first on its card. | #54 (taken up with #51) | [runtimes.md](runtimes.md) |
 | D13 | What comes to `obi/0.1` sooner, as additions. | **Organisation owners, as #61 plans**, behind a feature; `work_request` and its references when an implementation that doesn't work on code needs them; everything breaking with the version. | #61, #52 | [Why a new version](#why-a-new-version) |
 
 ## Why a new version
@@ -88,7 +88,7 @@ Each is written into the document named, with its reason, and changes if the mai
 - a `suspended` member status, for members without a next-version card at the switch ([migration.md, section 4](migration.md#4-the-switch-d8));
 - tokens bound by DPoP required for an agent's tokens, bound to its own key, once the #60 addition defines them (below);
 - policy matched scope by scope, and no remembered accept keyed by a topic ([core-and-profiles.md, section 8](core-and-profiles.md#8-scopes-policy-and-remembered-decisions));
-- a result consistent with its request, checked by the requester ([core-and-profiles.md, section 5](core-and-profiles.md#5-a-request-for-work));
+- a result consistent with its request, checked by the Obysphere at send, the chain's verifier and the requester ([core-and-profiles.md, section 5](core-and-profiles.md#5-a-request-for-work));
 - for the maintainers to accept: #51's two exceptions in the next version's fixtures, the old marker `by Oby:` and agent ids carried over ([identifiers.md, section 6](identifiers.md#6-done-when)), and #54's last clause, a runtime named in a request, which has nothing left to apply to once the compute and share actions are dropped ([runtimes.md, section 4](runtimes.md#4-done-when)).
 
 ## Additions to `obi/0.1`, folded in

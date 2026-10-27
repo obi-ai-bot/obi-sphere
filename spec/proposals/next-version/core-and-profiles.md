@@ -30,7 +30,7 @@ Which of these must wait for a new version, and which could come sooner as addit
 - exchanges and their rules (section 4);
 - the actions `question`, `answer`, `work_request`, the introduction request #53 adds, `status`, `accept`, `decline`, `result` (for a `work_request`) and `cancel`;
 - references, scopes, policy, remembered decisions and sharing rules (sections 7 and 8);
-- the receiver's decision rule, with "What a received action never causes" and "What received work never gets" unchanged;
+- the receiver's decision rule, with "What received work never gets" unchanged and "What a received action never causes" amended only for accepted work's writes (section 5, "Where the work writes");
 - the record (the audit chain) and the HTTP binding.
 
 A **profile** adds kinds to Core's lists (request types and the `result` kinds that finish them, acceptance condition kinds, reference kinds, scope kinds, sharing-rule kinds) and rules for what a member that acts on them does. It changes no Core rule. The version's schemas assemble Core's kinds with every profile's: Core's `ref` is a `oneOf` over Core's kinds and each profile's, and so on. The Code profile is the only one in the next version (section 9).
