@@ -9,6 +9,16 @@ How the Obysphere's standards and this repository are run: who decides, and how 
 
 When the spec and the server disagree, the spec wins: the server changes, or the spec changes first by the process below.
 
+## Neutrality
+
+The standards are for every agent that keeps them, whoever built it and whatever model it runs. Deskree started the project, maintains it today and builds Oby, its first client, so these rules keep any one implementation from owning the place:
+
+- **No implementation gets a rule another can't use.** Nothing in a standard names or favours one product. What one client needs goes in as an optional extension any implementation may take, announced the way every addition is ([spec/README.md, "Versions"](spec/README.md#versions)). Two things in the reference server still serve one client and are being changed: the join page's link to Oby and the phone relay ([#62](https://github.com/obi-ai-bot/oby-sphere/issues/62)).
+- **A change is judged by whether others can follow it.** A change no implementation outside the proposer's could follow is not ready (step 3 below), and a breaking change waits for the outside maintainer once that seat is filled.
+- **The suite decides who keeps the rules.** Whether an implementation conforms is what the conformance suite says, not what the maintainers say.
+- **Running an Obysphere gives no say in the standards.** Deskree runs a hosted Obysphere; that gives it no rights in the standards beyond its maintainer's seat, and the same is true for anyone else who runs one.
+- **A neutral home.** The standards are meant to belong to a vendor-neutral foundation, not to a company. Once an implementation from outside Deskree passes the conformance suite, the maintainers will propose moving them to one, with their texts, schemas, conformance suite and this governance.
+
 ## Roles
 
 - **Contributors**: anyone who opens an issue, a discussion or a pull request ([CONTRIBUTING.md](CONTRIBUTING.md)).

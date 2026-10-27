@@ -1,18 +1,18 @@
 # The Obysphere standards
 
-The standards say how the instruments of an Obysphere work: what one agent may send another, how a message is signed, sealed and checked, how the receiver decides, how the record is kept, and how an Obysphere is run over HTTP. They are written so that an agent that is not Oby can implement them, and each comes with JSON Schemas and conformance cases that check an implementation.
+The standards say how the instruments of an Obysphere work: what one agent may send another, how a message is signed, sealed and checked, how the receiver decides, how the record is kept, and how an Obysphere is run over HTTP. They are written for any agent, built by any vendor and running any model, and each comes with JSON Schemas and conformance cases that check an implementation, whoever wrote it. The principles they keep, and where those come from, are in [PRINCIPLES.md](../PRINCIPLES.md).
 
-> **Names.** The agent is Oby. The spec's documents (protocol.md, identity.md, sphere-api.md) were written when it was called Obi, so they say *Obi* for Oby and *Sphere* for an Obysphere. The protocol constant on the wire is `obi/0.1`, and so are the code identifiers that carry it.
+> **Names.** The documents (protocol.md, identity.md, sphere-api.md) were written when Oby, the first implementation, was called Obi, so their text says *Obi* for any member's agent and *Sphere* for an Obysphere. Plain names in the text are coming ([#50](https://github.com/obi-ai-bot/oby-sphere/issues/50)). The protocol constant on the wire is `obi/0.1`, and so are the identifiers that carry it; those change only at the next protocol version ([#51](https://github.com/obi-ai-bot/oby-sphere/issues/51)).
 
 ## The standards, by instrument
 
 | Instrument | Standard | Status | Where | What it covers |
 |---|---|---|---|---|
 | Messages | **Core** | **v0.1** | this folder: [protocol.md](protocol.md), [identity.md](identity.md), [sphere-api.md](sphere-api.md), [schemas/v0.1/](schemas/v0.1/), [conformance/](conformance/) | Who is who (owner-signed agent cards, delegation), what can be said (15 typed actions, text as data), how the receiver decides, the Sphere's HTTP binding and the audit chain. Implemented by the server in [`../server/`](../server/) and by Oby, and checked by the conformance suite. |
-| Rooms | Rooms | Planned | `rooms/` | One Oby in several Obyspheres with one identity; groups and announcement channels inside an Obysphere. Today an Oby belongs to one Sphere at a time and every message has one recipient. |
-| Files | Artifacts | Planned | `artifacts/` | Files and folders handed over sealed to the recipient, with an expiry, a receipt and a revoke. Today files travel only inside a running job's channel (protocol.md section 13). |
-| Secrets | Exchange | Planned | `exchange/` | How things travel (the relay, sealed bodies, bindings) and lending the use of a secret without handing it over. No Exchange text yet; parts of it are already in Core v0.1, and keep Core's status: sealed words (protocol.md 9.1), the job channel (section 13) and shares of an API account (section 15). |
-| Decisions | Council | Draft | [`council/process.md`](council/process.md) | How several agents and people decide together: the motion, seats drawn by lot, independent assessment, challenge, ballots and a counted verdict, with a record that keeps the dissent. Code review is its first application. In v0.1 today: `review_request` and `result` between two Obys. |
+| Rooms | Rooms | Planned ([#46](https://github.com/obi-ai-bot/oby-sphere/issues/46)) | `rooms/` | One Oby in several Obyspheres with one identity; groups and announcement channels inside an Obysphere. Today an Oby belongs to one Sphere at a time and every message has one recipient. |
+| Files | Artifacts | Planned ([#47](https://github.com/obi-ai-bot/oby-sphere/issues/47)) | `artifacts/` | Files and folders handed over sealed to the recipient, with an expiry, a receipt and a revoke. Today files travel only inside a running job's channel (protocol.md section 13). |
+| Secrets | Exchange | Planned ([#44](https://github.com/obi-ai-bot/oby-sphere/issues/44)) | `exchange/` | How things travel (the relay, sealed bodies, bindings) and lending the use of a secret without handing it over. No Exchange text yet; parts of it are already in Core v0.1, and keep Core's status: sealed words (protocol.md 9.1), the job channel (section 13) and shares of an API account (section 15). |
+| Decisions | Council | Draft ([#45](https://github.com/obi-ai-bot/oby-sphere/issues/45)) | [`council/process.md`](council/process.md) | How several agents and people decide together: the motion, seats drawn by lot, independent assessment, challenge, ballots and a counted verdict, with a record that keeps the dissent. Code review is its first application. In v0.1 today: `review_request` and `result` between two Obys. |
 
 **Statuses.**
 
@@ -21,7 +21,7 @@ The standards say how the instruments of an Obysphere work: what one agent may s
 - **Experimental**: implemented and tested, and still changing under the version rule below.
 - **Stable**: changes only by additions or under a new protocol constant, and has had an external review and an implementation outside Deskree. No standard is Stable yet.
 
-Today's documents stay where they are and are Core. A new standard's texts go in its own folder (`rooms/`, `artifacts/`, `exchange/`, `council/`), with schemas and conformance cases of its own when it has messages. The rules every standard keeps are the house rules in the [repository README](../README.md#the-house-rules).
+Today's documents stay where they are and are Core. A new standard's texts go in its own folder (`rooms/`, `artifacts/`, `exchange/`, `council/`), with schemas and conformance cases of its own when it has messages. The rules every standard keeps are the house rules in the [repository README](../README.md#the-house-rules), and the [principles](../PRINCIPLES.md) behind them. Where each standard goes next is in the [roadmap](../ROADMAP.md).
 
 ## Versions
 
@@ -38,12 +38,12 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 
 ## Principles
 
-- An Oby can only send the **typed actions** listed below. There is no free-text message type, and no message may carry a field its schema doesn't list.
-- Every text field inside an action is **data, never instructions**. The receiving Oby may show it to its owner or quote it to an agent as a file. It never places it in a prompt as an instruction. The schemas mark every such field with `x-obi-text: data`.
-- Every action is **signed** by the sending Oby. Each Oby publishes an A2A agent card signed by its owner's key.
-- An Oby acts for its owner with an **OAuth on-behalf-of** token scoped to that owner.
-- The Sphere server checks **policy** (may this Oby send this action to that Oby?) before it relays anything, and appends every action to the **audit chain**.
-- An Oby never merges, pushes or publishes anything on another person's behalf because of an action it received.
+- An agent can only send the **typed actions** listed below. There is no free-text message type, and no message may carry a field its schema doesn't list.
+- Every text field inside an action is **data, never instructions**. The receiving agent may show it to its owner or quote it to an agent as a file. It never places it in a prompt as an instruction. The schemas mark every such field with `x-obi-text: data`.
+- Every action is **signed** by the sending agent. Each agent publishes an A2A agent card signed by its owner's key.
+- An agent acts for its owner with an **OAuth on-behalf-of** token scoped to that owner.
+- The Sphere server checks **policy** (may this agent send this action to that one?) before it relays anything, and appends every action to the **audit chain**.
+- An agent never merges, pushes or publishes anything on another person's behalf because of an action it received.
 
 ## The actions
 
@@ -66,6 +66,8 @@ Fifteen types: five requests start an exchange, and ten replies continue or end 
 | `share_offer` | starts | Give the receiver's owner a share of a company-paid API account: their jobs run on the key holder's Mac, which adds the key; the key itself never travels. |
 | `share_status` | continues | From the key holder's Oby: how much of the share was used this period. |
 | `share_revoke` | ends | The key holder takes the share back. |
+
+**What is about code, and what isn't.** Five of these carry no domain at all: `question`, `answer`, `accept`, `decline` and `status`. The others are about code collaboration (`review_request`, `handoff`, and `run_request` with its replies, which run a git bundle on a member's machine; `result` carries their findings and outcomes) or about lending an API account (`share_offer`, `share_status`, `share_revoke`). Policy and remembered decisions are keyed by repository, and references name repositories, pull requests, issues and jobs. Separating a domain-neutral Core from a code-collaboration profile is planned for the next protocol version ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52)); until then an implementation that doesn't work on code can take `question` alone, with `accepts: ["question"]` on its card.
 
 ## The documents
 
