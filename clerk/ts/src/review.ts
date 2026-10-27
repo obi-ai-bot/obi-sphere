@@ -92,7 +92,8 @@ export function reviewTally(input: Json): Obj {
   checkRule(input.rule as Obj, input.quorum as number, seats);
   if (new Set(seats).size !== seats.length || seats.includes(convener)) fail("bad_panel");
   if (verifier !== null && (seats.includes(verifier) || verifier === convener)) fail("bad_panel");
-  if (!(roundAt < reviewsBy && reviewsBy + CHALLENGE_MARGIN_SECONDS <= challengeBy)) fail("bad_panel");
+  // The challenge needs its margin twice after the reviews: time to send it, and time to replace a verifier.
+  if (!(roundAt < reviewsBy && reviewsBy + 2 * CHALLENGE_MARGIN_SECONDS <= challengeBy)) fail("bad_panel");
 
   const body = (e: Entry) => e.envelope.body as Obj;
   // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time

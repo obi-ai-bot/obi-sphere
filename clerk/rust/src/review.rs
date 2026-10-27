@@ -184,7 +184,8 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
     if verifier.is_some_and(|v| distinct.contains(v) || v == convener) {
         return Err(BadPanel);
     }
-    if !(round_at < reviews_by && reviews_by + CHALLENGE_MARGIN_SECONDS <= challenge_by) {
+    // The challenge needs its margin twice after the reviews: time to send it, and time to replace a verifier.
+    if !(round_at < reviews_by && reviews_by + 2 * CHALLENGE_MARGIN_SECONDS <= challenge_by) {
         return Err(BadPanel);
     }
 

@@ -110,7 +110,8 @@ def tally(inp):
         fail("bad_panel")
     if verifier is not None and (verifier in seats or verifier == inp["convener"]):
         fail("bad_panel")
-    if not (round_at < reviews_by and reviews_by + CHALLENGE_MARGIN <= challenge_by):
+    # The challenge needs its margin twice after the reviews: time to send it, and time to replace a verifier.
+    if not (round_at < reviews_by and reviews_by + 2 * CHALLENGE_MARGIN <= challenge_by):
         fail("bad_panel")
 
     def requests_to(member, until):
@@ -200,7 +201,7 @@ def at(n):
 
 
 ROUND_AT = (T0 + timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-DEADLINES = {"reviews": at(60), "challenge": at(130)}
+DEADLINES = {"reviews": at(60), "challenge": at(180)}
 
 
 def uid(n):
@@ -297,11 +298,11 @@ def cases():
     ok("a blocker, the verifier asked but not answering: it stands", base(es2))
     ok("a blocker the verifier refutes", base(es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "changes_requested", met=met_list([False]))]))
     ok("a blocker the verifier upholds", base(es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "approved", met=met_list([True]))]))
-    late = [accept(n + 1, n, VERIFIER), result(135, n, VERIFIER, "changes_requested", met=met_list([False]))]
+    late = [accept(n + 1, n, VERIFIER), result(185, n, VERIFIER, "changes_requested", met=met_list([False]))]
     ok("the verifier's refutation after the challenge deadline doesn't count", base(es2 + late))
 
     es3 = es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "changes_requested", met=met_list([False]))]
-    es3 += [request(80, VERIFIER, conds=acceptance()), request(81, "agent-bob")]
+    es3 += [request(125, VERIFIER, conds=acceptance()), request(81, "agent-bob")]
     ok("requests after their deadlines (an ordinary review of the verifier, a re-review of a seat) aren't the panel's", base(es3))
 
     es, n = panel([("changes_requested", [finding("f-a", "blocker"), finding("f-b", "blocker", 7)]), ("changes_requested", [finding("f-a", "blocker")]), ("approved", [])])
@@ -388,7 +389,10 @@ def cases():
     err("the convener sits", base([], verifier=False, seats=[CONVENER, "agent-bob"]), "bad_panel")
     err("the verifier sits", {**base([], verifier=False), "verifier": "agent-bob"}, "bad_panel")
     err("deadlines out of order", {**base([], verifier=False), "deadlines": {"reviews": at(90), "challenge": at(60)}}, "bad_panel")
-    err("a challenge deadline less than 600 seconds after the reviews'", {**base([], verifier=False), "deadlines": {"reviews": at(60), "challenge": at(119)}}, "bad_panel")
+    plus = lambda s: (T0 + timedelta(seconds=s)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    err("a challenge deadline 1,199 seconds after the reviews'", {**base([], verifier=False), "deadlines": {"reviews": plus(600), "challenge": plus(1799)}}, "bad_panel")
+    es, _ = panel([("approved", []), ("approved", []), ("approved", [])])
+    ok("a challenge deadline exactly 1,200 seconds after the reviews'", {**base(es, verifier=False), "deadlines": {"reviews": plus(600), "challenge": plus(1800)}})
     es, _ = panel([("approved", [finding("f-1", "minor"), finding("f-1", "nit", 9)]), None, None])
     err("a counted result that repeats a finding id", base(es, verifier=False, quorum=1), "bad_input")
     es, _ = panel([("approved", []), None, None])
@@ -401,7 +405,7 @@ def cases():
 def vectors():
     return {
         "description": "Known-answer vectors for the review profile's tally (spec/council/review.md, section 6): the chain's entries in chain order, round R's time and the motion's deadlines, and the clerk's count input they give, or the error. Words are sealed (any text value may be; the tally reads none). Outputs compare as JSON values: member order doesn't matter, array order does. The answers come from clerk/vectors/review.py, written apart from both implementations; every output is a count input the clerk counts.",
-        "version": 3,
+        "version": 4,
         "tally": cases(),
     }
 

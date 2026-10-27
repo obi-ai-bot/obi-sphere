@@ -92,7 +92,7 @@ Errors are codes, as for the count: `bad_input`, `bad_version`, `bad_members` (`
 
 ## The review tally
 
-`reviewTally(input)` (TypeScript) and `review::tally` (Rust) turn the chain's entries into a review panel's count input ([spec/council/review.md](../spec/council/review.md) section 6): only requests recorded after round R's time, and only replies recorded by the motion's deadlines; one ballot per seat whose `result` counts, every finding with `blocking` for severity `blocker`, and each blocking finding's challenge from the verifier's `custom` conditions, ten to a request. They read nothing sealed, so anyone holding the chain tallies again without a key. Errors: `bad_input`, `bad_panel`, `two_requests`.
+`reviewTally(input)` (TypeScript) and `review::tally` (Rust) turn the chain's entries into a review panel's count input ([spec/council/review.md](../spec/council/review.md) section 6): only requests recorded after round R's time and by the motion's deadlines (a seat's by `deadlines.reviews`, the verifier's by `deadlines.challenge` less 600 seconds), and only replies recorded by the deadlines; one ballot per seat whose `result` counts, every finding with `blocking` for severity `blocker`, and each blocking finding's challenge from the verifier's `custom` conditions, ten to a request. They read nothing sealed, so anyone holding the chain tallies again without a key. Errors: `bad_input`, `bad_panel`, `two_requests`.
 
 ## Running
 
