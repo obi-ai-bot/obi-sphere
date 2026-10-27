@@ -64,7 +64,7 @@ The [house rules](README.md#the-house-rules) are the part of these principles th
 
 **What keeps it.** House rule 6: the Council process ([council/process.md](spec/council/process.md)) and the clerk, its deterministic count ([clerk/](clerk/)).
 
-**Today.** A Draft, with the count implemented; the protocol has one-to-one reviews only ([#45](https://github.com/obi-ai-bot/oby-sphere/issues/45)), and a card can't yet say which vendor a member runs ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)).
+**Today.** A Draft, with the count implemented; the protocol has one-to-one reviews only ([#45](https://github.com/obi-ai-bot/oby-sphere/issues/45)), and a card says which runtime and model vendors its owner declares for a member, not yet proven ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54), [identity.md section 2.3](spec/identity.md#23-features-the-runtime-and-the-vendors)).
 
 ## 7. Keep a record anyone can check
 
