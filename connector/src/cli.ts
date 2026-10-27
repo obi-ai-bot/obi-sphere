@@ -117,7 +117,7 @@ async function join(home: Home, p: Parsed) {
   home.remove("joining.json");
   say(`\nJoined. The owner's key fingerprint (compare it with the other members' owners out of band): ${ownerSigning.keyId}`);
   say(`The member's folder: ${home.dir} (keep it this user's only, and out of the host agent's reach).`);
-  say("Without asking, the host's agent may send questions and review requests to any member; a handoff waits for the owner. Change it with `obysphere-connector rules`.");
+  say("Until you set rules, everything the host's agent asks to send waits for your approval. To let it ask questions and request reviews without asking you: obysphere-connector rules --allow question,review_request --to '*'");
   say(`Add it to an MCP host: obysphere-connector mcp-config --home ${home.dir}`);
 }
 
@@ -157,7 +157,7 @@ async function decide(home: Home, p: Parsed, decision: "approve" | "decline" | "
   };
   home.writeJson(`decisions/${item.id}.json`, await signStatement(d, key));
   const running = runningPid(home);
-  say(`${decision === "approve" ? "Approved" : decision === "answer" ? "Answered" : "Declined"} ${item.id}. ${running ? `The connector (pid ${running}) applies it within seconds.` : "No connector is running: it is applied the next time one runs (within 15 minutes, or sign it again)."}`);
+  say(`${decision === "approve" ? "Approved" : decision === "answer" ? "Answered" : "Declined"} ${item.id}. ${running ? `The connector (pid ${running}) applies it within seconds;` : "No connector is running: it is applied the next time one runs (within 15 minutes, or sign it again);"} \`obysphere-connector inbox --all\` shows how it went.`);
 }
 
 async function rules(home: Home, p: Parsed) {

@@ -21,7 +21,7 @@ export const VERSION = "0.1.0";
 export const INBOX_LIMIT = 5;
 /** How long an owner's signed decision stays good to apply. */
 export const DECISION_FRESH_SECONDS = 900;
-/** After a member declines `busy`, how long before the agent may ask it again with nothing open (protocol.md section 11). */
+/** After a member declines `busy` with nothing else of ours open to it, how long before the agent may ask it again (protocol.md section 11). */
 export const BUSY_BACKOFF_SECONDS = 3600;
 /** A finished item is forgotten this long after it expired. */
 export const KEEP_FINISHED_SECONDS = 30 * 86400;
@@ -51,8 +51,8 @@ export interface MemberFile {
 interface ConnectorState {
   /** The highest rules version applied: an older rules file never replaces it. */
   rules_version: number;
-  /** Members that declined `busy`, and until when the agent doesn't ask them again with nothing open. */
-  busy_until: Record<string, number>;
+  /** Members that declined `busy`: when, and our requests that were open to them then (protocol.md section 11, "Rate limits"). */
+  busy: Record<string, { at: number; open: string[] }>;
 }
 
 export type ItemState =
@@ -169,7 +169,7 @@ export class Connector {
   }
 
   #state(): ConnectorState {
-    return { rules_version: 0, busy_until: {}, ...this.home.readJsonOr<Partial<ConnectorState>>("state.json", {}) };
+    return { rules_version: 0, busy: {}, ...this.home.readJsonOr<Partial<ConnectorState>>("state.json", {}) };
   }
 
   #saveState(s: ConnectorState) {
@@ -254,8 +254,10 @@ export class Connector {
   /** A request: in the mailbox to wait for the owner, or declined at once, and then kept nowhere but the log. */
   async #handleRequest(m: ReceivedMessage, r: Received) {
     const id = `in-${m.id}`;
-    // A delivery seen before (its acknowledgement lost): what was decided about it stands.
+    // A delivery seen before (its acknowledgement lost): what was decided about it stands, a decline
+    // sent at once included (protocol.md section 11, step 2).
     if (this.home.exists(`items/${id}.json`)) return;
+    if ((this.member.memory.exchanges[m.id]?.replies ?? []).some((e) => e.from === this.file.obi)) return;
     const body = plainBody(m.body);
     const decline = async (reason: string, why: string) => {
       this.#note(`declined ${m.type} ${m.id} from ${m.from}: ${reason} (${why})`);
@@ -284,6 +286,8 @@ export class Connector {
       return;
     }
     if (item.replies.some((x) => x.id === m.id)) return;
+    // Only the latest status is kept: a member can send any number, and each would be shown again.
+    if (m.type === "status") item.replies = item.replies.filter((x) => x.type !== "status");
     item.replies.push({ id: m.id, type: m.type, from: m.from, at: timestamp(nowSeconds()), body: plainBody(m.body) });
     if (m.type === "accept") item.state = "accepted";
     else if (m.type === "answer" || m.type === "result") item.state = "answered";
@@ -291,7 +295,8 @@ export class Connector {
       item.state = "declined";
       if ((m.body as JsonObject).reason === "busy") {
         const state = this.#state();
-        this.#saveState({ ...state, busy_until: { ...state.busy_until, [item.peer]: nowSeconds() + BUSY_BACKOFF_SECONDS } });
+        const open = this.items().filter((i) => i.direction === "out" && i.peer === item.peer && i.id !== item.id && OPEN.includes(i.state)).map((i) => i.id);
+        this.#saveState({ ...state, busy: { ...state.busy, [item.peer]: { at: nowSeconds(), open } } });
       }
     }
     item.log.push(`${m.type} received at seq ${r.seq}`);
@@ -447,9 +452,15 @@ export class Connector {
       if (peer.status !== "active") throw new ConnectorError(`${to} was revoked`);
       if (!peer.trusted) throw new ConnectorError(`${to} isn't trusted: ${peer.problem}`);
       if (!peer.accepts.includes(type)) throw new ConnectorError(`${to} doesn't accept ${type} (it accepts ${peer.accepts.join(", ")})`);
-      const busyUntil = this.#state().busy_until[to] ?? 0;
-      const open = this.items().some((i) => i.direction === "out" && i.peer === to && OPEN.includes(i.state));
-      if (busyUntil > nowSeconds() && !open) throw new ConnectorError(`${to} declined as busy: ask it again after ${timestamp(busyUntil)}`);
+      // After a busy: not again until one of the requests open to it then has ended, or, with none open then, for an hour.
+      const busy = Object.hasOwn(this.#state().busy, to) ? this.#state().busy[to] : undefined;
+      if (busy) {
+        const stillOpen = (id: string) => OPEN.includes(this.item(id)?.state ?? "expired");
+        const waiting = busy.open.length ? busy.open.every(stillOpen) : busy.at + BUSY_BACKOFF_SECONDS > nowSeconds();
+        if (waiting) throw new ConnectorError(busy.open.length ? `${to} declined as busy: ask it again once one of your open requests to it has ended` : `${to} declined as busy: ask it again after ${timestamp(busy.at + BUSY_BACKOFF_SECONDS)}`);
+      }
+      const same = this.items().some((i) => i.direction === "out" && i.peer === to && i.type === type && OPEN.includes(i.state) && canonicalize(i.body) === canonicalize(body));
+      if (same) throw new ConnectorError(`the same ${type} to ${to} is open already`);
       this.#checkShape(type, body);
       if (!(await this.#scanned(type, body))) throw new ConnectorError("the secret scan found what may be a secret, or couldn't run: nothing was sent");
       const item: Item = {
@@ -487,10 +498,10 @@ export class Connector {
       let withheld = false;
       let sent: { type: string; body: JsonObject } = { type, body };
       if (!(await this.#scanned(type, body))) {
+        // A status is only progress: stopped, nothing goes. Anything else finishes the request without words.
+        if (type === "status") throw new ConnectorError("the secret scan stopped that status: nothing was sent, and the request is still yours to reply to");
         withheld = true;
-        sent = type === "status" ? { type: "status", body: { state: "working" } }
-          : item.type === "question" ? { type: "decline", body: { reason: "other" } }
-          : { type: "result", body: this.#failedResult(item) };
+        sent = item.type === "question" ? { type: "decline", body: { reason: "other" } } : { type: "result", body: this.#failedResult(item) };
       }
       const out = await this.#sendReplyChecked(item, sent);
       if (sent.type !== "status") item.state = "replied";

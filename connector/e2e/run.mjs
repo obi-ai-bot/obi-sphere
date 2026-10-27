@@ -116,6 +116,7 @@ try {
   console.log("\n2. The connector joins with the same link, through its CLI");
   const joined = cli(["join", link, "--owner", "dee", "--obi", "dee-agent", "--passphrase-stdin"], { input: PASS + "\n" });
   must(joined.code === 0, `join exits 0${joined.code ? `: ${joined.err}` : ""}`);
+  check(cli(["rules", "--allow", "question,review_request", "--to", "*", "--passphrase-stdin"], { input: PASS + "\n" }).code === 0, "the owner lets the agent ask questions and request reviews without asking (a handoff still waits)");
   check(/fingerprint.*ed25519:/.test(joined.err), "join shows the owner key's fingerprint");
   const modes = readdirSync(memberHome).map((n) => spawnSync("stat", process.platform === "darwin" ? ["-f", "%Lp", join(memberHome, n)] : ["-c", "%a", join(memberHome, n)], { encoding: "utf8" }).stdout.trim());
   check(modes.every((m) => m === "600" || m === "700"), `every file in the member's folder is this user's only (${[...new Set(modes)].join(", ")})`);

@@ -124,3 +124,34 @@ test("incoming and outgoing items never share an id, and the digest covers what 
   assert.notEqual(itemDigest({ type: "question", peer: "a", body }), itemDigest({ type: "question", peer: "b", body }));
   assert.notEqual(itemDigest({ type: "question", peer: "a", body }), itemDigest({ type: "question", peer: "a", body: { text: "y" } }));
 });
+
+test("a status the scan stops isn't sent, and the request stays the agent's to answer", async () => {
+  const { c, state, question, deliver, decide, sent } = await setup();
+  const q = await question("Ready?");
+  state.deliveries = [deliver(q)];
+  await c.poll();
+  await decide(c.item(q.id)!, "approve");
+  state.deliveries = [];
+  await c.poll();
+  const before = sent.length;
+  await assert.rejects(c.reply(q.id, "status", { state: "working", note: `token ghp_${"a1B2".repeat(9)}` }), /nothing was sent/);
+  assert.equal(sent.length, before);
+  assert.equal(c.item(q.id)!.state, "approved");
+  const { withheld } = await c.reply(q.id, "answer", { text: "Yes." });
+  assert.equal(withheld, false);
+});
+
+test("a request declined at once and delivered again isn't put in the mailbox", async () => {
+  const { c, state, question, deliver } = await setup();
+  const qs = await Promise.all([0, 1, 2, 3, 4, 5].map((i) => question(`Question ${i}?`)));
+  const ds = qs.map((q, i) => deliver(q, i + 1));
+  state.deliveries = ds;
+  state.ackFails = true;
+  await c.poll().catch(() => {});
+  state.ackFails = false;
+  assert.equal(c.items().length, 5);
+  state.deliveries = [ds[5]!];
+  await c.poll();
+  assert.equal(c.items().length, 5);
+  assert.equal(c.item(qs[5]!.id), undefined);
+});

@@ -97,6 +97,7 @@ try {
   const { oby, client } = team;
   const joined = cli(["join", team.link, "--owner", "dee", "--obi", "dee-agent", "--name", "Dee's Claude Code", "--description", "Claude Code, joined through the connector.", "--passphrase-stdin"], PASS + "\n");
   if (!check(joined.code === 0, `the connector joins${joined.code ? `: ${joined.err}` : ""}`)) throw new Error("no member");
+  check(cli(["rules", "--allow", "question,review_request", "--to", "*", "--passphrase-stdin"], PASS + "\n").code === 0, "the owner lets the agent ask questions and request reviews without asking");
   const mcpConfig = join(run, "mcp.json");
   // alwaysLoad: Claude Code otherwise connects MCP servers lazily, and a `-p` run starts without its tools.
   writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { obysphere: { command: process.execPath, args: [BUNDLE, "mcp", "--home", memberHome], alwaysLoad: true } } }, null, 2));

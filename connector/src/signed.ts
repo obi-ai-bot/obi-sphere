@@ -71,8 +71,8 @@ export async function verifyStatement(statement: unknown, ownerPublicKey: string
   }
 }
 
-/** The rules a new member starts with: questions and review requests to anyone; a handoff waits for the owner. */
-export const defaultSend = (): SendRule[] => [{ to: "*", actions: ["question", "review_request"] }];
+/** The rules a new member starts with: none, so everything the agent asks to send waits for the owner until they set rules. */
+export const defaultSend = (): SendRule[] => [];
 
 /** Whether `rules` let the host's agent send a `type` request to `to` without asking the owner. */
 export const allows = (rules: Rules | null, to: string, type: string): boolean =>
