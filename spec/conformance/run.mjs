@@ -5,8 +5,14 @@
 //   node conformance/run.mjs --impl "<cmd>"     judge an implementation: each case's {case, context,
 //                                               input} on stdin (never its expected verdict),
 //                                               exit 0 = accept, anything else = reject
+//   node conformance/run.mjs --receiver "<cmd>" run the receiver track (receiver/README section): a
+//                                               live implementation, enrolled through its adapter
+//                                               command, against scripted adversarial peers
 //   options: --kinds envelope,card,audit,wire,host_approval   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
+//            receiver track: --server <dir> (the Sphere server; default ../server),
+//                            --sphere-url <loopback url> (a Sphere already running) with
+//                            --operator-token <t>, --corpus <file>, --only <id,id>, --keep
 //
 // Exit status 0 when every check passes, 1 otherwise.
 
@@ -357,11 +363,47 @@ async function selfCheck() {
   return failures === 0;
 }
 
+// ---------------------------------------------------------------------------------------------
+// The receiver track (receiver/harness.mjs): a live implementation against scripted peers.
+
+async function receiverMode(command) {
+  const { runReceiverTrack } = await import("./receiver/harness.mjs");
+  console.log("Obi-to-Obi protocol v0.1: conformance receiver track");
+  const result = await runReceiverTrack({
+    adapter: command,
+    serverDir: option("--server") ?? join(here, "..", "..", "server"),
+    sphereUrl: option("--sphere-url"),
+    operatorToken: option("--operator-token"),
+    corpusPath: option("--corpus"),
+    only: option("--only") ? new Set(option("--only").split(",")) : undefined,
+    keep: flag("--keep"),
+    onLog: (line) => console.log(line),
+  });
+  for (const r of result.results.filter((r) => r.status === "fail")) {
+    for (const p of r.problems) console.log(`      - ${r.id}: ${p}`);
+  }
+  const byClass = {};
+  for (const r of result.results) {
+    const c = (byClass[r.class] ??= { pass: 0, fail: 0, "n/a": 0 });
+    c[r.status]++;
+  }
+  console.log("\nPer class:");
+  for (const [cls, c] of Object.entries(byClass)) console.log(`  ${cls}: ${c.pass} passed, ${c.fail} failed, ${c["n/a"]} not applicable`);
+  if (result.root) console.log(`Kept the run folder at ${result.root}`);
+  console.log(result.ok ? "\nThe receiver track passed." : `\n${result.results.filter((r) => r.status === "fail").length} case(s) failed.`);
+  return result.ok;
+}
+
 const impl = option("--impl");
+const receiver = option("--receiver");
 const kinds = option("--kinds")?.split(",");
 if (args.includes("--impl") && !impl) {
   console.error('--impl needs a command, like --impl "node conformance/verify.mjs"');
   process.exit(64);
 }
-const passed = impl ? await implMode(impl, kinds) : await selfCheck();
+if (args.includes("--receiver") && !receiver) {
+  console.error('--receiver needs an adapter command, like --receiver "node conformance/receiver/receivers/receiver.mjs careful"');
+  process.exit(64);
+}
+const passed = receiver ? await receiverMode(receiver) : impl ? await implMode(impl, kinds) : await selfCheck();
 process.exit(passed ? 0 : 1);
