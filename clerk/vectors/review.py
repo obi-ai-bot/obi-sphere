@@ -15,7 +15,8 @@ from pathlib import Path
 
 MAX_INT = 2**53 - 1
 SHA = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
-TIMESTAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+CHALLENGE_MARGIN = 600
 ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 MOST_CONDITIONS = 10
 
@@ -109,11 +110,11 @@ def tally(inp):
         fail("bad_panel")
     if verifier is not None and (verifier in seats or verifier == inp["convener"]):
         fail("bad_panel")
-    if not (round_at < reviews_by <= challenge_by):
+    if not (round_at < reviews_by and reviews_by + CHALLENGE_MARGIN <= challenge_by):
         fail("bad_panel")
 
-    def requests_to(member):
-        """The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time."""
+    def requests_to(member, until):
+        """The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time and by `until`."""
         return [
             e
             for e in entries
@@ -122,7 +123,7 @@ def tally(inp):
             and e["envelope"]["to"] == member
             and same_repo(e["envelope"]["body"].get("repo"), subj["repo"])
             and e["envelope"]["body"].get("head_sha") == subj["head_sha"]
-            and seconds(e["recorded_at"]) > round_at
+            and round_at < seconds(e["recorded_at"]) <= until
         ]
 
     def review_result(request, member, deadline):
@@ -141,11 +142,13 @@ def tally(inp):
             fail("bad_input")
         if not (isinstance(acc, list) and all(is_obj(a) and is_int(a.get("index")) and isinstance(a.get("kind"), str) and isinstance(a.get("met"), bool) for a in acc)):
             fail("bad_input")
+        if len({f["id"] for f in findings}) != len(findings) or len({a["index"] for a in acc}) != len(acc):
+            fail("bad_input")
         return b
 
     ballots, findings = [], []
     for seat in seats:
-        reqs = requests_to(seat)
+        reqs = requests_to(seat, reviews_by)
         if len(reqs) > 1:
             fail("two_requests")
         res = review_result(reqs[0], seat, reviews_by) if reqs else None
@@ -157,7 +160,7 @@ def tally(inp):
 
     blocking = [f for f in findings if f["blocking"]]
     if verifier is not None and blocking:
-        reqs = requests_to(verifier)
+        reqs = requests_to(verifier, challenge_by - CHALLENGE_MARGIN)
         conds = [r["envelope"]["body"].get("acceptance", []) for r in reqs]
         shaped = (
             reqs
@@ -197,7 +200,7 @@ def at(n):
 
 
 ROUND_AT = (T0 + timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%SZ")
-DEADLINES = {"reviews": at(60), "challenge": at(90)}
+DEADLINES = {"reviews": at(60), "challenge": at(130)}
 
 
 def uid(n):
@@ -294,8 +297,12 @@ def cases():
     ok("a blocker, the verifier asked but not answering: it stands", base(es2))
     ok("a blocker the verifier refutes", base(es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "changes_requested", met=met_list([False]))]))
     ok("a blocker the verifier upholds", base(es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "approved", met=met_list([True]))]))
-    late = [accept(n + 1, n, VERIFIER), result(95, n, VERIFIER, "changes_requested", met=met_list([False]))]
+    late = [accept(n + 1, n, VERIFIER), result(135, n, VERIFIER, "changes_requested", met=met_list([False]))]
     ok("the verifier's refutation after the challenge deadline doesn't count", base(es2 + late))
+
+    es3 = es2 + [accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "changes_requested", met=met_list([False]))]
+    es3 += [request(80, VERIFIER, conds=acceptance()), request(81, "agent-bob")]
+    ok("requests after their deadlines (an ordinary review of the verifier, a re-review of a seat) aren't the panel's", base(es3))
 
     es, n = panel([("changes_requested", [finding("f-a", "blocker"), finding("f-b", "blocker", 7)]), ("changes_requested", [finding("f-a", "blocker")]), ("approved", [])])
     es += [request(n, VERIFIER, conds=custom(3)), accept(n + 1, n, VERIFIER), result(n + 2, n, VERIFIER, "changes_requested", met=met_list([True, False, True]))]
@@ -381,13 +388,20 @@ def cases():
     err("the convener sits", base([], verifier=False, seats=[CONVENER, "agent-bob"]), "bad_panel")
     err("the verifier sits", {**base([], verifier=False), "verifier": "agent-bob"}, "bad_panel")
     err("deadlines out of order", {**base([], verifier=False), "deadlines": {"reviews": at(90), "challenge": at(60)}}, "bad_panel")
+    err("a challenge deadline less than 600 seconds after the reviews'", {**base([], verifier=False), "deadlines": {"reviews": at(60), "challenge": at(119)}}, "bad_panel")
+    es, _ = panel([("approved", [finding("f-1", "minor"), finding("f-1", "nit", 9)]), None, None])
+    err("a counted result that repeats a finding id", base(es, verifier=False, quorum=1), "bad_input")
+    es, _ = panel([("approved", []), None, None])
+    es[2]["envelope"]["body"]["acceptance"] = [{"index": 0, "kind": "no_blocker_findings", "met": True}, {"index": 0, "kind": "tests_pass", "met": True}]
+    err("a counted result that repeats an acceptance index", base(es, verifier=False, quorum=1), "bad_input")
+    err("a timestamp with digits that aren't ASCII", {**base([], verifier=False), "round_at": "\uff12026-10-27T12:00:05Z"}, "bad_input")
     return out
 
 
 def vectors():
     return {
         "description": "Known-answer vectors for the review profile's tally (spec/council/review.md, section 6): the chain's entries in chain order, round R's time and the motion's deadlines, and the clerk's count input they give, or the error. Words are sealed (any text value may be; the tally reads none). Outputs compare as JSON values: member order doesn't matter, array order does. The answers come from clerk/vectors/review.py, written apart from both implementations; every output is a count input the clerk counts.",
-        "version": 2,
+        "version": 3,
         "tally": cases(),
     }
 

@@ -9,6 +9,7 @@ compares. Every input is listed below, by hand.
 
 import hashlib
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -175,9 +176,17 @@ def anchor_id(pool_hash_hex, to):
     return f"{h[0:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
 
 
+TIMESTAMP = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
+
+
 def beacon_round(anchored_at, genesis_time, period):
     """The first round whose time is more than CLOCK_SKEW seconds after anchored_at."""
-    t = int(datetime.strptime(anchored_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+    if not (isinstance(anchored_at, str) and TIMESTAMP.match(anchored_at)):
+        fail("bad_input")
+    try:
+        t = int(datetime.strptime(anchored_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+    except ValueError:
+        fail("bad_input")
     if t < 0:
         fail("bad_input")
     t += CLOCK_SKEW

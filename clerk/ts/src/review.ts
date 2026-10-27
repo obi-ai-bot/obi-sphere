@@ -23,6 +23,9 @@ type Entry = { seq: number; recorded_at: string; envelope: Obj };
 /** The most conditions one challenge request carries (protocol.md section 5.1: 1 to 10). */
 export const MOST_CONDITIONS = 10;
 
+/** The verifier's requests are recorded at least this long before `deadlines.challenge` (review.md section 6). */
+export const CHALLENGE_MARGIN_SECONDS = 600;
+
 const fail = (code: TallyErrorCode): never => {
   throw new TallyError(code);
 };
@@ -89,11 +92,12 @@ export function reviewTally(input: Json): Obj {
   checkRule(input.rule as Obj, input.quorum as number, seats);
   if (new Set(seats).size !== seats.length || seats.includes(convener)) fail("bad_panel");
   if (verifier !== null && (seats.includes(verifier) || verifier === convener)) fail("bad_panel");
-  if (!(roundAt < reviewsBy && reviewsBy <= challengeBy)) fail("bad_panel");
+  if (!(roundAt < reviewsBy && reviewsBy + CHALLENGE_MARGIN_SECONDS <= challengeBy)) fail("bad_panel");
 
   const body = (e: Entry) => e.envelope.body as Obj;
-  // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time.
-  const requestsTo = (member: string): Entry[] =>
+  // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time
+  // and by `until`.
+  const requestsTo = (member: string, until: number): Entry[] =>
     entries.filter(
       (e) =>
         e.envelope.type === "review_request" &&
@@ -101,7 +105,8 @@ export function reviewTally(input: Json): Obj {
         e.envelope.to === member &&
         sameRepo(body(e).repo, repo) &&
         body(e).head_sha === head &&
-        (seconds(e.recorded_at) as number) > roundAt,
+        (seconds(e.recorded_at) as number) > roundAt &&
+        (seconds(e.recorded_at) as number) <= until,
     );
   // The review's result, when its exchange ended with one from `member` by `deadline`, for the subject; checked.
   const reviewResult = (request: Entry, member: string, deadline: number): Obj | null => {
@@ -117,13 +122,15 @@ export function reviewTally(input: Json): Obj {
     if (!Array.isArray(findings) || !findings.every((f) => isObj(f) && isId(f.id) && typeof f.severity === "string")) fail("bad_input");
     if (!Array.isArray(acceptance) || !acceptance.every((a) => isObj(a) && isInt(a.index) && typeof a.kind === "string" && typeof a.met === "boolean"))
       fail("bad_input");
+    const unique = (xs: Json[]) => new Set(xs).size === xs.length;
+    if (!unique((findings as Obj[]).map((f) => f.id)) || !unique((acceptance as Obj[]).map((a) => a.index))) fail("bad_input");
     return b;
   };
 
   const ballots: Obj[] = [];
   const findings: { id: string; blocking: boolean; evidence: boolean; challenge: string }[] = [];
   for (const seat of seats) {
-    const requests = requestsTo(seat);
+    const requests = requestsTo(seat, reviewsBy);
     if (requests.length > 1) fail("two_requests");
     const result = requests.length ? reviewResult(requests[0], seat, reviewsBy) : null;
     if (result === null) continue;
@@ -135,7 +142,7 @@ export function reviewTally(input: Json): Obj {
 
   const blocking = findings.filter((f) => f.blocking);
   if (verifier !== null && blocking.length > 0) {
-    const requests = requestsTo(verifier);
+    const requests = requestsTo(verifier, challengeBy - CHALLENGE_MARGIN_SECONDS);
     const conditions = requests.map((r) => (has(body(r), "acceptance") ? body(r).acceptance : []));
     const shaped =
       requests.length > 0 &&

@@ -1,6 +1,6 @@
 {
  "description": "Known-answer vectors for the review profile's tally (spec/council/review.md, section 6): the chain's entries in chain order, round R's time and the motion's deadlines, and the clerk's count input they give, or the error. Words are sealed (any text value may be; the tally reads none). Outputs compare as JSON values: member order doesn't matter, array order does. The answers come from clerk/vectors/review.py, written apart from both implementations; every output is a count input the clerk counts.",
- "version": 2,
+ "version": 3,
  "tally": [
   {
    "name": "three seats answer: two approve, one requests changes; no blocker",
@@ -23,7 +23,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -313,7 +313,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -601,7 +601,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -916,7 +916,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -1274,7 +1274,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -1632,7 +1632,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -1898,11 +1898,11 @@
       }
      },
      {
-      "seq": 195,
-      "recorded_at": "2026-10-27T12:15:50Z",
+      "seq": 235,
+      "recorded_at": "2026-10-27T12:22:30Z",
       "envelope": {
        "protocol": "obi/0.1",
-       "id": "00000000-0000-4000-8000-000000000095",
+       "id": "00000000-0000-4000-8000-000000000135",
        "type": "result",
        "from": "agent-erin",
        "to": "agent-alice",
@@ -1970,6 +1970,414 @@
    }
   },
   {
+   "name": "requests after their deadlines (an ordinary review of the verifier, a re-review of a seat) aren't the panel's",
+   "input": {
+    "convener": "agent-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "round_at": "2026-10-27T12:00:05Z",
+    "deadlines": {
+     "reviews": "2026-10-27T12:10:00Z",
+     "challenge": "2026-10-27T12:21:40Z"
+    },
+    "entries": [
+     {
+      "seq": 101,
+      "recorded_at": "2026-10-27T12:00:10Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000001",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-bob",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 102,
+      "recorded_at": "2026-10-27T12:00:20Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000002",
+       "type": "accept",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 103,
+      "recorded_at": "2026-10-27T12:00:30Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000003",
+       "type": "result",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "for": "review_request",
+        "outcome": "approved",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "no_blocker_findings",
+          "met": true
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 104,
+      "recorded_at": "2026-10-27T12:00:40Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000004",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-carol",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000004",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 105,
+      "recorded_at": "2026-10-27T12:00:50Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000005",
+       "type": "accept",
+       "from": "agent-carol",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000004",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000004"
+      }
+     },
+     {
+      "seq": 106,
+      "recorded_at": "2026-10-27T12:01:00Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000006",
+       "type": "result",
+       "from": "agent-carol",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000004",
+       "body": {
+        "for": "review_request",
+        "outcome": "approved",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "no_blocker_findings",
+          "met": true
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000004"
+      }
+     },
+     {
+      "seq": 107,
+      "recorded_at": "2026-10-27T12:01:10Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000007",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-dan",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000007",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 108,
+      "recorded_at": "2026-10-27T12:01:20Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000008",
+       "type": "accept",
+       "from": "agent-dan",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000007",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000007"
+      }
+     },
+     {
+      "seq": 109,
+      "recorded_at": "2026-10-27T12:01:30Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000009",
+       "type": "result",
+       "from": "agent-dan",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000007",
+       "body": {
+        "for": "review_request",
+        "outcome": "changes_requested",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [
+         {
+          "id": "f-9",
+          "severity": "blocker",
+          "file": "src/average.js",
+          "line": 4,
+          "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+          "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+         },
+         {
+          "id": "f-3",
+          "severity": "nit",
+          "file": "src/average.js",
+          "line": 9,
+          "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+          "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+         }
+        ],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "no_blocker_findings",
+          "met": false
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000007"
+      }
+     },
+     {
+      "seq": 110,
+      "recorded_at": "2026-10-27T12:01:40Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000010",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-erin",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000010",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "custom",
+          "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 111,
+      "recorded_at": "2026-10-27T12:01:50Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000011",
+       "type": "accept",
+       "from": "agent-erin",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000010",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000010"
+      }
+     },
+     {
+      "seq": 112,
+      "recorded_at": "2026-10-27T12:02:00Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000012",
+       "type": "result",
+       "from": "agent-erin",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000010",
+       "body": {
+        "for": "review_request",
+        "outcome": "changes_requested",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "custom",
+          "met": false
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000010"
+      }
+     },
+     {
+      "seq": 180,
+      "recorded_at": "2026-10-27T12:13:20Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000080",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-erin",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000080",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 181,
+      "recorded_at": "2026-10-27T12:13:30Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000081",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-bob",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000081",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     }
+    ],
+    "verifier": "agent-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "agent-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "agent-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "agent-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "agent-dan/f-9",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "refuted"
+     },
+     {
+      "id": "agent-dan/f-3",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
    "name": "three blockers from two seats, challenged in seat order: one refuted",
    "input": {
     "convener": "agent-alice",
@@ -1990,7 +2398,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -2381,7 +2789,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -3015,7 +3423,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -3368,7 +3776,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -3711,7 +4119,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -4044,7 +4452,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -4240,7 +4648,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -4487,7 +4895,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -4741,7 +5149,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -5004,7 +5412,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -5281,7 +5689,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -5463,7 +5871,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -5760,7 +6168,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6020,7 +6428,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6282,7 +6690,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6309,7 +6717,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6361,7 +6769,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6400,7 +6808,7 @@
     "round_at": "soon",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6427,7 +6835,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [],
     "note": "x"
@@ -6455,7 +6863,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6609,7 +7017,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [
      {
@@ -6755,7 +7163,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6782,7 +7190,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6810,7 +7218,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6837,7 +7245,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6864,7 +7272,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6887,7 +7295,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6913,7 +7321,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6939,7 +7347,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": []
    },
@@ -6966,7 +7374,7 @@
     "round_at": "2026-10-27T12:00:05Z",
     "deadlines": {
      "reviews": "2026-10-27T12:10:00Z",
-     "challenge": "2026-10-27T12:15:00Z"
+     "challenge": "2026-10-27T12:21:40Z"
     },
     "entries": [],
     "verifier": "agent-bob"
@@ -6999,6 +7407,374 @@
     "entries": []
    },
    "error": "bad_panel"
+  },
+  {
+   "name": "a challenge deadline less than 600 seconds after the reviews'",
+   "input": {
+    "convener": "agent-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "round_at": "2026-10-27T12:00:05Z",
+    "deadlines": {
+     "reviews": "2026-10-27T12:10:00Z",
+     "challenge": "2026-10-27T12:19:50Z"
+    },
+    "entries": []
+   },
+   "error": "bad_panel"
+  },
+  {
+   "name": "a counted result that repeats a finding id",
+   "input": {
+    "convener": "agent-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "round_at": "2026-10-27T12:00:05Z",
+    "deadlines": {
+     "reviews": "2026-10-27T12:10:00Z",
+     "challenge": "2026-10-27T12:21:40Z"
+    },
+    "entries": [
+     {
+      "seq": 101,
+      "recorded_at": "2026-10-27T12:00:10Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000001",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-bob",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 102,
+      "recorded_at": "2026-10-27T12:00:20Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000002",
+       "type": "accept",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 103,
+      "recorded_at": "2026-10-27T12:00:30Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000003",
+       "type": "result",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "for": "review_request",
+        "outcome": "approved",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [
+         {
+          "id": "f-1",
+          "severity": "minor",
+          "file": "src/average.js",
+          "line": 4,
+          "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+          "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+         },
+         {
+          "id": "f-1",
+          "severity": "nit",
+          "file": "src/average.js",
+          "line": 9,
+          "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+          "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+         }
+        ],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "no_blocker_findings",
+          "met": true
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 104,
+      "recorded_at": "2026-10-27T12:00:40Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000004",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-carol",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000004",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 105,
+      "recorded_at": "2026-10-27T12:00:50Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000005",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-dan",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000005",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "error": "bad_input"
+  },
+  {
+   "name": "a counted result that repeats an acceptance index",
+   "input": {
+    "convener": "agent-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "round_at": "2026-10-27T12:00:05Z",
+    "deadlines": {
+     "reviews": "2026-10-27T12:10:00Z",
+     "challenge": "2026-10-27T12:21:40Z"
+    },
+    "entries": [
+     {
+      "seq": 101,
+      "recorded_at": "2026-10-27T12:00:10Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000001",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-bob",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 102,
+      "recorded_at": "2026-10-27T12:00:20Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000002",
+       "type": "accept",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {},
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 103,
+      "recorded_at": "2026-10-27T12:00:30Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000003",
+       "type": "result",
+       "from": "agent-bob",
+       "to": "agent-alice",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000001",
+       "body": {
+        "for": "review_request",
+        "outcome": "approved",
+        "repo": "acme/app",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "findings": [],
+        "acceptance": [
+         {
+          "index": 0,
+          "kind": "no_blocker_findings",
+          "met": true
+         },
+         {
+          "index": 0,
+          "kind": "tests_pass",
+          "met": true
+         }
+        ]
+       },
+       "in_reply_to": "00000000-0000-4000-8000-000000000001"
+      }
+     },
+     {
+      "seq": 104,
+      "recorded_at": "2026-10-27T12:00:40Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000004",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-carol",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000004",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     },
+     {
+      "seq": 105,
+      "recorded_at": "2026-10-27T12:00:50Z",
+      "envelope": {
+       "protocol": "obi/0.1",
+       "id": "00000000-0000-4000-8000-000000000005",
+       "type": "review_request",
+       "from": "agent-alice",
+       "to": "agent-dan",
+       "sphere": "e2e",
+       "correlation_id": "00000000-0000-4000-8000-000000000005",
+       "body": {
+        "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+        "repo": "acme/app",
+        "base_branch": "main",
+        "head_branch": "feature/average",
+        "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+        "acceptance": [
+         {
+          "kind": "no_blocker_findings"
+         }
+        ]
+       }
+      }
+     }
+    ]
+   },
+   "error": "bad_input"
+  },
+  {
+   "name": "a timestamp with digits that aren't ASCII",
+   "input": {
+    "convener": "agent-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "agent-bob",
+     "agent-carol",
+     "agent-dan"
+    ],
+    "round_at": "２026-10-27T12:00:05Z",
+    "deadlines": {
+     "reviews": "2026-10-27T12:10:00Z",
+     "challenge": "2026-10-27T12:21:40Z"
+    },
+    "entries": []
+   },
+   "error": "bad_input"
   }
  ]
 }

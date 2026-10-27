@@ -14,6 +14,9 @@ use crate::MAX_INT;
 /// The most conditions one challenge request carries (protocol.md section 5.1: 1 to 10).
 pub const MOST_CONDITIONS: usize = 10;
 
+/// The verifier's requests are recorded at least this long before `deadlines.challenge` (review.md section 6).
+pub const CHALLENGE_MARGIN_SECONDS: u64 = 600;
+
 /// Why a tally input can't be used. The code is what the vectors name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TallyError {
@@ -53,6 +56,12 @@ fn int(v: Option<&Value>) -> Option<u64> {
 /// A protocol timestamp's seconds since 1970, or `None` when it isn't one.
 fn seconds(v: Option<&Value>) -> Option<u64> {
     unix_seconds(v?.as_str()?).ok()
+}
+
+fn list(v: Option<&Value>) -> &[Value] {
+    v.and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default()
 }
 
 fn is_sha(s: &str) -> bool {
@@ -175,12 +184,13 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
     if verifier.is_some_and(|v| distinct.contains(v) || v == convener) {
         return Err(BadPanel);
     }
-    if !(round_at < reviews_by && reviews_by <= challenge_by) {
+    if !(round_at < reviews_by && reviews_by + CHALLENGE_MARGIN_SECONDS <= challenge_by) {
         return Err(BadPanel);
     }
 
-    // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time.
-    let requests_to = |member: &str| -> Vec<&Entry> {
+    // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time
+    // and by `until`.
+    let requests_to = |member: &str, until: u64| -> Vec<&Entry> {
         entries
             .iter()
             .filter(|e| {
@@ -190,6 +200,7 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
                     && same_repo(e.body().get("repo"), repo)
                     && e.body().get("head_sha").and_then(Value::as_str) == Some(head)
                     && e.at > round_at
+                    && e.at <= until
             })
             .collect()
     };
@@ -238,13 +249,26 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
         if !findings_ok || !acceptance_ok {
             return Err(BadInput);
         }
+        let ids: Vec<&str> = list(b.get("findings"))
+            .iter()
+            .filter_map(|f| f["id"].as_str())
+            .collect();
+        let indexes: Vec<u64> = list(b.get("acceptance"))
+            .iter()
+            .filter_map(|a| a["index"].as_u64())
+            .collect();
+        if ids.iter().collect::<HashSet<_>>().len() != ids.len()
+            || indexes.iter().collect::<HashSet<_>>().len() != indexes.len()
+        {
+            return Err(BadInput);
+        }
         Ok(Some(b))
     };
 
     let mut ballots = Vec::new();
     let mut findings: Vec<(String, bool, &str)> = Vec::new();
     for seat in &seats {
-        let requests = requests_to(seat);
+        let requests = requests_to(seat, reviews_by);
         if requests.len() > 1 {
             return Err(TwoRequests);
         }
@@ -274,7 +298,7 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
 
     let blocking: Vec<usize> = (0..findings.len()).filter(|&i| findings[i].1).collect();
     if let Some(verifier) = verifier.filter(|_| !blocking.is_empty()) {
-        let requests = requests_to(verifier);
+        let requests = requests_to(verifier, challenge_by - CHALLENGE_MARGIN_SECONDS);
         let conditions: Vec<Option<&Vec<Value>>> = requests
             .iter()
             .map(|r| match r.body().get("acceptance") {

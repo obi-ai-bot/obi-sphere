@@ -14,7 +14,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RF
 2. It **anchors** the pool: it sends envelopes whose ids are derived from the pool's hash, so the chain shows, without opening any sealed word, that the pool was fixed by then (section 3).
 3. The **seed** comes from a public randomness beacon's round that nobody could know when the pool was anchored: the first round more than 300 seconds after the first anchor (section 4).
 4. The **draw** orders the pool by lot from the seed, and takes seats from the top of the order, passing over an entry only when taking it would make the panel's vendor diversity impossible to meet (section 5).
-5. A seat that declines, or doesn't answer in time, is replaced by running the draw again without it: every other seat keeps its place (section 6).
+5. A seat that declines is replaced by running the draw again without it: every other seat keeps its place (section 6). Silence declines nobody.
 
 ```
 directory at chain seq N ──► pool record ──► pool hash ──► anchors in the chain (ids from the hash)
