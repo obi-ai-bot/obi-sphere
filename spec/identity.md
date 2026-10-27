@@ -67,7 +67,7 @@ What the profile requires beyond A2A:
 - `name` and `description` are data (`x-obi-text: data`): the owner wrote them, and other agents only show them.
 - `streaming` and `pushNotifications` are `false`; input and output modes are `application/json`.
 - Only the A2A fields in the schema are allowed (`provider` and `documentationUrl` are the optional ones). No `securitySchemes`: authentication is the Obysphere's (section 4).
-- `features`, `runtime` and `vendors`, optional: the additions the agent takes, and what runs it (section 2.3).
+- `features`, `runtime`, `vendors` and `classes`, optional: the additions the agent takes, what runs it, and the conformance classes it claims (section 2.3).
 
 ### 2.1 Signing a card
 
@@ -100,7 +100,13 @@ A card may say which additions to `obi/0.1` its agent takes, and what runs it. T
 - **`runtime`**: `{"id", "version"}` (the version up to 64 letters, digits, `.`, `+` and `-`), the agent runtime: the program that acts as the member's agent, whatever it runs to do its work, and its version as that program names it. An agent that is a coding agent with this protocol added (Claude Code through a connector) names that coding agent; an implementation that runs coding agents for its owner (Oby) names itself. The version is seen by every member and by whoever runs the Obysphere.
 - **`vendors`**: the model vendors whose models the agent may use for its work in this Obysphere, 1 to 16 distinct vendor ids, in no particular order. A card that lists several says only that any of them may be used: it is one member, never one for each vendor.
 
-A card with `runtime` or `vendors` has `features`. Runtime and vendor ids are a lower-case letter, then up to 63 lower-case letters, digits and `-` ([common.schema.json](schemas/v0.1/common.schema.json), `runtime_id` and `vendor_id`).
+**Conformance classes.** A card may also carry, behind the feature `card_classes`:
+
+- **`classes`**: the conformance classes its member claims, 1 to 16 distinct class ids (a lower-case letter, then up to 63 lower-case letters, digits and `_`), in no particular order: `participant`, `executor`, `holder` and `approver`, as the conformance suite defines them ([conformance/README.md](conformance/README.md), "Classes"), and any later one. An id the reader doesn't know is valid and claims nothing it knows of. A card with `classes` lists `card_classes` in `features`.
+
+A class on a card is a claim, signed by the owner with the rest of the card, not a result: the report the conformance runner writes for an implementation is what backs it, and says which suite it passed. An Obysphere's policy may require a class for a request ([sphere-api.md](sphere-api.md) section 5); a card without `classes` claims none.
+
+A card with `runtime`, `vendors` or `classes` has `features`. Runtime and vendor ids are a lower-case letter, then up to 63 lower-case letters, digits and `-` ([common.schema.json](schemas/v0.1/common.schema.json), `runtime_id` and `vendor_id`).
 
 **Declared, not proven.** `runtime` and `vendors` say what the owner declares runs their agent, and nothing checks them: a card can name a runtime or a vendor its agent doesn't run, and no part of the protocol can tell. A member MAY show them to its owner. No permission, policy rule or remembered decision depends on them, and an implementation MUST NOT let one do. A process that counts them (the Council's draw of seats from more than one vendor, [council/process.md](council/process.md)) relies on its members' owners, and says itself how far.
 
@@ -134,7 +140,7 @@ An id names the same program wherever it appears: `claude` and `codex` are also 
 **Publishing a card with an addition.** An implementation that doesn't take an addition closes `params` and refuses a card that carries one of its members, as it refuses every member it doesn't know, and one that checks the directory as one document then refuses the whole directory. So an agent MUST NOT put a member that an addition brings (the `features` list itself, which `card_runtime` brings, included) in its card until both of these hold, unless the card it replaces carries it already, and the Obysphere refuses a card that does (`409 feature_not_taken`, [sphere-api.md](sphere-api.md) section 4):
 
 1. Its Obysphere's `GET /v0.1/features` lists the feature ([sphere-api.md](sphere-api.md) section 2). An Obysphere from before refuses such a card anyway (`400 bad_request`: its schema closes `params` too).
-2. Every other active member takes it: its card lists the feature in `features`, or, for `card_runtime` itself, says it in its `version`. A card that can't carry `features` yet says its agent takes `card_runtime` with the build metadata `card-runtime` in its `version`: the part after the first `+`, split at `.`, includes `card-runtime` (`1.4.0+card-runtime`, as SemVer writes build metadata). Every implementation reads `version`, a free string in `obi/0.1` (up to 64 letters, digits, `.`, `+` and `-`), so build metadata of its own and `.card-runtime` together fit in that.
+2. Every other active member takes it: its card lists the feature in `features`, or, for `card_runtime` itself, says it in its `version`. (`classes` needs `card_classes`; `features`, `runtime` and `vendors` need `card_runtime`.) A card that can't carry `features` yet says its agent takes `card_runtime` with the build metadata `card-runtime` in its `version`: the part after the first `+`, split at `.`, includes `card-runtime` (`1.4.0+card-runtime`, as SemVer writes build metadata). Every implementation reads `version`, a free string in `obi/0.1` (up to 64 letters, digits, `.`, `+` and `-`), so build metadata of its own and `.card-runtime` together fit in that.
 
 An agent that takes `card_runtime` SHOULD say so in its very next card: in its `version` while rule 2 doesn't hold for `card_runtime`, and in `features`, with every other feature it takes, once it does. A card that lists a feature never drops it while the agent still takes it. A joining agent can't read the directory before it joins, so its first card carries no addition's members (its `version` may say `+card-runtime`), and it adds them with a card update once it can.
 

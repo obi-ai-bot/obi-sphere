@@ -532,6 +532,16 @@ export function buildFixtures() {
   cardCase("invalid-card-runtime-id-sixty-five", "A runtime id one character too long.", withParams({ ...runtime, runtime: { id: "a".repeat(65), version: "1.0.0" } }), "reject", "card_invalid");
   cardCase("invalid-card-runtime-version-with-a-space", "A runtime version with a space in it.", withParams({ ...runtime, runtime: { id: "claude", version: "2.1.0 beta" } }), "reject", "card_invalid");
   cardCase("valid-card-version-says-card-runtime", "A card from before features that says, in its version's build metadata, that it takes card_runtime.", (() => { const c = cardFor("obi-a", "owner-a", A, OA, { version: "1.4.0+card-runtime" }); return signCard(c, OA.privateKey, OA.keyId); })(), "accept");
+  // The conformance classes a member claims (identity.md section 2.3), behind card_classes.
+  const classes = { features: ["card_runtime", "card_classes"], classes: ["participant", "approver"] };
+  cardCase("valid-card-with-classes", "A card that claims two conformance classes.", withParams(classes), "accept");
+  cardCase("valid-card-with-a-later-class", "A class the reader doesn't know: any id that matches is valid.", withParams({ ...classes, classes: ["participant", "some_later_class"] }), "accept");
+  cardCase("invalid-card-classes-without-card-classes", "Classes on a card whose features don't name card_classes.", withParams({ features: ["card_runtime"], classes: ["participant"] }), "reject", "card_invalid");
+  cardCase("invalid-card-classes-without-features", "Classes on a card with no features list.", withParams({ classes: ["participant"] }), "reject", "card_invalid");
+  cardCase("invalid-card-classes-empty", "An empty classes list.", withParams({ ...classes, classes: [] }), "reject", "card_invalid");
+  cardCase("invalid-card-class-repeated", "The same class twice.", withParams({ ...classes, classes: ["participant", "participant"] }), "reject", "card_invalid");
+  cardCase("invalid-card-class-not-an-id", "A class claimed in words.", withParams({ ...classes, classes: ["Participant and executor"] }), "reject", "card_invalid");
+  cardCase("invalid-card-seventeen-classes", "One class more than a card may claim.", withParams({ ...classes, classes: ids(17, "class_") }), "reject", "card_invalid");
   const runtimeTampered = withParams(runtime);
   runtimeTampered.capabilities.extensions[0].params.vendors = ["anthropic", "openai"];
   cardCase("invalid-card-vendors-changed-after-signing", "A vendor added after the owner signed.", runtimeTampered, "reject", "bad_signature");
