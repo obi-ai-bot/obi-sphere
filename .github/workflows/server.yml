@@ -108,7 +108,7 @@ jobs:
 
       - name: Receiver track (careful receiver passes, reckless one fails) against a local Sphere
         working-directory: spec
-        run: node --test conformance/receiver/receiver-track.test.mjs
+        run: node --test conformance/receiver/*.test.mjs
 
       - name: 200 concurrent sends against a local Sphere, all recorded, one chain
         working-directory: server

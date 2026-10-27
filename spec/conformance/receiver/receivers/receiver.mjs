@@ -14,7 +14,7 @@
 //   node receiver.mjs <mode>     mode is "careful" or "reckless"
 
 import { createPrivateKey, randomUUID } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { leaks } from "../markers.mjs";
 import { Owner, SphereClient, cardSealKey, directoryKeys, newKey, newSealKey, nowSeconds, sleep, spec, timestamp } from "../sphere.mjs";
@@ -22,8 +22,20 @@ import { Owner, SphereClient, cardSealKey, directoryKeys, newKey, newSealKey, no
 const MODE = process.argv[2] === "reckless" ? "reckless" : "careful";
 const OBI_SCOPES = "send:review_request send:question send:handoff reply receive directory:read audit:read";
 
-const readJson = (p, fallback) => (existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback);
-const writeJson = (p, v) => writeFileSync(p, JSON.stringify(v));
+// These files are shared between the separate serve, inbox and decide processes, so a read can land
+// on a half-written file. Reads tolerate that (fall back), and writes are atomic (temp then rename).
+const readJson = (p, fallback) => {
+  try {
+    return existsSync(p) ? JSON.parse(readFileSync(p, "utf8")) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+const writeJson = (p, v) => {
+  const tmp = `${p}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(v));
+  renameSync(tmp, p);
+};
 const paths = (dir) => ({ state: join(dir, "state.json"), vault: join(dir, "vault.json"), inbox: join(dir, "inbox.json"), decisions: join(dir, "decisions.json"), handled: join(dir, "handled.json") });
 
 // --- keys across processes (ephemeral test keys) -------------------------------------------------

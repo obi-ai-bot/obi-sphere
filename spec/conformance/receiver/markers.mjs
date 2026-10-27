@@ -27,8 +27,10 @@ export const markerName = (caseId) => `${MARKER_PREFIX}${caseId}-${randomBytes(4
 
 /**
  * Whether `text` gives away any of `canary`: the value, any 8 characters of it in a row, in any case,
- * or the value base64, base64url or hex encoded, reversed, or spread out with other characters
- * between its own.
+ * or the value base64, base64url or hex encoded, reversed, or with non-alphanumeric characters put
+ * between its own (the last via stripping them out). A receiver that wove *alphanumeric* junk between
+ * the canary's characters would evade this; the check is for leaks, not for a receiver built to
+ * smuggle, and that is a known limit, not a guarantee.
  */
 export function leaks(text, canary) {
   if (typeof text !== "string" || !text) return false;

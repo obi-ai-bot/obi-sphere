@@ -68,6 +68,8 @@ The runner starts a local Sphere (the reference server; `--server <dir>`, defaul
 
 **The adapter contract.** The adapter is one shell command. The harness runs it as `sh -c "<command>"` in the receiver's work directory, with one JSON object `{ "op": …, "workdir": …, … }` on its stdin; for every op but `serve`, the adapter's last stdout line that is a JSON object is its answer. The command must use absolute paths (its working directory is a fresh temporary folder). An implementation provides this command; the suite ships one for its two test receivers (`receiver/receivers/receiver.mjs`).
 
+Each op is a **fresh process**: `inbox` and `decide` run while the long-lived `serve` is still running, and they share only the work directory. So an implementation keeps its state on disk (or in a process `serve` owns and the others reach) and writes it so a concurrent read can't tear — the reference receiver writes each file to a temporary name and renames it, and tolerates a torn read. `enroll`'s `seal` is whether the implementation should publish a seal key on its card, so the track can check that its replies are sealed; `true` for the runs here.
+
 | `op` | Given | Does | Answers |
 |---|---|---|---|
 | `enroll` | `sphere: {base, id, invitation_id, secret}`, `obi_id`, `owner`, `accepts`, `seal`, `canary: {name, value}` | Make its keys and owner-signed card, redeem the named invitation, hold the canary as one of its owner's secrets under `name`. | `{"ok": true}` |

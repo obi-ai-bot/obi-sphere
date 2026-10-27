@@ -19,6 +19,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const RECEIVER = join(here, "receivers", "receiver.mjs");
 const serverDir = resolve(process.env.OBI_SERVER_DIR ?? join(here, "..", "..", "..", "server"));
 const haveServer = existsSync(join(serverDir, "scripts", "local.mjs")) && existsSync(join(serverDir, "node_modules"));
+// A silent skip would let the suite go green without ever running; under CI the server must be there.
+if (process.env.CI && !haveServer) throw new Error(`the receiver track needs a server checkout with its packages at ${serverDir} (set OBI_SERVER_DIR)`);
 
 const adapter = (mode) => `"${process.execPath}" "${RECEIVER}" ${mode}`;
 
