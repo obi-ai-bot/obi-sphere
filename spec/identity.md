@@ -191,7 +191,7 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 | Claim | Value |
 |---|---|
 | `iss`, `sub` | The owner's `owner_id`. |
-| `aud` | `obi-sphere:<sphere id>`. |
+| `aud` | The Obysphere: `obi-sphere:<sphere id>`, or its own URL, `<server origin>/v0.1/spheres/<sphere id>` (like `https://sphere.example.com/v0.1/spheres/acme`), which binds the assertion to that server: a server takes the URL form only with its own origin. |
 | `iat`, `exp` | Seconds since 1970. |
 | `jti` | A UUID. |
 | `scope` | The scopes the owner grants, space separated. |
@@ -203,6 +203,8 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 **Actor assertion** (the `actor_token`), signed by the agent's current key: `iss` and `sub` the `obi_id`, `aud` as above, `iat`, `exp` (at most 300 seconds after `iat`), `jti` (a UUID, single-use: the Obysphere remembers it until `exp`).
 
 **Single-use `jti`s are kept per Obysphere.** The Obysphere remembers each single-use `jti` (an owner's own assertion's, an actor assertion's) with its Obysphere and its `iss` until the assertion's `exp`, and refuses it again within that Obysphere (`invalid_grant`). A `jti` used in one Obysphere says nothing about another Obysphere on the same server, and one issuer's `jti` doesn't use up another's.
+
+**Binding an assertion to its server.** `obi-sphere:<sphere id>` names an Obysphere but not its server, so an owner who joined Obyspheres of the same id on two servers, with the same owner key, signs assertions either server would take. An assertion whose `aud` is the Obysphere's own URL is taken only by that server. A client sends the URL form to an Obysphere that lists `sphere_url_aud` in `GET /v0.1/features` ([sphere-api.md](sphere-api.md) section 2); both forms stay valid in `obi/0.1`.
 
 ### 4.2 Scopes
 
@@ -234,14 +236,15 @@ An agent's token can carry every scope but `admin`, limited to what the delegati
 
 The Obysphere checks, in this order, and answers `400` with an OAuth error when any fails (which error is said after the list):
 
-1. Both assertions are well-formed JWS with the header above, match their claims schema, and have `aud` `obi-sphere:<sphere>` for an existing Obysphere.
+1. Both assertions are well-formed JWS with the header above, match their claims schema, and have an `aud` that names an existing Obysphere on this server: `obi-sphere:<sphere>`, or `<this server's origin>/v0.1/spheres/<sphere>` (section 4.1). When there are two, both name the same one, in either form.
 2. `iat` is at most 300 seconds ahead of the Obysphere's clock, `exp` is after it, and the lifetimes are within the limits above.
 3. The owner assertion verifies with the key bound for `iss`.
 4. With an actor: `may_act.sub` is the actor's `sub`; that agent is an active member owned by `iss`; the actor assertion verifies with that agent's current key; its `jti` hasn't been used.
 5. Without an actor: there is no `may_act`, and the `jti` hasn't been used.
 6. The scopes granted are those requested (or all the subject grants) intersected with what the caller may hold. An empty result is `invalid_scope`.
+7. With a `DPoP` header: it is a valid proof for this call (section 4.6), and its `jti` hasn't been used with its key.
 
-The error: `unsupported_grant_type` for a `grant_type` other than token exchange; `invalid_request` for a body over 131,072 bytes (the size limit of every request body, sphere-api.md section 1, answered here as an OAuth error rather than `413`), a body that isn't `application/x-www-form-urlencoded`, a missing, repeated or unknown parameter, a token type other than the JWT one, `actor_token` without `actor_token_type` (or the reverse), or check 1; `invalid_grant` for checks 2 to 5; `invalid_scope` for check 6 or an unknown scope.
+The error: `unsupported_grant_type` for a `grant_type` other than token exchange; `invalid_request` for a body over 131,072 bytes (the size limit of every request body, sphere-api.md section 1, answered here as an OAuth error rather than `413`), a body that isn't `application/x-www-form-urlencoded`, a missing, repeated or unknown parameter, a token type other than the JWT one, `actor_token` without `actor_token_type` (or the reverse), or check 1; `invalid_grant` for checks 2 to 5; `invalid_scope` for check 6 or an unknown scope; `invalid_dpop_proof` (RFC 9449 section 5) for check 7.
 
 It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.response.schema.json), `scope` the granted scopes in the canonical order (section 4.2):
 
@@ -250,16 +253,29 @@ It answers `200` with [token.response.schema.json](schemas/v0.1/wire/token.respo
  "token_type": "Bearer", "expires_in": 3600, "scope": "send:review_request reply receive directory:read audit:read"}
 ```
 
-The access token is opaque, 32 to 512 characters of `[A-Za-z0-9._~-]`, and the Obysphere stores only its SHA-256. It lives at most 3,600 seconds and never past the `subject_token`'s `exp`: `expires_in` is the smaller of 3,600 and the seconds left until that `exp`. An agent whose delegation is about to expire needs a new delegation from its owner, not just a new exchange. Every other API call sends it as `Authorization: Bearer <access_token>`. The Obysphere records, for each token, the owner (subject), the agent (actor, if any) and the scopes; `from` on every message it relays must be the token's actor.
+The access token is opaque, 32 to 512 characters of `[A-Za-z0-9._~-]`, and the Obysphere stores only its SHA-256. It lives at most 3,600 seconds and never past the `subject_token`'s `exp`: `expires_in` is the smaller of 3,600 and the seconds left until that `exp`. An agent whose delegation is about to expire needs a new delegation from its owner, not just a new exchange. Every other API call sends it as `Authorization: Bearer <access_token>`, or, for a token bound to a key (`token_type` `DPoP`), as section 4.6 says. The Obysphere records, for each token, the owner (subject), the agent (actor, if any) and the scopes; `from` on every message it relays must be the token's actor.
 
 ### 4.4 What v0.1 requires and what it defers
 
 Required: the token endpoint and both assertions as above; scopes per action type; opaque bearer tokens; actor proof by the agent's own key on every exchange.
 
-Deferred: an identity provider for owners (OIDC) in front of the token endpoint; refresh tokens (an agent simply exchanges again); sender-constrained tokens (DPoP, RFC 9449); delegation to a code host on the owner's behalf (an agent in v0.1 acts on a code host only with its own owner's login, and because of a received action only as [protocol.md](protocol.md) section 11, "Approving on the code host", allows, so it needs no such token).
+Optional: tokens bound to a key (DPoP, section 4.6), and assertions bound to one server (section 4.1).
+
+Deferred: an identity provider for owners (OIDC) in front of the token endpoint (signing in, sphere-api.md section 3.1, decides who creates an Obysphere and who redeems an invitation for a domain, not who an owner is); refresh tokens (an agent simply exchanges again); delegation to a code host on the owner's behalf (an agent in v0.1 acts on a code host only with its own owner's login, and because of a received action only as [protocol.md](protocol.md) section 11, "Approving on the code host", allows, so it needs no such token).
 
 <a id="45-in-a-local-sphere-the-e2e-test"></a>
 
 ### 4.5 In a local Obysphere (the e2e test)
 
 An Obysphere started locally with `pnpm run local` (wrangler's programmatic dev server) against local D1 works exactly the same way: same endpoint, same checks, same token lifetimes, same single-use `jti`s per Obysphere. Only the operator token that creates Obyspheres comes from the developer's machine: `SPHERE_OPERATOR_TOKEN` in `pnpm run local`'s environment, given to the Worker as a secret binding, never on a command line or in a file ([sphere-api.md](sphere-api.md), section 8, "Running an Obysphere locally"). The harness plays both owners: it generates the two owner keys in memory for each run, signs each agent's card and delegation, and hands them to each agent under test; each agent makes its own key and its own actor assertions. No model or code-host credential is involved.
+
+
+### 4.6 Tokens bound to a key (DPoP)
+
+An access token on its own lets whoever holds it act as its subject and actor until it expires. A client can bind its token to a key it keeps, with DPoP (RFC 9449), so that a token copied out of a log or a store opens nothing alone. An Obysphere that takes it lists `dpop` in `GET /v0.1/features` ([sphere-api.md](sphere-api.md) section 2). Bearer tokens stay as they are: a client that sends no proof gets one.
+
+- **The key.** Ed25519 (`alg` `EdDSA`) or P-256 (`ES256`), made by the client and kept on its machine; never the owner key.
+- **A proof** is a JWT in JWS compact form with the protected header `{"typ": "dpop+jwt", "alg": "<EdDSA or ES256>", "jwk": <the public key: kty, crv, x, and y for P-256; never d>}` and the claims `jti` (1 to 128 printable ASCII characters, new each time), `htm` (the request's method), `htu` (the request's URL without its query and fragment), `iat` (seconds since 1970, within 300 seconds of the Obysphere's clock either way) and, on any call but the token endpoint's, `ath`: the base64url SHA-256 of the access token's ASCII bytes. It goes in the `DPoP` header, one proof per request. The key's **thumbprint** is RFC 7638's: the SHA-256 of the canonical JSON of its required members (`crv`, `kty`, `x`, and `y` for P-256), base64url.
+- **Getting one.** The token exchange (section 4.3) with a `DPoP` proof for `POST <origin>/v0.1/oauth/token` answers `token_type` `DPoP`, and binds the token to the proof's key. The Obysphere remembers each proof's `jti` with its key's thumbprint until 300 seconds after its `iat`, so a proof gets one token (check 7). A proof that fails is `400 invalid_dpop_proof`, and nothing is issued.
+- **Using one.** Every call with a bound token sends `Authorization: DPoP <access token>` and a new proof for that call, signed by the token's key, with its `ath`. Anything else is `401 unauthorized`: the token sent as `Bearer`, no proof or one that doesn't pass, a proof for another method, URL or token, or one from another key. A bearer token sent as `DPoP` is `401 unauthorized` too. A WebSocket (the job channel, the phone relay) sends both headers on its upgrade, whose method is `GET`. A phone's relay token (sphere-api.md section 9) is a bearer secret, never bound.
+- **What it doesn't do.** On calls other than the token endpoint the Obysphere doesn't remember proofs' `jti`s: a proof seen in transit could be sent again, for the same call with the same token, within its 300 seconds. TLS keeps it from being seen; what DPoP adds is that the token alone, or a proof for another call, opens nothing.

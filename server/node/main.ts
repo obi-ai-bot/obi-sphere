@@ -5,7 +5,7 @@
 //
 // Environment: PORT (8787), SPHERE_DATA (./data; /data in the image), SPHERE_URL (its public
 // address, only for the claim link it prints), and the Worker's own settings: SPHERE_OPERATOR_TOKEN,
-// GOOGLE_CLIENT_ID, CREATOR_WORKSPACES, SPHERE_CREATE_LIMIT, PHONE_RELAY (src/env.ts).
+// GOOGLE_CLIENT_ID, SIGNIN_PROVIDERS, CREATOR_WORKSPACES, SPHERE_CREATE_LIMIT, PHONE_RELAY (src/env.ts).
 //
 // Claiming: with no SPHERE_OPERATOR_TOKEN and no claim yet, it prints a one-time claim link to its
 // log and refuses everything but health, its features and the claim itself. Whoever claims it makes the operator
@@ -58,6 +58,7 @@ const env: Record<string, unknown> = {
   },
   SPHERE_OPERATOR_TOKEN: setting("SPHERE_OPERATOR_TOKEN"),
   GOOGLE_CLIENT_ID: setting("GOOGLE_CLIENT_ID"),
+  SIGNIN_PROVIDERS: setting("SIGNIN_PROVIDERS"),
   CREATOR_WORKSPACES: setting("CREATOR_WORKSPACES"),
   SPHERE_CREATE_LIMIT: setting("SPHERE_CREATE_LIMIT"),
   PHONE_RELAY: setting("PHONE_RELAY"),

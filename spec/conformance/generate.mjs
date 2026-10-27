@@ -785,6 +785,31 @@ export function buildFixtures() {
   wireCase("invalid-relay-short-id", "A relay id of 21 characters: fewer than 128 random bits.", RELAY, { relay: relayId.slice(0, 21), devices: [] }, "reject");
   // An Obysphere that offers the phone relay lists it (sphere-api.md section 9).
   wireCase("valid-features-phone-relay", "An Obysphere that takes card_runtime and offers the phone relay.", "wire/features.response", { features: ["card_runtime", "phone_relay"] }, "accept");
+  // Assertions, as the token endpoint reads their claims (identity.md section 4.1): `aud` names the
+  // Obysphere, or is its own URL, which only that server takes.
+  const DELEGATION = "wire/delegation.claims", ACTOR = "wire/actor.claims";
+  const owned = (aud) => ({ iss: "owner-a", sub: "owner-a", aud, iat: 1792000000, exp: 1792000300, jti: uuidFor(`wire-assertion-${aud}`), scope: "admin" });
+  const acting = (aud) => ({ iss: "obi-a", sub: "obi-a", aud, iat: 1792000000, exp: 1792000300, jti: uuidFor(`wire-actor-${aud}`) });
+  wireCase("valid-assertion-aud-sphere-id", "An owner assertion for `obi-sphere:<sphere>`.", DELEGATION, owned(`obi-sphere:${SPHERE}`), "accept");
+  wireCase("valid-assertion-aud-sphere-url", "An owner assertion for the Obysphere's own URL: bound to that server.", DELEGATION, owned(`https://sphere.example.com/v0.1/spheres/${SPHERE}`), "accept");
+  wireCase("valid-assertion-aud-sphere-url-port", "The Obysphere's URL with a port, on this machine.", DELEGATION, owned(`http://127.0.0.1:8787/v0.1/spheres/${SPHERE}`), "accept");
+  wireCase("valid-actor-aud-sphere-url", "An actor assertion for the Obysphere's own URL.", ACTOR, acting(`https://sphere.example.com/v0.1/spheres/${SPHERE}`), "accept");
+  wireCase("invalid-assertion-aud-other-path", "An `aud` URL that isn't an Obysphere's: its path is /v0.1/spheres/<sphere>.", DELEGATION, owned(`https://sphere.example.com/v0.1/spheres/${SPHERE}/members`), "reject");
+  wireCase("invalid-assertion-aud-query", "An `aud` URL with a query.", DELEGATION, owned(`https://sphere.example.com/v0.1/spheres/${SPHERE}?x=1`), "reject");
+  wireCase("invalid-assertion-aud-other-scheme", "An `aud` URL that isn't http or https.", ACTOR, acting(`wss://sphere.example.com/v0.1/spheres/${SPHERE}`), "reject");
+  wireCase("invalid-assertion-aud-upper-case", "An `aud` URL whose host isn't written lower case, as an origin is.", DELEGATION, owned(`https://Sphere.Example.com/v0.1/spheres/${SPHERE}`), "reject");
+  // Tokens bound to a key (identity.md section 4.6), and signing in with any provider (sphere-api.md section 3.1).
+  const tokenAnswer = (type) => ({ access_token: "T".repeat(43), issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: type, expires_in: 3600, scope: "admin" });
+  wireCase("valid-token-response-dpop", "A token bound to the key of the request's DPoP proof.", "wire/token.response", tokenAnswer("DPoP"), "accept");
+  wireCase("valid-token-response-bearer", "A bearer token, as before DPoP.", "wire/token.response", tokenAnswer("Bearer"), "accept");
+  wireCase("invalid-token-response-other-type", "A token type that is neither Bearer nor DPoP.", "wire/token.response", tokenAnswer("MAC"), "reject");
+  const SIGNIN = "wire/signin.request";
+  wireCase("valid-signin-request", "Start a sign-in for an owner key, the code going back to obi-sphere://signin.", SIGNIN, { owner_key: OA.publicKey }, "accept");
+  wireCase("valid-signin-request-loopback", "The code going back to the client, on this machine.", SIGNIN, { owner_key: OA.publicKey, return_to: "http://127.0.0.1:53682/signed-in" }, "accept");
+  wireCase("valid-signin-request-scheme", "The code going back to a scheme of the client's own.", SIGNIN, { owner_key: OA.publicKey, return_to: "example-client:/signin" }, "accept");
+  wireCase("invalid-signin-request-return-query", "A return_to with a query of its own.", SIGNIN, { owner_key: OA.publicKey, return_to: "http://127.0.0.1:53682/cb?next=1" }, "reject");
+  wireCase("valid-signin-providers", "The providers a server signs people in with.", "wire/signin-providers.response", { providers: [{ id: "google", name: "Google" }, { id: "acme-sso", name: "Acme SSO" }] }, "accept");
+  wireCase("invalid-signin-providers-id", "A provider id that can't be a path segment.", "wire/signin-providers.response", { providers: [{ id: "Acme SSO", name: "Acme SSO" }] }, "reject");
 
   // ---- Public key material ------------------------------------------------------------------
   const publicKeys = Object.fromEntries(Object.entries(keys).map(([label, k]) => [label, { seed_string: k.seed, public_key: k.publicKey, key_id: k.keyId }]));
