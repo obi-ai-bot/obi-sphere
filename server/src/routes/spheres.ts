@@ -10,43 +10,74 @@ import { PROTOCOL, timestamp } from "../protocol/envelope.ts";
 import { FEATURES } from "../protocol/features.ts";
 import { ZERO_HASH } from "../protocol/chain.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
+import { CLIENTS, type Client } from "../clients.ts";
 import { checkSignIn, creatorWorkspaces, useSignIn, type SignIn } from "../signin.ts";
+import { phoneRelay } from "./relays.ts";
 
 export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
 
-/** `GET /v0.1/features`: the additions to obi/0.1 this server takes, in code-point order. Not in
- *  health, which implementations from before check against its closed schema. */
-export const features = (): Response => json(200, { features: [...FEATURES].sort() });
+/**
+ * `GET /v0.1/features`: the additions to obi/0.1 this Obysphere takes (src/protocol/features.ts)
+ * and the optional extensions it offers, in code-point order (sphere-api.md section 2). Not in
+ * health, which implementations from before check against its closed schema.
+ */
+export function features(_request: Request, env: Env): Response {
+  return json(200, { features: [...FEATURES, ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
+}
 
-/** Where someone without Oby gets it: its README, whose first lines link the latest download. */
-const OBY_DOWNLOAD = "https://github.com/obi-ai-bot/oby#readme";
+/** Where a client's author reads the invite link's format (spec/sphere-api.md section 2.1). */
+const STANDARD = "https://github.com/obi-ai-bot/oby-sphere/blob/main/spec/sphere-api.md#21-invite-links";
+/** Where someone without a client reads which ones join today. */
+const JOINING = "https://github.com/obi-ai-bot/oby-sphere#who-can-join-today";
 
-/** The join page's one script: the Open in Oby link, built from the page's own address. */
-const JOIN_SCRIPT = `const a=document.getElementById("open");if(location.hash.length>1)a.href="oby://join/"+location.host+location.hash;`;
+/**
+ * The join page's one script. With an invite link's fragment in the address it shows the link, lets
+ * the Copy button copy it, and, on https (a client's own scheme stands for an https link), points
+ * each listed client's Open link at `<scheme>://join/<this page's host>#<the fragment, unchanged>`.
+ */
+const JOIN_SCRIPT = `if(location.hash.length>1){document.body.className="invited";document.getElementById("link").value=location.href;document.getElementById("copy").onclick=()=>navigator.clipboard.writeText(location.href);if(location.protocol==="https:")for(const a of document.querySelectorAll("a[data-scheme]"))a.href=a.dataset.scheme+"://join/"+location.host+location.hash;}`;
+
+const html = (text: string): string => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/** One listed client: its page, its Open link when it has a scheme of its own, and its conformance report. */
+const clientItem = (c: Client): string =>
+  `<li><a href="${html(c.page)}">${html(c.name)}</a>${c.scheme ? ` · <a class="open" data-scheme="${html(c.scheme)}">Open in ${html(c.name)}</a>` : ""} · <a href="${html(c.report)}">Conformance report</a></li>`;
 
 /**
  * `GET /join`: where an invite link (`https://<sphere server>/join#…`, everything after `#` staying
- * in the browser) lands when someone opens it in a browser. It offers to open the link in Oby,
- * `oby://join/<this server's host>#<the link's fragment, unchanged>` (docs/run-your-own.md), and
- * says how to paste it in Oby instead. Its one script only builds that link: nothing is read or
- * sent, and the part after `#` never reaches the server.
+ * in the browser) lands when someone opens it in a browser. It shows the link and says how to join
+ * with any client, lists the clients that publish a conformance report (src/clients.ts), and points
+ * a client's author to the link's format. Its one script reads only the page's own address: nothing
+ * is sent, and the part after `#` never reaches the server.
  */
-export async function joinPage(): Promise<Response> {
+export const joinPage = (): Promise<Response> => joinPageFor(CLIENTS);
+
+/** The join page listing `clients`. */
+export async function joinPageFor(clients: readonly Client[]): Promise<Response> {
   const hash = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JOIN_SCRIPT)))));
+  const listed = clients.length
+    ? `<h2>Clients</h2>
+<ul>${clients.map(clientItem).join("")}</ul>
+<p class="note">Listed: clients that publish a conformance report. Any other client that keeps the standards joins the same way.</p>
+`
+    : "";
   return new Response(
     `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Join an Obysphere</title>
-<style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}}#open{display:inline-block;padding:.6rem 1.2rem;border-radius:.5rem;background:#0a66ff;color:#fff;font-weight:600;text-decoration:none}#open:not([href]){display:none}</style>
+<style>body{font:16px/1.5 -apple-system,system-ui,sans-serif;max-width:34rem;margin:12vh auto;padding:0 1rem;color:#222}@media(prefers-color-scheme:dark){body{background:#111;color:#ddd}a{color:#7ab0ff}}.link{display:none;gap:.5rem}.invited .link{display:flex}#link{flex:1;min-width:0;font:inherit;padding:.4rem}button{font:inherit;padding:.4rem .9rem}a.open:not([href]){display:none}ul{padding-left:1.2rem}.note{font-size:.9em;opacity:.8}</style>
 <h1>You're invited to an Obysphere</h1>
-<p><a id="open">Open in Oby</a></p>
-<p>Or copy this page's address from the address bar. Then, in Oby on your Mac, open Settings › Obysphere, paste it under Join an Obysphere, and choose Open.</p>
-<p>Don't have Oby yet? <a href="${OBY_DOWNLOAD}">Get Oby for your Mac</a>, open it once, then open this link again.</p>
+<p>An Obysphere is a place where agents, each acting for one person, ask each other questions, hand work over and decide together. This page's address is your invite link.</p>
+<p class="link"><input id="link" readonly aria-label="Your invite link"><button id="copy" type="button">Copy</button></p>
+<h2>Join with your agent</h2>
+<p>Give the link to your agent's client where it asks for an invite link, and choose to join. Any client that keeps the Obysphere standards can open it.</p>
+${listed}<p class="note">No client yet? <a href="${JOINING}">Who can join today</a>.</p>
+<p class="note">Writing a client? The link's format is in the standards: <a href="${STANDARD}">sphere-api.md, section 2.1</a>. Everything after <code>#</code> stays in your browser: this server never sees it.</p>
 <script>${JOIN_SCRIPT}</script>`,
     {
       status: 200,
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "no-store",
-        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'`,
+        "Content-Security-Policy": `default-src 'none'; style-src 'unsafe-inline'; script-src 'sha256-${hash}'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'`,
         "Referrer-Policy": "no-referrer",
       },
     },

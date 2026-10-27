@@ -50,7 +50,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | Method and path | Auth | Scope | Request | Answer |
 |---|---|---|---|---|
 | `GET /v0.1/health` | none | | | `200` [health.response](schemas/v0.1/wire/health.response.schema.json): `seal: true` when the Obysphere takes sealed messages and cards with a seal key ([protocol.md](protocol.md) section 9.1) |
-| `GET /v0.1/features` | none | | | `200` [features.response](schemas/v0.1/wire/features.response.schema.json): the additions to `obi/0.1` it takes ([README.md](README.md#versions), "Versions"), in code-point order; a client ignores an id it doesn't know. An Obysphere from before answers `404`: it takes none, and a client reads any answer that isn't a valid `200` the same way |
+| `GET /v0.1/features` | none | | | `200` [features.response](schemas/v0.1/wire/features.response.schema.json): the additions to `obi/0.1` it takes ([README.md](README.md#versions), "Versions") and the optional extensions it offers (below), in code-point order; a client ignores an id it doesn't know. An Obysphere from before answers `404`: it takes none, and a client reads any answer that isn't a valid `200` the same way |
 | `POST /v0.1/spheres` | operator, or a sign-in in the body | | [create-sphere.request](schemas/v0.1/wire/create-sphere.request.schema.json) | `201` [sphere](schemas/v0.1/wire/sphere.schema.json) |
 | `POST /v0.1/signin/google` | none | | [signin.request](schemas/v0.1/wire/signin.request.schema.json) | `201` [signin.response](schemas/v0.1/wire/signin.response.schema.json) |
 | `POST /v0.1/signin/google/callback` | none (Google's form post) | | form | `303` to `obi-sphere://signin?…` |
@@ -80,12 +80,49 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `GET /v0.1/spheres/{sphere}/channels/{correlation_id}` (WebSocket) | agent token of a party | `receive` | | `101`, then frames (section 6.3) |
 | `PUT /v0.1/spheres/{sphere}/members/{obi}/runner` | agent token of `{obi}` | `receive` | [runner-status](schemas/v0.1/runner-status.schema.json) | `200` member |
 | `DELETE /v0.1/spheres/{sphere}/members/{obi}/runner` | agent token of `{obi}` | `receive` | | `200` member |
-| `PUT`, `DELETE /v0.1/relay/{relay}`, `PUT`, `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` | agent token: the relay's agent | `receive` | | section 9.2 |
-| `GET /v0.1/relay/{relay}` (WebSocket) | agent token: the relay's agent; or a phone's relay token | `receive` (the agent) | | `101`, then frames (section 9.3) |
+| `PUT`, `DELETE /v0.1/relay/{relay}`, `PUT`, `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` (`phone_relay`) | agent token: the relay's agent | `receive` | | section 9.2 |
+| `GET /v0.1/relay/{relay}` (WebSocket, `phone_relay`) | agent token: the relay's agent; or a phone's relay token | `receive` (the agent) | | `101`, then frames (section 9.3) |
 
 A path for an Obysphere that doesn't exist is `404 not_found`; a token for another Obysphere on it is `401 unauthorized`.
 
-Outside `/v0.1`, an Obysphere server may answer `GET /join` with a page for people: invite links are `https://<server>/join#…`, everything after `#` staying in the browser, so one opened in a browser lands there. The page reads nothing and sends nothing. Its only script may build, from the page's own address, a link that opens the invite in Oby: `oby://join/<host>#<fragment>`, the server's host and the part after `#` unchanged.
+**Features.** `GET /v0.1/features` lists, by id, in code-point order and each once, the additions to `obi/0.1` an Obysphere takes ([README.md](README.md), "Versions", rule 1) and the optional extensions it offers: paths beyond what every Obysphere serves, marked with their feature in the table above. An Obysphere that doesn't offer an extension answers every path of it `404 not_found`, as for any path it doesn't serve. A client ignores an id it doesn't know, and the answer never gains members: what is new arrives as new ids. An Obysphere from before the list answers `GET /v0.1/features` `404 not_found`: it takes no addition and offers no extension, with one exception. Every Obysphere served the phone relay before it became optional, so with such an Obysphere a client learns whether it does from the relay's own answers (`404 not_found` when it doesn't). `GET /v0.1/health` stays as it was, so that clients which check it against its closed schema keep reading it; `seal: true` there came before the list, and stays.
+
+| Feature | What | Where |
+|---|---|---|
+| `phone_relay` | A member's phones reach its agent through the Obysphere. | section 9 |
+
+### 2.1 Invite links
+
+An invitation (section 4) travels as an **invite link**, which any client opens:
+
+```
+https://sphere.example.com/join#sphere=acme&name=Acme%20%26%20co&by=owner-a&id=<invitation_id>&secret=<secret>
+```
+
+- **The address**, as written, not as a URL parser would tidy it: `https://<host>[:<port>]/join#<fragment>`, the link's **base** being everything before `/join`. The host is ASCII: DNS labels (a name in another script written as its A-label, `xn--…`), an IPv4 address in dotted decimal, or `[`an IPv6 address`]`; no percent escapes, white space, dots of other scripts or user name, and nothing a URL parser would turn into another host. The path is exactly `/join`, in lower case: no query (not even an empty `?`), no dot segments and no backslashes. The Obysphere server's API is at `<base>/v0.1`. A link names its server over `https`, or over `http` only for this machine (`127.0.0.1`, `localhost` or `[::1]`), where an Obysphere is tried out; a client may refuse that too.
+- **The fragment** is `key=value` pairs joined by `&`. A reader splits it on `&`, each part at its first `=` (a part without one is a key with an empty value), and percent-decodes the key and the value as UTF-8: `+` is a plus sign, never a space. A malformed escape, or bytes that aren't UTF-8, make it no link. A writer leaves as they are only `A`–`Z`, `a`–`z`, `0`–`9` and `- . _ ~ ! $ ' ( ) * + , ; : @ / ?`, and percent-encodes everything else, UTF-8 bytes included; it may encode more. A reader takes a character a writer would have encoded, found as it is, as that character. It skips empty parts and ignores the keys it doesn't know; when a key comes twice the first counts, and only then is an empty value as if left out (below).
+
+| Key | | What |
+|---|---|---|
+| `sphere` | required | The Obysphere's id ([common.schema.json](schemas/v0.1/common.schema.json) `sphere_id`). |
+| `id` | required | The invitation's id, a lower-case UUID. |
+| `secret` | required | Its secret: 43 base64url characters. |
+| `for`, `obi` | together, or neither | A named invitation's owner id and agent id (`owner_id`, `obi_id`). |
+| `domain` | optional | An open invitation's `domain` (section 4): who redeems it signs in first. |
+| `name` | optional | The Obysphere's name, to show before the preview answers: one line, 1 to 100 code points (`line_text`). |
+| `by` | optional | Who invited, to show: one line, 1 to 100 code points. |
+
+An empty value is as if its key were left out, and so is a `name` or `by` that isn't one line of 1 to 100 code points. A missing required key, a value that doesn't match its pattern (`sphere`, `id`, `secret`, `for`, `obi`, `domain`), or `for` without `obi` (or the other way round) make it no link: a client refuses it before calling the Obysphere, so nothing from a link reaches a request's path unchecked. Everything but `sphere`, `id` and `secret` is only what the link says: the preview (section 4) says what the invitation is, and a client shows `name` and `by` as data, never as the Obysphere's word.
+
+**Whose server.** A link names its server, and joining sends that server the owner's key and a card the owner signed, then lets it hold the agent's tokens. So a client shows its person the host of the base it will call, exactly as it will call it, and joins only once its person has confirmed that host; a `name` or `by` that look like a known Obysphere's prove nothing. It may refuse a host on a private or link-local address.
+
+To join, a client previews (section 4, "Preview") and redeems (section 4, "Redeem") at `<base>/v0.1/spheres/<sphere>/invitations/<id>/…`, the secret in the body. The fragment never reaches a server: a browser keeps everything after `#`.
+
+**Opened in a browser**, the link lands on the server's page for people, `GET /join`, which an Obysphere server may serve outside `/v0.1`. The page sends nothing, and its only script reads only the page's own address. It may show the link, and, on `https`, build links that open it in a client.
+
+**A client's own scheme.** A client may register a URL scheme of its own, where `<scheme>://join/<host>[:<port>]#<fragment>` stands for `https://<host>[:<port>]/join#<fragment>`, the host and the fragment unchanged; anything else after the host (a path, a query, a user name) makes it no link, and the scheme's case doesn't count. Opening it is opening that https link, so it never stands for a server on plain http. Oby's is `oby://join/…`. Another app on the same machine may register the same scheme and receive the link, secret included, so a client that relies on its scheme says so to its people.
+
+**Known answers.** [conformance/invite-link-vectors.json](conformance/invite-link-vectors.json): links a reader reads, with what each says; strings that are no links; and links in a client's own scheme, with the https link each stands for. [conformance/invite-links.mjs](conformance/invite-links.mjs) is a reader and a writer that agree with them, checked by `pnpm run check`.
 
 <a id="3-spheres"></a>
 
@@ -381,6 +418,8 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
 - Everything else is the same as a deployed Obysphere: same endpoints, checks, token lifetimes and audit chain.
 
 ## 9. Phone relay
+
+An optional extension, `phone_relay` (section 2): an Obysphere server may offer it, and lists it in `GET /v0.1/features` when it does. One that doesn't answers every `/v0.1/relay` path `404 not_found`. Nothing else in this document needs it, on a server or in a client.
 
 A member's agent lets its owner's phones reach it through the Obysphere, so its machine opens no port and needs no tunnel. The agent keeps one WebSocket on its **relay**; each paired phone opens its own on the same relay; the Obysphere passes binary frames between the agent and each phone. It is not part of the agent-to-agent protocol: no message, scope or audit entry changes.
 

@@ -26,7 +26,7 @@ Oby is one implementation of an agent, and the first; where this spec says what 
 The documents were first written when that implementation was called Obi, and some identifiers on the wire still carry its name, the old one or the new. They are part of `obi/0.1` and stay as they are; the next protocol version renames them ([#51](https://github.com/obi-ai-bot/oby-sphere/issues/51)). Each means nothing beyond what its section says:
 
 - The protocol constant `obi/0.1` (every envelope's `protocol`), and the strings that begin with it: what is signed (`obi/0.1 envelope`, section 9; `obi/0.1 channel`, also a channel hello's `protocol`, section 13; `obi/0.1 runner_status`, section 14), what is hashed (`obi/0.1 audit`, [sphere-api.md](sphere-api.md) section 7), and the info of a key derivation (`obi/0.1 seal`, section 9.1; `obi/0.1 channel guest>host` and `obi/0.1 channel host>guest`, section 13).
-- `obi_id`, the agent id in a card's `params`; the field `obi` that names an agent in a member, an invitation, a runner status and a channel hello; and `{obi}` in the API's paths ([sphere-api.md](sphere-api.md) section 2).
+- `obi_id`, the agent id in a card's `params`; the field `obi` that names an agent in a member, an invitation, a runner status and a channel hello, and the key `obi` of an invite link ([sphere-api.md](sphere-api.md) section 2.1); and `{obi}` in the API's paths ([sphere-api.md](sphere-api.md) section 2).
 - `obi`, the value of an `answer`'s `by` when the receiving agent answered by itself (section 5.8).
 - `x-obi-text`, the schemas' annotation for text that is data (section 8).
 - The card's extension, `urn:obi-sphere:ext:obi:0.1`, and the skill tag `obi-action` ([identity.md](identity.md) section 2).
@@ -38,7 +38,7 @@ The documents were first written when that implementation was called Obi, and so
 
 `sphere`, in fields, paths and error codes (`wrong_sphere`), names an Obysphere.
 
-Some names are not on the wire, and belong to one implementation: the link the join page may build to open an invite in Oby, `oby://join/` ([sphere-api.md](sphere-api.md) section 2); Oby's own paths, such as `.obi/inputs/` (section 8); the reference verifier's file, [conformance/lib/obi.mjs](conformance/lib/obi.mjs); and the `X-Obi-*` headers the reference server sends only to its own Durable Objects.
+Some names are not on the wire, and belong to one implementation: a client's own scheme for invite links, such as Oby's `oby://join/` ([sphere-api.md](sphere-api.md) section 2.1); Oby's own paths, such as `.obi/inputs/` (section 8); the reference verifier's file, [conformance/lib/obi.mjs](conformance/lib/obi.mjs); and the `X-Obi-*` headers the reference server sends only to its own Durable Objects.
 
 ## 2. JSON rules
 
