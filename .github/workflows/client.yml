@@ -1,5 +1,7 @@
 # The client library (client/): types, unit tests, the conformance suite with the library as the
-# implementation, its example against a local Sphere (`pnpm run e2e`), and its build.
+# implementation, its example against a local Sphere (`pnpm run e2e`), and its build. Then the MCP
+# connector built on it (connector/): types, unit tests, its end-to-end run against a local Sphere,
+# and its build.
 #
 # A draft pull request runs the workflow but skips its jobs, unless it has the `full-ci` label
 # (that takes effect on the next push after labelling); marking it ready for review runs
@@ -43,6 +45,7 @@ jobs:
           cache: pnpm
           cache-dependency-path: |
             client/pnpm-lock.yaml
+            connector/pnpm-lock.yaml
             server/pnpm-lock.yaml
             spec/pnpm-lock.yaml
 
@@ -51,6 +54,7 @@ jobs:
           (cd spec && pnpm install --frozen-lockfile)
           (cd server && pnpm install --frozen-lockfile)
           (cd client && pnpm install --frozen-lockfile)
+          (cd connector && pnpm install --frozen-lockfile)
 
       - name: Types
         working-directory: client
@@ -70,4 +74,20 @@ jobs:
 
       - name: Build and pack
         working-directory: client
+        run: pnpm pack --pack-destination "$RUNNER_TEMP"
+
+      - name: Connector types
+        working-directory: connector
+        run: pnpm run check
+
+      - name: Connector unit tests
+        working-directory: connector
+        run: pnpm test
+
+      - name: The connector against a local Sphere, a scripted Oby and a scripted MCP client
+        working-directory: connector
+        run: pnpm run e2e
+
+      - name: Connector build and pack
+        working-directory: connector
         run: pnpm pack --pack-destination "$RUNNER_TEMP"
