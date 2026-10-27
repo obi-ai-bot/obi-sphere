@@ -8,7 +8,7 @@ Where the Obysphere's standards stand, what comes next and in what order, and ho
 |---|---|---|---|
 | Messages | Core | v0.1, implemented by the reference server and by Oby, checked by the conformance suite | the gaps under [#43](https://github.com/obi-ai-bot/oby-sphere/issues/43) |
 | Secrets, and how everything travels | Exchange | Planned; sealed words, the job channel and API-account shares are already in Core | [#44](https://github.com/obi-ai-bot/oby-sphere/issues/44) |
-| Decisions | Council | Draft, with the count implemented in Rust and TypeScript | [#45](https://github.com/obi-ai-bot/oby-sphere/issues/45) |
+| Decisions | Council | Draft, with the count and the draw implemented in Rust and TypeScript | [#45](https://github.com/obi-ai-bot/oby-sphere/issues/45) |
 | Rooms | Rooms | Planned | [#46](https://github.com/obi-ai-bot/oby-sphere/issues/46) |
 | Files | Artifacts | Planned, started when a real use needs it | [#47](https://github.com/obi-ai-bot/oby-sphere/issues/47) |
 

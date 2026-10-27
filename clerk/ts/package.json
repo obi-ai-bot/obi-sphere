@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A deterministic vote count: majority, supermajority, unanimity, evidenced veto, Schulze, Borda and median, with known-answer vectors.",
+  "description": "A deterministic vote count and draw by lot: majority, supermajority, unanimity, evidenced veto, Schulze, Borda and median, with known-answer vectors.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.18"
@@ -17,5 +17,8 @@
   "devDependencies": {
     "@types/node": "^22.18.0",
     "typescript": "^5.9.0"
+  },
+  "dependencies": {
+    "@noble/curves": "2.0.1"
   }
 }

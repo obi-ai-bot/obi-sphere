@@ -1,8 +1,8 @@
-# The clerk: a deterministic vote count
+# The clerk: a deterministic vote count and draw
 
-A small library that counts ballots by a stated rule and gives the same answer every time, in [Rust](rust/) and [TypeScript](ts/). It never reads the words behind a ballot and never uses judgement: the count is a function of its input. Anyone holding the input can count again and compare with a recorded verdict.
+A small library that counts ballots by a stated rule and gives the same answer every time, in [Rust](rust/) and [TypeScript](ts/). It never reads the words behind a ballot and never uses judgement: the count is a function of its input. Anyone holding the input can count again and compare with a recorded verdict. It also draws a panel's seats by lot ([the draw](#the-draw), below).
 
-Both implementations are checked against the same known-answer vectors, [vectors/count.json](vectors/count.json), and must give exactly the answers there. An implementation in another language is correct when it does too.
+Both implementations are checked against the same known-answer vectors, [vectors/count.json](vectors/count.json) and [vectors/draw.json](vectors/draw.json), and must give exactly the answers there. An implementation in another language is correct when it does too.
 
 Status: Draft. The input and output below may still change; the vectors' `version` changes with them.
 
@@ -74,18 +74,37 @@ An input that can't be counted gives one error code: the first that applies, che
 6. `bad_finding`: a finding id repeated, or a `challenge` that isn't `none`, `stands` or `refuted`.
 7. Then each ballot in order, the first failing check winning: `unknown_seat` (its seat isn't in `seats`), `duplicate_ballot` (its seat already has one), `wrong_ballot` (a choice the rule doesn't take: `vote` other than `abstain` on a ranked rule or `median`, a `vote` other than the three, a `ranking` on a rule that isn't ranked, a `value` on a rule other than `median`), `bad_ranking` (not every option exactly once).
 
+## The draw
+
+[spec/council/draw.md](../spec/council/draw.md) defines it; the clerk implements each step as a function of its input:
+
+| TypeScript | Rust (`obi_clerk::draw`) | Does |
+|---|---|---|
+| `pool(input)` | `pool` | Builds the pool record from the members active at a point in the chain: the eligible ones, one per owner. |
+| `poolHash(record)` | `pool_hash` | SHA-256 over `"obi council pool\n"` and the record's RFC 8785 canonical JSON. |
+| `anchorId(poolHash, to)` | `anchor_id` | The id of an anchor envelope to `to`: a version 8 UUID from the pool hash. |
+| `beaconRound(anchoredAt, genesis, period)` | `beacon_round` | The first beacon round at least 300 seconds after the last anchor. |
+| `verifyBeacon(publicKey, round, signature)` | `verify_beacon` | Whether a drand quicknet round's signature verifies (BLS12-381, via [`@noble/curves`](https://github.com/paulmillr/noble-curves) and [`drand-verify`](https://github.com/noislabs/drand-verify)). |
+| `beaconRandomness(signature)` | `beacon_randomness` | A round's randomness: the SHA-256 of its signature. |
+| `draw({pool, randomness, declined?})` | `draw` | The seed, the order, and the seats and verifiers, or `unmet`. |
+
+Errors are codes, as for the count: `bad_input`, `bad_members` (`pool`), `bad_pool`, `bad_panel`, `bad_declined` (draw.md section 5).
+
 ## Running
 
 ```
 make clerk-check
 ```
 
-runs both: `cargo test` and `cargo clippy` in `rust/`, and `pnpm run check` and `pnpm test` in `ts/` (Node 22.18 or later). To count inputs from the command line, one JSON object per line:
+runs everything: `python3 vectors/draw.py --check` (the draw's vectors are what their Python reference writes), `cargo test` and `cargo clippy` in `rust/`, and `pnpm run check` and `pnpm test` in `ts/` (Node 22.18 or later). To count or draw from the command line, one JSON object per line:
 
 ```
 cd clerk/rust && cargo run -q --example count < inputs.jsonl
+cd clerk/rust && cargo run -q --example draw < draws.jsonl
 ```
 
 ## The vectors
+
+[vectors/draw.json](vectors/draw.json) has the draw's vectors (draw.md section 9). Their answers come from [vectors/draw.py](vectors/draw.py), a third implementation in Python's standard library written apart from both; the beacon's signature checks are drand's own answers.
 
 [vectors/count.json](vectors/count.json) has `count` vectors (an input, and the exact output or the error code) and `verify` vectors (an input, a recorded verdict, and whether it matches). The expected answers were worked out by hand, not by either implementation; the Schulze and Borda cases include standard examples from the literature, where Borda and Schulze pick different winners from the same ballots.

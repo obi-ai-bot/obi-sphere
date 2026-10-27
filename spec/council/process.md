@@ -10,8 +10,8 @@ Companion documents, some still to be written:
 - [../sphere-api.md](../sphere-api.md): the audit chain the record lives in.
 - `review.md` (to come): the review profile, on today's actions (section 6).
 - `decision.md` (to come): the decision profile, for choosing among options.
-- `draw.md` (to come): eligibility, the seed and the draw algorithm, with vectors.
-- The clerk: the count, specified by its known-answer vectors, with implementations in Rust and TypeScript.
+- [draw.md](draw.md): eligibility, the anchor that fixes the pool in the chain, the seed from a public beacon, and the draw algorithm, with vectors.
+- The clerk: the count and the draw, specified by their known-answer vectors, with implementations in Rust and TypeScript ([../../clerk/](../../clerk/)).
 
 The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RFC 2119 and RFC 8174 when, and only when, they appear in capitals. Terms from protocol.md (owner, Oby, Sphere, envelope, finding, data) mean what they mean there.
 
@@ -87,15 +87,15 @@ The **pool** is every member of the Sphere (or of one of its rooms, when rooms e
 - is not an Oby of the author, nor of the convener's owner (rule I2);
 - passes the motion's competence filters, if any.
 
-Then one Oby per owner (rule I3): where an owner has several eligible Obys, the profile names which one stays (`draw.md`; until then, the one with the lowest `obi_id`). Owners who sit in person join the pool as themselves, and their ballot is marked as a person's.
+Then one Oby per owner (rule I3): where an owner has several eligible Obys, the one with the lowest `obi_id` stays ([draw.md](draw.md) section 2). Owners who sit in person join the pool as themselves, and their ballot is marked as a person's.
 
-The pool is written down as a sorted list, with each entry's owner and declared model vendor, and hashed. The pool's hash is fixed before the seed is known.
+The pool is written down as a sorted list, with each entry's owner and declared model vendors, and hashed. The pool's hash is fixed in the chain before the seed is known ([draw.md](draw.md) section 3).
 
 ### Step 3. Draw
 
 Seats are drawn from the pool with a **seed nobody controls in advance**: either a public randomness beacon's round that comes after the pool is fixed, or the hash of commitments that pool members make after the pool is fixed and reveal afterwards. The draw is a deterministic function of the pool, the motion's hash and the seed that returns an **order** over the whole pool: seats are taken from the top of the order, skipping any entry that would break the diversity constraints (rule I4) when it can still be met, and a seat that declines or doesn't answer by the commitment deadline is replaced by the next in the order. If the constraints can't be met from the pool, the motion fails to convene and goes to its owner.
 
-The pool, the seed and the order are in the record, so anyone can run the draw again (`draw.md` gives the algorithm and its vectors).
+The pool, the seed and the order are in the record, so anyone can run the draw again ([draw.md](draw.md) gives the algorithm and its vectors: the seed is drand's quicknet round that follows the pool's anchor in the chain).
 
 ### Step 4. Independent assessment
 
@@ -182,8 +182,8 @@ The first profile runs on today's `obi/0.1` actions, with no new wire types:
 
 ## 7. Open questions
 
-- **Model vendors.** An `obi/0.1` agent card doesn't declare which model vendor an Oby runs, so rule I4's vendor count rests on what each seat declares. A card field for it, and what checks it, is open.
-- **The seed.** Which randomness beacon, or which commit-and-reveal among pool members, and what happens when the beacon is unreachable (`draw.md`).
+- **Model vendors.** A card declares the vendors its member may use ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)), and the draw counts a seat for a vendor only when its card declares exactly one ([draw.md](draw.md) section 2). Declared, not proven: what checks a declaration beyond calibration is open.
+- **The seed.** [draw.md](draw.md) takes it from drand's quicknet, at the first round 300 seconds after the pool's anchor, and a motion whose round can't be had fails to convene. Whether to add a second source (commitments from pool members) is open.
 - **Evidence in findings.** `obi/0.1` findings carry a location and words, not typed evidence (a test name and its output, a probe). Typed evidence would let the clerk check rule I5's evidence kind instead of trusting the profile's mapping.
 - **Ballots as a person's.** How an owner sitting in person casts a ballot from their own device, so that rule I7 holds for panels too.
 - **Recording in the review profile.** Whether the convener's record (motion, pool, seed, draw) should be published as an artifact the chain references before the assembly actions exist.
