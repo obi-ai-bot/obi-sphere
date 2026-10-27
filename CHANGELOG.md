@@ -12,6 +12,7 @@ Changes to the server alone are in the git history and in [server/README.md](ser
 
 Changes merged into `dev` since the baseline below. Each pull request that changes `spec/` adds its entry here.
 
+- *Addition.* The Council process, Draft ([spec/council/process.md](spec/council/process.md)): roles, integrity rules, the ten steps from motion to audit, how a member re-checks a verdict, and the review profile on today's `review_request` and `result`. Not part of `obi/0.1`: no message, schema or fixture changes.
 - *Clarification.* The baseline is tagged `oby/0.1`. The spec index is organised by instrument and lists all 15 action types; this changelog replaces the one at the top of `spec/README.md`; the versioning rule is written down ([spec/README.md, "Versions"](spec/README.md#versions)). The conformance README says fifteen action types, as the self-check already checks.
 
 ## `oby/0.1`: the baseline
