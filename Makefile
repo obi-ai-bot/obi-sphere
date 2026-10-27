@@ -16,5 +16,6 @@ spec-conformance:
 # The clerk's count and draw, in Rust and TypeScript, against clerk/vectors/. Rust (cargo) and Python 3 are needed too.
 clerk-check:
 	python3 clerk/vectors/draw.py --check
+	python3 clerk/vectors/review.py --check
 	cd clerk/rust && cargo test --locked && cargo clippy --locked --all-targets -- -D warnings
 	cd clerk/ts && pnpm install --frozen-lockfile && pnpm run check && pnpm test

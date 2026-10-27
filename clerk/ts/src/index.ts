@@ -8,6 +8,7 @@
 import { createHash } from "node:crypto";
 
 export * from "./draw.ts";
+export * from "./review.ts";
 
 /** The largest integer an input may hold: 2^53 − 1. */
 export const MAX_INT = Number.MAX_SAFE_INTEGER;

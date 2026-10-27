@@ -1,0 +1,4193 @@
+{
+ "description": "Known-answer vectors for the review profile's tally (spec/council/review.md, section 6): a panel's envelopes from the chain, in chain order, and the clerk's count input they give, or the error. Words are sealed (any text value may be, the tally reads none). Outputs compare as JSON values: member order doesn't matter, array order does. The answers come from clerk/vectors/review.py, written apart from both implementations; every output is a count input clerk/vectors/count.json's rules accept.",
+ "version": 1,
+ "tally": [
+  {
+   "name": "three seats answer: two approve, one requests changes; no blocker",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-1",
+         "severity": "minor",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-2",
+         "severity": "major",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-carol/f-1",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     },
+     {
+      "id": "obi-dan/f-2",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a blocker and no verifier: it stands unchallenged",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-9",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "id": "f-3",
+         "severity": "nit",
+         "file": "src/average.js",
+         "line": 9,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-dan/f-9",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "none"
+     },
+     {
+      "id": "obi-dan/f-3",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a blocker, the verifier asked but not answering: it stands",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-9",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "id": "f-3",
+         "severity": "nit",
+         "file": "src/average.js",
+         "line": 9,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-dan/f-9",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "none"
+     },
+     {
+      "id": "obi-dan/f-3",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a blocker the verifier refutes",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-9",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "id": "f-3",
+         "severity": "nit",
+         "file": "src/average.js",
+         "line": 9,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "result",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "custom",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-dan/f-9",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "refuted"
+     },
+     {
+      "id": "obi-dan/f-3",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a blocker the verifier upholds",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-9",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "id": "f-3",
+         "severity": "nit",
+         "file": "src/average.js",
+         "line": 9,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "result",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "custom",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-dan/f-9",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "stands"
+     },
+     {
+      "id": "obi-dan/f-3",
+      "blocking": false,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "three blockers from two seats, challenged in seat order: one refuted",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-a",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "id": "f-b",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 7,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-a",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "result",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "custom",
+         "met": true
+        },
+        {
+         "index": 1,
+         "kind": "custom",
+         "met": false
+        },
+        {
+         "index": 2,
+         "kind": "custom",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-bob/f-a",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "stands"
+     },
+     {
+      "id": "obi-bob/f-b",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "refuted"
+     },
+     {
+      "id": "obi-carol/f-a",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "stands"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a challenge with the wrong number of conditions doesn't count",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-a",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        },
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "result",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "custom",
+         "met": false
+        },
+        {
+         "index": 1,
+         "kind": "custom",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-bob/f-a",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "a challenge whose condition isn't custom doesn't count",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-a",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "tests_pass"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "result",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "tests_pass",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-bob/f-a",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "the verifier declines after accepting: the blocker stands",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-a",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-erin",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "custom",
+         "text": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "type": "accept",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000012",
+      "type": "decline",
+      "from": "obi-erin",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "reason": "busy"
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000010"
+     }
+    ],
+    "verifier": "obi-erin"
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": [
+     {
+      "id": "obi-bob/f-a",
+      "blocking": true,
+      "evidence": true,
+      "challenge": "none"
+     }
+    ]
+   }
+  },
+  {
+   "name": "one seat declines, one never answers: one ballot",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "decline",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "reason": "busy"
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "a failed review is absent, and its findings with it",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "failed",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": []
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "reject"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "a result for another commit is absent",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "aeab70f30251c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "repositories compare ignoring case; a request for another commit isn't the panel's",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "Acme/App",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "aeab70f30251c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "aeab70f30251c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 1,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "a reply from anyone but the seat doesn't count",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000090",
+      "type": "result",
+      "from": "obi-mallory",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [
+        {
+         "id": "f-x",
+         "severity": "blocker",
+         "file": "src/average.js",
+         "line": 4,
+         "title": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+         "detail": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc"
+        }
+       ],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": false
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "a supermajority rule with no veto passes straight through",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "supermajority",
+     "num": 2,
+     "den": 3
+    },
+    "quorum": 2,
+    "veto": false,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "changes_requested",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     }
+    ]
+   },
+   "output": {
+    "rule": {
+     "kind": "supermajority",
+     "num": 2,
+     "den": 3
+    },
+    "quorum": 2,
+    "veto": false,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "ballots": [
+     {
+      "seat": "obi-bob",
+      "vote": "approve"
+     },
+     {
+      "seat": "obi-carol",
+      "vote": "reject"
+     },
+     {
+      "seat": "obi-dan",
+      "vote": "approve"
+     }
+    ],
+    "findings": []
+   }
+  },
+  {
+   "name": "two requests to one seat for the subject",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "type": "accept",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "type": "result",
+      "from": "obi-bob",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000001",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000001"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-carol",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "type": "accept",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "type": "result",
+      "from": "obi-carol",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000004",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000004"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000007",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-dan",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000008",
+      "type": "accept",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {},
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000009",
+      "type": "result",
+      "from": "obi-dan",
+      "to": "obi-alice",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000007",
+      "body": {
+       "for": "review_request",
+       "outcome": "approved",
+       "repo": "acme/app",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "findings": [],
+       "acceptance": [
+        {
+         "index": 0,
+         "kind": "no_blocker_findings",
+         "met": true
+        }
+       ]
+      },
+      "in_reply_to": "00000000-0000-4000-8000-000000000007"
+     },
+     {
+      "protocol": "obi/0.1",
+      "id": "00000000-0000-4000-8000-000000000010",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "sphere": "e2e",
+      "correlation_id": "00000000-0000-4000-8000-000000000010",
+      "body": {
+       "goal": "q83vEjRWeJA5Z6gNmV1vXyt7lH8K0oX2u_4T-9wq0aBc",
+       "repo": "acme/app",
+       "base_branch": "main",
+       "head_branch": "feature/average",
+       "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f",
+       "acceptance": [
+        {
+         "kind": "no_blocker_findings"
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "error": "two_requests"
+  },
+  {
+   "name": "not an object",
+   "input": [],
+   "error": "bad_input"
+  },
+  {
+   "name": "a head_sha that isn't a commit id",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "main"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": []
+   },
+   "error": "bad_input"
+  },
+  {
+   "name": "an envelope without a body",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [
+     {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "review_request",
+      "from": "obi-alice",
+      "to": "obi-bob",
+      "correlation_id": "00000000-0000-4000-8000-000000000001"
+     }
+    ]
+   },
+   "error": "bad_input"
+  },
+  {
+   "name": "an unknown member",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [],
+    "note": "x"
+   },
+   "error": "bad_input"
+  },
+  {
+   "name": "a rule the review profile doesn't take",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "schulze"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": []
+   },
+   "error": "bad_panel"
+  },
+  {
+   "name": "no seats",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [],
+    "envelopes": []
+   },
+   "error": "bad_panel"
+  },
+  {
+   "name": "a seat twice",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-bob"
+    ],
+    "envelopes": []
+   },
+   "error": "bad_panel"
+  },
+  {
+   "name": "the convener sits",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-alice",
+     "obi-bob"
+    ],
+    "envelopes": []
+   },
+   "error": "bad_panel"
+  },
+  {
+   "name": "the verifier sits",
+   "input": {
+    "convener": "obi-alice",
+    "subject": {
+     "repo": "acme/app",
+     "head_sha": "6d20146f366b1a4b5e7f8c9d0e1f2a3b4c5d6e7f"
+    },
+    "rule": {
+     "kind": "majority"
+    },
+    "quorum": 2,
+    "veto": true,
+    "seats": [
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
+    ],
+    "envelopes": [],
+    "verifier": "obi-bob"
+   },
+   "error": "bad_panel"
+  }
+ ]
+}

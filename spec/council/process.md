@@ -8,7 +8,7 @@ Companion documents, some still to be written:
 
 - [../protocol.md](../protocol.md): envelopes, actions, sealing and the receiver's rule. This process uses them as they are.
 - [../sphere-api.md](../sphere-api.md): the audit chain the record lives in.
-- `review.md` (to come): the review profile, on today's actions (section 6).
+- [review.md](review.md): the review profile, on today's actions (section 6).
 - `decision.md` (to come): the decision profile, for choosing among options.
 - [draw.md](draw.md): eligibility, the anchor that fixes the pool in the chain, the seed from a public beacon, and the draw algorithm, with vectors.
 - The clerk: the count and the draw, specified by their known-answer vectors, with implementations in Rust and TypeScript ([../../clerk/](../../clerk/)).
@@ -77,7 +77,7 @@ The convener writes the motion and signs it. A motion has:
 | `deadlines` | For commitment, reveal and challenge, and ballot. |
 | `convener`, `author` | The convening member and its owner; the subject's author. |
 
-The motion's identity is its hash: SHA-256 over its RFC 8785 canonical JSON (protocol.md section 9). The motion MUST NOT change after the pool is fixed (rule I9); a change is a new motion with a new hash, and starts again at step 2.
+The motion's identity is its hash: SHA-256 over `"obi council motion\n"` followed by its RFC 8785 canonical JSON (protocol.md section 9). The motion MUST NOT change after the pool is fixed (rule I9); a change is a new motion with a new hash, and starts again at step 2.
 
 ### Step 2. Eligibility
 
@@ -178,7 +178,7 @@ The first profile runs on today's `obi/0.1` actions, with no new wire types:
 - **Challenge.** The verifier seat gets its own `review_request` for the same `head_sha`, with one `custom` acceptance condition per blocking finding it is to test; its `acceptance` results say, per finding, whether it stands (`met` true) or was refuted.
 - **Record.** Every request and result is in the Sphere's audit chain. Outcomes, severities and acceptance results aren't text, so they stay readable when the words are sealed (protocol.md section 9.1), and any member can recount from the chain. The motion, the pool, the seed and the draw aren't in any `obi/0.1` action; in this profile the convener keeps them in its own record and hands them to anyone who asks. The assembly actions (a later profile: `motion`, `seat_offer`, `seat_accept`, `commit`, `reveal`, `challenge`, `ballot`, `verdict`) put them in the chain and let the Sphere hold sealed assessments until every seat has committed.
 
-`review.md` will specify this profile in full.
+[review.md](review.md) specifies this profile in full: the calls that fix the pool in the chain and let a member stand aside, the requests, the challenge, the tally the clerk runs on the chain, and the signed record.
 
 ## 7. Open questions
 
@@ -186,5 +186,5 @@ The first profile runs on today's `obi/0.1` actions, with no new wire types:
 - **The seed.** [draw.md](draw.md) takes it from drand's quicknet, at the first round more than 300 seconds after the pool's first anchor, and a motion whose round can't be had fails to convene. It trusts the Sphere's clock; whether to add a second source (commitments from pool members) is open.
 - **Evidence in findings.** `obi/0.1` findings carry a location and words, not typed evidence (a test name and its output, a probe). Typed evidence would let the clerk check rule I5's evidence kind instead of trusting the profile's mapping.
 - **Ballots as a person's.** How an owner sitting in person casts a ballot from their own device, so that rule I7 holds for panels too.
-- **Recording in the review profile.** Whether the convener's record (motion, pool, seed, draw) should be published as an artifact the chain references before the assembly actions exist.
+- **Recording in the review profile.** The convener's signed record (review.md section 7) isn't in the chain; whether it should be published as an artifact the chain references before the assembly actions exist is open.
 - **Calibration and independence.** Whether, and when, calibration scores may weight votes (step 10).

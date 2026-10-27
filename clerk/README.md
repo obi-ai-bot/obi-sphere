@@ -2,7 +2,7 @@
 
 A small library that counts ballots by a stated rule and gives the same answer every time, in [Rust](rust/) and [TypeScript](ts/). It never reads the words behind a ballot and never uses judgement: the count is a function of its input. Anyone holding the input can count again and compare with a recorded verdict. It also draws a panel's seats by lot ([the draw](#the-draw), below).
 
-Both implementations are checked against the same known-answer vectors, [vectors/count.json](vectors/count.json) and [vectors/draw.json](vectors/draw.json), and must give exactly the answers there. An implementation in another language is correct when it does too.
+Both implementations are checked against the same known-answer vectors, [vectors/count.json](vectors/count.json), [vectors/draw.json](vectors/draw.json) and [vectors/review.json](vectors/review.json), and must give exactly the answers there. An implementation in another language is correct when it does too.
 
 Status: Draft. The input and output below may still change; the vectors' `version` changes with them.
 
@@ -90,13 +90,17 @@ An input that can't be counted gives one error code: the first that applies, che
 
 Errors are codes, as for the count: `bad_input`, `bad_members` (`pool`), `bad_pool`, `bad_panel`, `bad_declined` (draw.md section 5).
 
+## The review tally
+
+`reviewTally(input)` (TypeScript) and `review::tally` (Rust) turn a review panel's envelopes, as the chain holds them, into the count input ([spec/council/review.md](../spec/council/review.md) section 6): one ballot per seat whose `result` counts, every finding with `blocking` for severity `blocker`, and each blocking finding's challenge from the verifier's `custom` conditions. They read nothing sealed, so anyone holding the chain tallies again without a key. Errors: `bad_input`, `bad_panel`, `two_requests`.
+
 ## Running
 
 ```
 make clerk-check
 ```
 
-runs everything: `python3 vectors/draw.py --check` (the draw's vectors are what their Python reference writes), `cargo test` and `cargo clippy` in `rust/`, and `pnpm run check` and `pnpm test` in `ts/` (Node 22.18 or later). To count or draw from the command line, one JSON object per line:
+runs everything: `python3 vectors/draw.py --check` and `python3 vectors/review.py --check` (the draw's and the tally's vectors are what their Python references write), `cargo test` and `cargo clippy` in `rust/`, and `pnpm run check` and `pnpm test` in `ts/` (Node 22.18 or later). To count or draw from the command line, one JSON object per line:
 
 ```
 cd clerk/rust && cargo run -q --example count < inputs.jsonl
@@ -105,6 +109,6 @@ cd clerk/rust && cargo run -q --example draw < draws.jsonl
 
 ## The vectors
 
-[vectors/draw.json](vectors/draw.json) has the draw's vectors (draw.md section 9). Their answers come from [vectors/draw.py](vectors/draw.py), a third implementation in Python's standard library written apart from both; the beacon's signature checks are drand's own answers.
+[vectors/draw.json](vectors/draw.json) has the draw's vectors (draw.md section 9), and [vectors/review.json](vectors/review.json) the review tally's (review.md section 10). Their answers come from [vectors/draw.py](vectors/draw.py), a third implementation in Python's standard library written apart from both; the beacon's signature checks are drand's own answers.
 
 [vectors/count.json](vectors/count.json) has `count` vectors (an input, and the exact output or the error code) and `verify` vectors (an input, a recorded verdict, and whether it matches). The expected answers were worked out by hand, not by either implementation; the Schulze and Borda cases include standard examples from the literature, where Borda and Schulze pick different winners from the same ballots.
