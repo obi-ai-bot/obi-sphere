@@ -47,6 +47,43 @@ Every file under `fixtures/` is one case:
 - **`wire`**: `input` is one request or answer body of [sphere-api.md](../sphere-api.md). `context` is `{schema}`, the wire schema it is judged by (`wire/invitation.request`, …), named as `verify.mjs --schema` names it. Checks: that schema alone (rejections are `bad_request`). They pin the rules a client needs that live in a schema, like a named invitation's `owner` and `obi` coming together.
 - **`host_approval`**: whether a receiving Oby may post its approving review on the code host now ([protocol.md](../protocol.md) section 11, "Approving on the code host"): accept means it may, reject that it must not. `context` is `{now, request, member, owner_login, standing_permission}`: the request as `{correlation_id, repo, pr, base_branch, head_sha, expires_at}`, whether the receiver is still an active member of its Sphere, its owner's login on the code host, and whether its owner gave the standing permission for the sender's owner and `repo`. `input` is `{owner_confirmations, code_host}`: the owner's confirmations the receiver holds, each `{correlation_id, head_sha, signed_at, from_owner_device, used_before}` (the receiver has checked the device's signature already; `from_owner_device` false is a yes from anywhere else), and what the code host shows, `{codeowners, changed_files, files_complete, reviews, teams, permissions}`: the `CODEOWNERS` file on `base_branch` (or null), every changed path (a renamed file's old and new), whether that list is whole, the reviews in the order they were made, as the code host lists them (`{login, account_type, body, state, commit_id}`: `account_type` `User` or `Bot`, `state` `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED` or `DISMISSED`), the members of each team the file names (`{"org/team": [logins]}`) and each approver's access to the repository (`{login: "admin" | "maintain" | "write" | "triage" | "read" | "none"}`). Rejections are `lapsed`, `no_owner_confirmation` or `no_code_owner_approval`. The cases fix the matching rules of "Who counts as a code owner" too.
 
+## Conformance classes
+
+An implementation that only asks and answers questions and one that runs other people's jobs on its machine carry very different risks, but passing "the suite" says nothing about which an implementation is. **Conformance classes** name what an implementation is allowed to do, each as a set of rules and the cases that check them. An implementation claims the classes it keeps; its published report (below) backs the claim. Issue #57.
+
+There are four. The ids are stable, lower-case, and defined here (identity.md links to this section):
+
+| Class | What the member does | The rules | Checked by |
+|---|---|---|---|
+| **participant** | Sends and receives typed actions, verifies every message, and treats words as data; its owner decides what it takes on. | protocol.md sections 8 (text is data), 10 (verifying), 11 (how the receiver decides); identity.md section 2.2 (cards). | The message cases of kind `envelope`, `card`, `audit` and `wire` for the core actions (everything but the `run_*` and `share_*` types), **and** the receiver track's `participant` cases (the owner decides, the owner's words are the owner's, the canary never leaves). |
+| **executor** | Runs received work (a `run_request`, protocol.md section 14) in a fresh sandbox with **none of its owner's secrets** (section 11, "What received work never gets"). | protocol.md sections 5.10–5.13, 14; section 11's secrets rule. | The message cases for the `run_*` types, **and** the receiver track's `executor` cases (a job runs with no owner secret reaching it). |
+| **holder** | Holds a key or an API account that others use, and meters it (protocol.md section 15). | protocol.md sections 5.14–5.16 (`share_*`), 15; the `cost_cents` metering on a share's result. | The message cases for the `share_*` types and the share/cost fields. |
+| **approver** | May post an approving review on a code host, only under the owner-confirmation rule (protocol.md section 11, "Approving on the code host"). | protocol.md section 11, "Approving on the code host" and "Who counts as a code owner". | The `host_approval` cases. |
+
+- **A claim, not a grant.** A card says which classes its member claims, in `params.classes` (1 to 16 distinct ids `^[a-z][a-z0-9_]{0,63}$`), behind the card feature `card_classes` (identity.md). The owner signs it; the card does not prove it. What backs a claim is the member's **report** (below): the cases of that class, passed.
+- **Every member is a participant.** Verifying messages, treating words as data and letting the owner decide are the floor; `executor`, `holder` and `approver` are claimed on top.
+- **A class has both message cases and behaviour cases**, where the behaviour can't be shown by a message. `participant` and `executor` have receiver-track cases; `holder` and `approver` are checked at the message and `host_approval` level in v0.1.
+- **An Obysphere's policy can require a class for an action** — so that, for example, only a member that claims `executor` may be sent a `run_request`. That rule is [sphere-api.md section 5](../sphere-api.md#5-policy); it reads the class from the member's current card.
+
+## The report and the badge
+
+`node conformance/run.mjs … --report <file.json>` writes a **report** an implementation can publish: the suite version, the implementation's label, when it ran, and, per class, how many of that class's cases ran and passed and whether the class is `pass`, `fail` or `not_run` (none of its cases ran in this mode). A run in `--impl` mode fills the message cases; a `--receiver` run fills the behaviour cases; a project that claims a class with both runs both and publishes the merged report (`--report` merges into an existing file, so two runs into the same path combine).
+
+```sh
+node conformance/run.mjs --impl "<command>" --report report.json --label "my-impl"
+node conformance/run.mjs --receiver "<adapter command>" --report report.json --label "my-impl"
+node conformance/run.mjs --badge report.json > badge.svg      # a badge from a report
+```
+
+The badge is a small self-contained SVG (no external service) that names the suite and each class with its status. A project publishes `report.json` at a stable URL and the badge beside it; an Obysphere's join page lists the implementations that have (see server `clients.ts`). The report format is versioned by the `suite` field, records the `commit` it ran at, and is documented at the top of `conformance/report.mjs`.
+
+Two published reports live in [`reports/`](reports/), each a regenerable snapshot (rerun the commands above to refresh it; their `commit` is `null`, since a squash-merge would leave a branch commit dangling — an external publisher records its real commit, from `$GITHUB_SHA` in CI):
+
+- [`reference-receiver`](reports/reference-receiver.json) ([badge](reports/reference-receiver.svg)) — the reference careful receiver (the track's test fixture): `participant` **pass** (message cases + the receiver track), `holder` and `approver` **pass** (message cases). `executor` is **incomplete** until an executor receiver's behaviour cases ship.
+- [`reference-server`](reports/reference-server.json) ([badge](reports/reference-server.svg)) — the reference Obysphere server's checker. A Sphere validates messages, so its report has only the message part: `holder` **pass**, `participant` and `executor` **incomplete** (no behaviour part), `approver` **not run** (a Sphere decides no `host_approval`).
+
+An implementation independent of this repository (a connector, obid) publishes its own report the same way; that is how #57's "one other implementation" is met.
+
 ## The receiver track
 
 The fixtures above check messages: what an implementation accepts and rejects. Three of the house rules are instead about what a receiver *does* — words are data, the owner decides, and received work gets no secrets — and a message can't show those. The **receiver track** checks them against a running implementation, through a scripted adversarial peer. It is issue #58.
@@ -79,12 +116,7 @@ Each op is a **fresh process**: `inbox` and `decide` run while the long-lived `s
 
 An implementation that can't be driven headlessly this way can't be run on the track; say so rather than weakening the track.
 
-**The classes a case belongs to.** Each case declares a conformance class (#57). The track here covers:
-
-- **participant** — sends and receives typed actions, verifies everything, treats words as data, and waits for its owner. These are the cases the track ships.
-- **executor** — runs received work in a sandbox with none of its owner's secrets. Its cases need a receiver that takes `run_request` and runs a job; they are added with #57.
-
-A case lists the request types the receiver's card must accept (`needs`); one the card doesn't accept is reported *not applicable*, never passed.
+**The classes a case belongs to.** Each case declares a conformance class ([above](#conformance-classes)). The track ships the `participant` cases (words are data, the owner decides, the canary stays). The `executor` cases need a receiver that takes `run_request` and runs a job; they are added when an executor receiver is available. A case lists the request types the receiver's card must accept (`needs`); one the card doesn't accept is reported *not applicable*, never passed.
 
 **The hand-written cases** (`receiver/cases.mjs`) carry no adversarial text. They fix what holds whatever a peer sends — a question waits for the owner and the owner's own words come back as the owner's, a review is taken on only after the owner decides, a plain request for secrets is the owner's to answer and the canary never leaves — and they are what tell a careful receiver from a reckless one.
 

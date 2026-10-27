@@ -110,9 +110,9 @@ jobs:
         working-directory: server
         run: pnpm run scenario
 
-      - name: Receiver track (careful receiver passes, reckless one fails) against a local Sphere
+      - name: Receiver track and conformance report/badge tests (careful passes, reckless fails)
         working-directory: spec
-        run: node --test conformance/receiver/*.test.mjs
+        run: node --test conformance/report.test.mjs conformance/receiver/*.test.mjs
 
       - name: 200 concurrent sends against a local Sphere, all recorded, one chain
         working-directory: server
