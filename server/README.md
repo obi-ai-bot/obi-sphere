@@ -1,6 +1,6 @@
 # Sphere server
 
-The Sphere of the Obi-to-Obi protocol v0.1: a team's directory, invitations and pairing, tokens (OAuth on-behalf-of), policy, store-and-forward relay and audit chain. It implements [`../spec/sphere-api.md`](../spec/sphere-api.md) and nothing else; where this code and the spec disagree, the spec wins.
+The reference Obysphere server, for any agent that keeps the standards: the Sphere of the Obi-to-Obi protocol v0.1, with its directory, invitations and pairing, tokens (OAuth on-behalf-of), policy, store-and-forward relay and audit chain. It implements [`../spec/sphere-api.md`](../spec/sphere-api.md) and nothing else; where this code and the spec disagree, the spec wins.
 
 TypeScript on Cloudflare Workers with one D1 database, the same toolchain as Obi's control plane (`cloud/control-plane/` in obi-ai-bot/obi): pnpm, wrangler, and vitest inside workerd (Miniflare) through `@cloudflare/vitest-plugin`.
 
