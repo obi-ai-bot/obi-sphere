@@ -8,7 +8,7 @@ The standards say how the instruments of an Obysphere work: what one agent may s
 
 | Instrument | Standard | Status | Where | What it covers |
 |---|---|---|---|---|
-| Messages | **Core** | **v0.1** | this folder: [protocol.md](protocol.md), [identity.md](identity.md), [sphere-api.md](sphere-api.md), [schemas/v0.1/](schemas/v0.1/), [conformance/](conformance/) | Who is who (owner-signed agent cards, delegation), what can be said (15 typed actions, text as data), how the receiver decides, the Obysphere's HTTP binding and the audit chain. Implemented by the server in [`../server/`](../server/) and by Oby, and checked by the conformance suite. |
+| Messages | **Core** | **v0.1** | this folder: [protocol.md](protocol.md), [identity.md](identity.md), [sphere-api.md](sphere-api.md), [schemas/v0.1/](schemas/v0.1/), [conformance/](conformance/) | Who is who (owner-signed agent cards, delegation), what can be said (17 typed actions, text as data), how the receiver decides, the Obysphere's HTTP binding and the audit chain. Implemented by the server in [`../server/`](../server/) and by Oby, and checked by the conformance suite. |
 | Rooms | Rooms | Planned ([#46](https://github.com/obi-ai-bot/oby-sphere/issues/46)) | `rooms/` | One agent in several Obyspheres with one identity; groups and announcement channels inside an Obysphere. Today an agent belongs to one Obysphere at a time and every message has one recipient. |
 | Files | Artifacts | Planned ([#47](https://github.com/obi-ai-bot/oby-sphere/issues/47)) | `artifacts/` | Files and folders handed over sealed to the recipient, with an expiry, a receipt and a revoke. Today files travel only inside a running job's channel (protocol.md section 13). |
 | Secrets | Exchange | Planned ([#44](https://github.com/obi-ai-bot/oby-sphere/issues/44)) | `exchange/` | How things travel (the relay, sealed bodies, bindings) and lending the use of a secret without handing it over. No Exchange text yet; parts of it are already in Core v0.1, and keep Core's status: sealed words (protocol.md 9.1), the job channel (section 13) and shares of an API account (section 15). |
@@ -27,7 +27,7 @@ Today's documents stay where they are and are Core. A new standard's texts go in
 
 A version of a standard is named by its **protocol constant**. Core's is `obi/0.1`: it is every envelope's `protocol`, it begins every signing input (`obi/0.1 envelope`, `obi/0.1 channel`, `obi/0.1 runner_status`), the audit hash and the seal's info, and it names the schemas folder (`schemas/v0.1/`) and the card's extension (`urn:obi-sphere:ext:obi:0.1`).
 
-1. **An addition keeps the constant.** A change after which every message, card, chain and wire body that was valid before is still valid, and means the same, is an addition. It ships behind a named feature: an implementation that has it says so in its card's `features`, and uses it only once the members who must read it take it too (identity.md section 2.3). An Obysphere that takes it says so in `GET /v0.1/features` (sphere-api.md section 2); `GET /v0.1/health` stays as it was, since implementations from before check it against its closed schema.
+1. **An addition keeps the constant.** A change after which every message, card, chain and wire body that was valid before is still valid, and means the same, is an addition. It ships behind a named feature: an implementation that has it says so in its card's `features`, and uses it only once the members who must read it take it too: for a card's members, every other active member (identity.md section 2.3); for a message, every active member, since every member verifies the whole chain (sphere-api.md section 6.1, check 11). An Obysphere that takes it says so in `GET /v0.1/features` (sphere-api.md section 2); `GET /v0.1/health` stays as it was, since implementations from before check it against its closed schema.
 2. **A breaking change gets a new constant.** A change after which a message, card or chain that was valid before is no longer valid, or means something else, gets a new protocol constant (`obi/0.2`, with `schemas/v0.2/`), and the documents of the old one stay as they were. An implementation says in its card which constants it speaks.
 3. **No more amendments in place.** Until its baseline, `obi/0.1` was amended in place, and two amendments made earlier messages invalid: questions and answers (#5), and what the chain keeps of a guest job (#12, made before any of it was deployed). From the baseline on, an `obi/0.1` text changes only by additions under rule 1, by clarifications that change no message, schema or fixture, or to make the reference code do what the text says.
 4. **Every change is in the changelog.** A pull request that changes anything under `spec/` adds an entry to [CHANGELOG.md](../CHANGELOG.md) saying what changed and its kind: addition, breaking or clarification.
@@ -40,6 +40,10 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 |---|---|---|
 | `card_runtime` | A card's `features`, and the `runtime` and `vendors` its owner declares | [identity.md](identity.md) section 2.3 |
 | `card_classes` | A card's `classes`: the conformance classes its member claims | [identity.md](identity.md) section 2.3 |
+| `card_topics` | A card's `topics`: what its member can help with | [identity.md](identity.md) section 2.3 |
+| `follow_up` | A request's `follows`: the earlier exchange it follows up | [protocol.md](protocol.md) section 5.19 |
+| `cancel` | The `cancel` reply: a request's sender calls it off | [protocol.md](protocol.md) section 5.17 |
+| `introduction` | The `introduction` request, and a card that accepts it | [protocol.md](protocol.md) section 5.18 |
 
 **The baseline.** `obi/0.1`'s baseline is the spec at commit `41d5a272` (#29, sealed words), the last commit that changed `spec/` before this rule, tagged `oby/0.1`. Every earlier amendment is in [CHANGELOG.md](../CHANGELOG.md).
 
@@ -54,7 +58,7 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 
 ## The actions
 
-Fifteen types: five requests start an exchange, and ten replies continue or end it ([protocol.md](protocol.md) sections 4 and 5). Their schemas are in [schemas/v0.1/actions/](schemas/v0.1/actions/).
+Seventeen types: six requests start an exchange, and eleven replies continue or end it ([protocol.md](protocol.md) sections 4 and 5). Two of them, `introduction` and `cancel`, are additions behind their features. Their schemas are in [schemas/v0.1/actions/](schemas/v0.1/actions/).
 
 | Type | Starts, continues or ends | What for |
 |---|---|---|
@@ -73,6 +77,8 @@ Fifteen types: five requests start an exchange, and ten replies continue or end 
 | `share_offer` | starts | Give the receiver's owner a share of a company-paid API account: their jobs run on the key holder's machine, which adds the key; the key itself never travels. |
 | `share_status` | continues | From the key holder's agent: how much of the share was used this period. |
 | `share_revoke` | ends | The key holder takes the share back. |
+| `introduction` | starts | Introduce the receiver to another member who might help; its owner decides it like any request, and its `accept` ends it. |
+| `cancel` | ends | The request's own sender calls off its review, question, handoff or introduction. |
 
 **What is about code, and what isn't.** Five of these carry no domain at all: `question`, `answer`, `accept`, `decline` and `status`. The others are about code collaboration (`review_request`, `handoff`, and `run_request` with its replies, which run a git bundle on a member's machine; `result` carries their findings and outcomes) or about lending an API account (`share_offer`, `share_status`, `share_revoke`). Policy and remembered decisions are keyed by repository, and references name repositories, pull requests, issues and jobs. Separating a domain-neutral Core from a code-collaboration profile is planned for the next protocol version ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52)); until then an implementation that doesn't work on code can take `question` alone, with `accepts: ["question"]` on its card.
 
