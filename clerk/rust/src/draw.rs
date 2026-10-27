@@ -13,13 +13,17 @@ use sha2::{Digest, Sha256};
 
 use crate::MAX_INT;
 
-/// The protocol's allowed clock skew, in seconds: the round follows its anchor by at least this much.
+/// The protocol's allowed clock skew, in seconds: the round follows its anchor by more than this.
 pub const CLOCK_SKEW_SECONDS: u64 = 300;
+
+/// The version of the draw this code implements: the pool record's `draw` (draw.md section 2).
+pub const DRAW_VERSION: u64 = 1;
 
 /// Why a draw input can't be used. The code is what the vectors name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DrawError {
     BadInput,
+    BadVersion,
     BadMembers,
     BadPool,
     BadPanel,
@@ -30,6 +34,7 @@ impl DrawError {
     pub fn code(self) -> &'static str {
         match self {
             DrawError::BadInput => "bad_input",
+            DrawError::BadVersion => "bad_version",
             DrawError::BadMembers => "bad_members",
             DrawError::BadPool => "bad_pool",
             DrawError::BadPanel => "bad_panel",
@@ -116,14 +121,15 @@ fn sha256(parts: &[&[u8]]) -> [u8; 32] {
     h.finalize().into()
 }
 
-/// RFC 8785 canonical JSON (protocol.md section 9), for the values the draw hashes. Numbers must be integers.
-pub fn canonicalize(value: &Value) -> String {
+/// RFC 8785 canonical JSON (protocol.md section 9), for the values the draw hashes: `BadInput` for a number
+/// that isn't an integer.
+pub fn canonicalize(value: &Value) -> Result<String, DrawError> {
     let mut out = String::new();
-    write_canonical(value, &mut out);
-    out
+    write_canonical(value, &mut out)?;
+    Ok(out)
 }
 
-fn write_canonical(value: &Value, out: &mut String) {
+fn write_canonical(value: &Value, out: &mut String) -> Result<(), DrawError> {
     match value {
         Value::Null => out.push_str("null"),
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
@@ -133,7 +139,7 @@ fn write_canonical(value: &Value, out: &mut String) {
             (_, _, Some(f)) if f.fract() == 0.0 && f.abs() <= MAX_INT as f64 => {
                 out.push_str(&(f as i64).to_string())
             }
-            _ => panic!("canonical JSON here takes integers only"),
+            _ => return Err(BadInput),
         },
         Value::String(s) => write_string(s, out),
         Value::Array(items) => {
@@ -142,7 +148,7 @@ fn write_canonical(value: &Value, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                write_canonical(item, out);
+                write_canonical(item, out)?;
             }
             out.push(']');
         }
@@ -157,11 +163,12 @@ fn write_canonical(value: &Value, out: &mut String) {
                 }
                 write_string(k, out);
                 out.push(':');
-                write_canonical(&map[k.as_str()], out);
+                write_canonical(&map[k.as_str()], out)?;
             }
             out.push('}');
         }
     }
+    Ok(())
 }
 
 fn write_string(s: &str, out: &mut String) {
@@ -246,6 +253,7 @@ pub fn pool(input: &Value) -> Result<Value, DrawError> {
         .collect();
     entries.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     let mut out = Map::new();
+    out.insert("draw".into(), json!(DRAW_VERSION));
     for k in TERMS {
         out.insert(k.into(), o[k].clone());
     }
@@ -258,11 +266,11 @@ pub fn pool(input: &Value) -> Result<Value, DrawError> {
 }
 
 /// The pool hash: SHA-256 over "obi council pool\n" and the record's canonical JSON, as lower-case hex.
-pub fn pool_hash(record: &Value) -> String {
-    hex(&sha256(&[
+pub fn pool_hash(record: &Value) -> Result<String, DrawError> {
+    Ok(hex(&sha256(&[
         b"obi council pool\n",
-        canonicalize(record).as_bytes(),
-    ]))
+        canonicalize(record)?.as_bytes(),
+    ])))
 }
 
 /// The id of an anchor envelope to `to` for a pool hash: a version 8 UUID from SHA-256 (draw.md section 3).
@@ -349,16 +357,16 @@ pub fn unix_seconds(timestamp: &str) -> Result<u64, DrawError> {
     u64::try_from(t).map_err(|_| BadInput)
 }
 
-/// The first beacon round whose time is at least `anchored_at` plus the clock skew (draw.md section 4).
+/// The first beacon round whose time is more than the clock skew after `anchored_at` (draw.md section 4).
 pub fn beacon_round(anchored_at: &str, genesis_time: u64, period: u64) -> Result<u64, DrawError> {
     if period < 1 || genesis_time > MAX_INT || period > MAX_INT {
         return Err(BadInput);
     }
     let t = unix_seconds(anchored_at)? + CLOCK_SKEW_SECONDS;
-    if t <= genesis_time {
+    if t < genesis_time {
         return Ok(1);
     }
-    Ok((t - genesis_time).div_ceil(period) + 1)
+    Ok((t - genesis_time) / period + 2)
 }
 
 /// drand's quicknet, the beacon draw.md names (section 4, "The beacon").
@@ -376,14 +384,15 @@ fn even_hex(s: &str) -> bool {
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
 
-/// Whether `signature_hex` is the beacon's signature of `round`, under the beacon's G2 public key: quicknet's
-/// scheme, a G1 signature of the SHA-256 of the round as 8 big-endian bytes, hashed to the curve as RFC 9380 says.
-pub fn verify_beacon(public_key_hex: &str, round: u64, signature_hex: &str) -> bool {
+/// Whether `signature_hex` is quicknet's signature of `round`: a G1 signature of the SHA-256 of the round as 8
+/// big-endian bytes, hashed to the curve as RFC 9380 says, under quicknet's G2 key. The key is quicknet's own,
+/// never one from a record: a check that took the key from its input would take a key anyone could sign with.
+pub fn verify_beacon(round: u64, signature_hex: &str) -> bool {
     use drand_verify::{G2PubkeyRfc, Pubkey};
-    if !(1..=MAX_INT).contains(&round) || !even_hex(public_key_hex) || !even_hex(signature_hex) {
+    if !(1..=MAX_INT).contains(&round) || !even_hex(signature_hex) {
         return false;
     }
-    let Ok(key) = G2PubkeyRfc::from_variable(&hex_bytes(public_key_hex)) else {
+    let Ok(key) = G2PubkeyRfc::from_variable(&hex_bytes(quicknet::PUBLIC_KEY)) else {
         return false;
     };
     key.verify(round, b"", &hex_bytes(signature_hex))
@@ -417,10 +426,12 @@ fn can_meet(taken: &HashSet<&str>, slots: usize, rest: &[&Entry], need: usize) -
 /// Draws seats from a pool record and a beacon round's randomness (draw.md sections 4 to 7).
 pub fn draw(input: &Value) -> Result<Value, DrawError> {
     let o = exact(Some(input), &["pool", "randomness"], &["declined"]).ok_or(BadInput)?;
-    let mut keys = TERMS.to_vec();
+    let mut keys = vec!["draw"];
+    keys.extend(TERMS);
     keys.push("entries");
     let rec = exact(o.get("pool"), &keys, &[]).ok_or(BadInput)?;
     check_terms(rec)?;
+    let version = int(rec.get("draw")).ok_or(BadInput)?;
     if !is_hex(o.get("randomness")) {
         return Err(BadInput);
     }
@@ -444,6 +455,9 @@ pub fn draw(input: &Value) -> Result<Value, DrawError> {
         entries.push((eid, owner, vendors));
     }
     let exclude = ids(rec.get("exclude")).unwrap();
+    if version != DRAW_VERSION {
+        return Err(BadVersion);
+    }
     let entry_ids: Vec<&str> = entries.iter().map(|e| e.0).collect();
     if !ascending(&entry_ids)
         || owners.len() != entries.len()
@@ -473,7 +487,7 @@ pub fn draw(input: &Value) -> Result<Value, DrawError> {
         return Err(BadDeclined);
     }
 
-    let hash = pool_hash(&Value::Object(rec.clone()));
+    let hash = pool_hash(&Value::Object(rec.clone()))?;
     let randomness = hex_bytes(o["randomness"].as_str().unwrap());
     let seed = sha256(&[b"obi council seed\n", &hex_bytes(&hash), &randomness]);
     let mut keyed: Vec<([u8; 32], Entry)> = entries

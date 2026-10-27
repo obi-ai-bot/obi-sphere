@@ -40,6 +40,18 @@
    "round": 1000000,
    "signature": "83ad29e4c409f9470fc2ef02f90214df49e02b441a1a241a82d622d9f608ef98fd8b11a029f1bee9d9e83b45088abe",
    "valid": false
+  },
+  {
+   "name": "the identity point as the signature",
+   "round": 1000000,
+   "signature": "c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "valid": false
+  },
+  {
+   "name": "round 0, which no beacon has",
+   "round": 0,
+   "signature": "83ad29e4c409f9470fc2ef02f90214df49e02b441a1a241a82d622d9f608ef98fd8b11a029f1bee9d9e83b45088abe72",
+   "valid": false
   }
  ],
  "pool": [
@@ -141,6 +153,7 @@
     ]
    },
    "output": {
+    "draw": 1,
     "sphere": "e2e",
     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
     "at": {
@@ -242,6 +255,7 @@
     ]
    },
    "output": {
+    "draw": 1,
     "sphere": "e2e",
     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
     "at": {
@@ -301,6 +315,7 @@
     ]
    },
    "output": {
+    "draw": 1,
     "sphere": "e2e",
     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
     "at": {
@@ -318,6 +333,94 @@
      "vendors": 0
     },
     "entries": []
+   }
+  },
+  {
+   "name": "pool: entries and exclude sorted as UTF-8 bytes; the lowest obi_id of an owner by bytes",
+   "input": {
+    "sphere": "e2e",
+    "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+    "at": {
+     "seq": 41,
+     "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+    },
+    "request": "review_request",
+    "exclude": [
+     "😀",
+     "ﬁ"
+    ],
+    "seats": 3,
+    "verifiers": 0,
+    "diversity": {
+     "owners": 0,
+     "vendors": 0
+    },
+    "members": [
+     {
+      "obi_id": "obi-😀",
+      "owner": "z",
+      "accepts": [
+       "review_request",
+       "question"
+      ]
+     },
+     {
+      "obi_id": "obi-ﬁ",
+      "owner": "z",
+      "accepts": [
+       "review_request",
+       "question"
+      ]
+     },
+     {
+      "obi_id": "obi-a",
+      "owner": "ﬁ",
+      "accepts": [
+       "review_request",
+       "question"
+      ]
+     },
+     {
+      "obi_id": "obi-b",
+      "owner": "y",
+      "accepts": [
+       "review_request",
+       "question"
+      ]
+     }
+    ]
+   },
+   "output": {
+    "draw": 1,
+    "sphere": "e2e",
+    "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+    "at": {
+     "seq": 41,
+     "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+    },
+    "request": "review_request",
+    "exclude": [
+     "ﬁ",
+     "😀"
+    ],
+    "seats": 3,
+    "verifiers": 0,
+    "diversity": {
+     "owners": 0,
+     "vendors": 0
+    },
+    "entries": [
+     {
+      "id": "obi-b",
+      "owner": "y",
+      "vendors": []
+     },
+     {
+      "id": "obi-ﬁ",
+      "owner": "z",
+      "vendors": []
+     }
+    ]
    }
   },
   {
@@ -476,6 +579,7 @@
    "name": "draw: three seats from seven, no diversity asked",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -546,25 +650,25 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "2ed71d0e0706fea0f7d38f1818bfcd8629c03319c52339625edd754d629a3fea",
-    "seed": "26ee4bb1ac706e97707791ab4fc20b5895dc8823a32c6f7b7fa1e363d8a37ee8",
+    "pool_hash": "78040bac935bc22fd02593e3c46195dbf4c970eb6f3c2ab9f362e78aad09151b",
+    "seed": "ce9ec58a99ca8b71bb5f74a26e9e20562d125ce2ba77e8f09bb2757f02c2ab92",
     "order": [
+     "obi-grace",
      "obi-heidi",
      "obi-frank",
      "obi-carol",
-     "obi-dan",
+     "obi-erin",
      "obi-bob",
-     "obi-grace",
-     "obi-erin"
+     "obi-dan"
     ],
     "outcome": "drawn",
     "seats": [
+     "obi-grace",
      "obi-heidi",
-     "obi-frank",
-     "obi-carol"
+     "obi-frank"
     ],
     "verifiers": [],
-    "vendors": 2,
+    "vendors": 1,
     "skipped": []
    }
   },
@@ -572,6 +676,7 @@
    "name": "draw: three seats, two vendors, one verifier",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -642,21 +747,21 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
-    "seed": "9656ff0bcb56b232b42c7aaf55add8e6d781244f4ef56ad8ba9c0ea606fb8c7e",
+    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
     "order": [
-     "obi-frank",
      "obi-grace",
      "obi-heidi",
-     "obi-carol",
      "obi-dan",
+     "obi-carol",
+     "obi-erin",
      "obi-bob",
-     "obi-erin"
+     "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-frank",
      "obi-grace",
+     "obi-dan",
      "obi-carol"
     ],
     "verifiers": [
@@ -672,6 +777,7 @@
    "name": "draw: three seats, three vendors (skips seats whose vendor is already there)",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -742,16 +848,16 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "c68f6e2d35d173fd3ba078b68e50f5aa0fe15679c76dea436a0559214b08230a",
-    "seed": "bf22f974e3c1d34d383a44d1a2d8e2db2bc70c60496f01d7b39f3a847861866f",
+    "pool_hash": "3623c918f0f8cd22870396d16cd74e22d1528feb1f58cfb5e1a9b24c05a814a6",
+    "seed": "54c524d51b8c973f22bfebe37ecafdbe98806236bba86ae1db46bedcde5ec3f0",
     "order": [
-     "obi-bob",
-     "obi-heidi",
-     "obi-erin",
-     "obi-frank",
-     "obi-dan",
      "obi-grace",
-     "obi-carol"
+     "obi-bob",
+     "obi-frank",
+     "obi-carol",
+     "obi-erin",
+     "obi-heidi",
+     "obi-dan"
     ],
     "outcome": "drawn",
     "seats": [
@@ -762,8 +868,10 @@
     "verifiers": [],
     "vendors": 3,
     "skipped": [
-     "obi-heidi",
-     "obi-erin"
+     "obi-grace",
+     "obi-carol",
+     "obi-erin",
+     "obi-heidi"
     ]
    }
   },
@@ -771,6 +879,7 @@
    "name": "draw: another seed, another order",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -841,38 +950,35 @@
     "randomness": "1f4ef2bcd2f072a743a910b5c1e18fae3505da8bb32f76726552f6bf8192d14d"
    },
    "output": {
-    "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
-    "seed": "13c2b199e80e8e3a85483a88a9f5348717589e7fcd3e3389f69da0c94ca9a58a",
+    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+    "seed": "d47b7375c07000c8a3e7f07e7f3ca2df88b4a04898981987204928005194b632",
     "order": [
-     "obi-erin",
      "obi-carol",
-     "obi-heidi",
-     "obi-grace",
-     "obi-bob",
      "obi-frank",
+     "obi-erin",
+     "obi-grace",
+     "obi-heidi",
+     "obi-bob",
      "obi-dan"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-erin",
      "obi-carol",
-     "obi-frank"
+     "obi-frank",
+     "obi-erin"
     ],
     "verifiers": [
-     "obi-heidi"
+     "obi-grace"
     ],
     "vendors": 2,
-    "skipped": [
-     "obi-heidi",
-     "obi-grace",
-     "obi-bob"
-    ]
+    "skipped": []
    }
   },
   {
    "name": "draw: the first seat declined; the others keep their seats",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -942,40 +1048,39 @@
     },
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
     "declined": [
-     "obi-frank"
+     "obi-grace"
     ]
    },
    "output": {
-    "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
-    "seed": "9656ff0bcb56b232b42c7aaf55add8e6d781244f4ef56ad8ba9c0ea606fb8c7e",
+    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
     "order": [
-     "obi-frank",
      "obi-grace",
      "obi-heidi",
-     "obi-carol",
      "obi-dan",
+     "obi-carol",
+     "obi-erin",
      "obi-bob",
-     "obi-erin"
+     "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-grace",
-     "obi-carol",
-     "obi-dan"
+     "obi-heidi",
+     "obi-dan",
+     "obi-carol"
     ],
     "verifiers": [
-     "obi-heidi"
+     "obi-erin"
     ],
     "vendors": 2,
-    "skipped": [
-     "obi-heidi"
-    ]
+    "skipped": []
    }
   },
   {
    "name": "draw: two seats and the verifier declined",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1045,40 +1150,43 @@
     },
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
     "declined": [
-     "obi-grace",
+     "obi-dan",
      "obi-heidi",
      "obi-carol"
     ]
    },
    "output": {
-    "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
-    "seed": "9656ff0bcb56b232b42c7aaf55add8e6d781244f4ef56ad8ba9c0ea606fb8c7e",
+    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
     "order": [
-     "obi-frank",
      "obi-grace",
      "obi-heidi",
-     "obi-carol",
      "obi-dan",
+     "obi-carol",
+     "obi-erin",
      "obi-bob",
-     "obi-erin"
+     "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-frank",
-     "obi-dan",
-     "obi-bob"
+     "obi-grace",
+     "obi-erin",
+     "obi-frank"
     ],
     "verifiers": [
-     "obi-erin"
+     "obi-bob"
     ],
-    "vendors": 3,
-    "skipped": []
+    "vendors": 2,
+    "skipped": [
+     "obi-bob"
+    ]
    }
   },
   {
    "name": "draw: one vendor in the pool, two asked: unmet",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1129,12 +1237,12 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "4f2e8c9741eb08246441d84a5e2cb56494b59592f383ca3cc798f842b0567f22",
-    "seed": "059595bb6e32c199ceace37285b4f12d1872be7f3e93b2b6b569690cb7822a3c",
+    "pool_hash": "8eb5dd1e06badd036905c1728b7583734ebb8d34568586f35c397c0aab203925",
+    "seed": "6d3c6b01d31167df80debd0c615e8d6d2895ea23ecb1efe3a4fe39fb63bf064f",
     "order": [
-     "obi-dan",
      "obi-carol",
      "obi-erin",
+     "obi-dan",
      "obi-bob"
     ],
     "outcome": "unmet",
@@ -1148,6 +1256,7 @@
    "name": "draw: one vendor, none asked: drawn",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1198,18 +1307,18 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "659a41966ea30e4d3568de57296d3c5b8823d527932e36b2577f7c3103c86cb2",
-    "seed": "04a03c63c78775318551e1ac0eae3d2b34916a27360ba4993af603387d10e8cb",
+    "pool_hash": "5a24d343e28becd1b79f19857d3339eedffefd85a320cdacc03fecb89a4d7740",
+    "seed": "0cf159a0705490db018641b80debde704e4f736ded3033497352e3607d991cd7",
     "order": [
      "obi-bob",
-     "obi-dan",
+     "obi-erin",
      "obi-carol",
-     "obi-erin"
+     "obi-dan"
     ],
     "outcome": "drawn",
     "seats": [
      "obi-bob",
-     "obi-dan",
+     "obi-erin",
      "obi-carol"
     ],
     "verifiers": [],
@@ -1221,6 +1330,7 @@
    "name": "draw: too few left for the seats and the verifier after declines: unmet",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1274,13 +1384,13 @@
     ]
    },
    "output": {
-    "pool_hash": "948f2fd6325794f9189ee690f4ab2cefacc2e17dda242ab991d808b233d87a9f",
-    "seed": "d2968afb9364701bb5e211e7c04ac48cd9aab36f28909a29fa7db31e68b2b77b",
+    "pool_hash": "2a5f759e3a9fd3aebff977994b3c4d3874dea85def38c2d4569ef61e03ead80b",
+    "seed": "3608099624b5bd4fe9ac6c487f8b9ed9cb60d1a28cfe6cca13fc288f68fce874",
     "order": [
-     "obi-dan",
-     "obi-bob",
      "obi-erin",
-     "obi-carol"
+     "obi-bob",
+     "obi-carol",
+     "obi-dan"
     ],
     "outcome": "unmet",
     "seats": [],
@@ -1293,6 +1403,7 @@
    "name": "draw: agents declaring no vendor or several sit but count for none",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1342,13 +1453,13 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "4e017d4c51360db4e095537481646623a86ca8a79020107e0a386ee3f4d62634",
-    "seed": "be1f1680bf722c716df5efb5dcdab00ec6cf891bb89b43b7f9c073b2d3faead0",
+    "pool_hash": "9377fa5fee4c71676cf33f1e7b921e647f4872c4e06769dce756c70be538dcfe",
+    "seed": "d95ef0fb7593c2238bb277f4d9be50e89a6c844dfdfcf48690b0a058f59c3ecb",
     "order": [
      "obi-erin",
+     "obi-carol",
      "obi-dan",
-     "obi-bob",
-     "obi-carol"
+     "obi-bob"
     ],
     "outcome": "drawn",
     "seats": [
@@ -1357,13 +1468,16 @@
     ],
     "verifiers": [],
     "vendors": 2,
-    "skipped": []
+    "skipped": [
+     "obi-carol"
+    ]
    }
   },
   {
    "name": "draw: only multi-vendor agents: they can't make two vendors, unmet",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1402,11 +1516,11 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "a252c32558193254d25dc4ea36541188f038e93b0e7f0f19a6d474bed364fe0c",
-    "seed": "5031fee0651c17c3b430f0d8fa6354ddaf02059d50eba27d714e31da07d90ea0",
+    "pool_hash": "6f5f50f743e0151f0d75b441d7a377e9f974cae4b76c99798c7abfbb38f6c109",
+    "seed": "36d3b3355c15741130b864cc7067e4d06dea62b52b3030f070a945d73c7fbe91",
     "order": [
-     "obi-bob",
-     "obi-carol"
+     "obi-carol",
+     "obi-bob"
     ],
     "outcome": "unmet",
     "seats": [],
@@ -1419,6 +1533,7 @@
    "name": "draw: an empty pool is unmet",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1440,8 +1555,8 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "59fec2bd0e7d2c4ab844527cf87546917e2eb9de1e9e7e99dacfa524b64921fb",
-    "seed": "7a8540e0d552883f76224fca594ff2d63bf610a5a96fe3db42f4a3290acaa602",
+    "pool_hash": "65c02eed4b62cfb5c2337f1221e537bf5e8c2caa589ce444e4b9e5f271e8f735",
+    "seed": "393caf35d0bbd59027aaa73026c72d5b593d75317fb94ce81a63ead25a9f4b46",
     "order": [],
     "outcome": "unmet",
     "seats": [],
@@ -1451,9 +1566,275 @@
    }
   },
   {
+   "name": "draw: three seats and a verifier, no diversity",
+   "input": {
+    "pool": {
+     "draw": 1,
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "alice"
+     ],
+     "seats": 3,
+     "verifiers": 1,
+     "diversity": {
+      "owners": 0,
+      "vendors": 0
+     },
+     "entries": [
+      {
+       "id": "obi-bob",
+       "owner": "bob",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-carol",
+       "owner": "carol",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-dan",
+       "owner": "dan",
+       "vendors": [
+        "openai"
+       ]
+      },
+      {
+       "id": "obi-erin",
+       "owner": "erin",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-frank",
+       "owner": "frank",
+       "vendors": [
+        "google"
+       ]
+      },
+      {
+       "id": "obi-grace",
+       "owner": "grace",
+       "vendors": []
+      },
+      {
+       "id": "obi-heidi",
+       "owner": "heidi",
+       "vendors": [
+        "anthropic",
+        "openai"
+       ]
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
+   },
+   "output": {
+    "pool_hash": "19d445050a4ef7d3cc1d403e6edc02832d029dc2f8ebdf9d23acbd30f983d3db",
+    "seed": "05c1cba28a2ac44c768519c1d810ae0a205255a3691914e90abab97057eb3286",
+    "order": [
+     "obi-carol",
+     "obi-dan",
+     "obi-frank",
+     "obi-bob",
+     "obi-erin",
+     "obi-heidi",
+     "obi-grace"
+    ],
+    "outcome": "drawn",
+    "seats": [
+     "obi-carol",
+     "obi-dan",
+     "obi-frank"
+    ],
+    "verifiers": [
+     "obi-bob"
+    ],
+    "vendors": 3,
+    "skipped": []
+   }
+  },
+  {
+   "name": "draw: a seat declines and the verifier, next in the order, becomes a seat",
+   "input": {
+    "pool": {
+     "draw": 1,
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "alice"
+     ],
+     "seats": 3,
+     "verifiers": 1,
+     "diversity": {
+      "owners": 0,
+      "vendors": 0
+     },
+     "entries": [
+      {
+       "id": "obi-bob",
+       "owner": "bob",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-carol",
+       "owner": "carol",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-dan",
+       "owner": "dan",
+       "vendors": [
+        "openai"
+       ]
+      },
+      {
+       "id": "obi-erin",
+       "owner": "erin",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-frank",
+       "owner": "frank",
+       "vendors": [
+        "google"
+       ]
+      },
+      {
+       "id": "obi-grace",
+       "owner": "grace",
+       "vendors": []
+      },
+      {
+       "id": "obi-heidi",
+       "owner": "heidi",
+       "vendors": [
+        "anthropic",
+        "openai"
+       ]
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
+    "declined": [
+     "obi-carol"
+    ]
+   },
+   "output": {
+    "pool_hash": "19d445050a4ef7d3cc1d403e6edc02832d029dc2f8ebdf9d23acbd30f983d3db",
+    "seed": "05c1cba28a2ac44c768519c1d810ae0a205255a3691914e90abab97057eb3286",
+    "order": [
+     "obi-carol",
+     "obi-dan",
+     "obi-frank",
+     "obi-bob",
+     "obi-erin",
+     "obi-heidi",
+     "obi-grace"
+    ],
+    "outcome": "drawn",
+    "seats": [
+     "obi-dan",
+     "obi-frank",
+     "obi-bob"
+    ],
+    "verifiers": [
+     "obi-erin"
+    ],
+    "vendors": 3,
+    "skipped": []
+   }
+  },
+  {
+   "name": "draw: ids sort as UTF-8 bytes, not UTF-16 code units (U+FB01 before U+1F600)",
+   "input": {
+    "pool": {
+     "draw": 1,
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "ﬁ",
+      "😀"
+     ],
+     "seats": 2,
+     "verifiers": 0,
+     "diversity": {
+      "owners": 0,
+      "vendors": 0
+     },
+     "entries": [
+      {
+       "id": "obi-z",
+       "owner": "z",
+       "vendors": []
+      },
+      {
+       "id": "obi-ﬁ",
+       "owner": "o-ﬁ",
+       "vendors": [
+        "openai"
+       ]
+      },
+      {
+       "id": "obi-😀",
+       "owner": "o-😀",
+       "vendors": [
+        "anthropic"
+       ]
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
+   },
+   "output": {
+    "pool_hash": "b420067c08a0cb9ddcac3cb972c3b573aa7ec5411fd00f67919685c00d707c0e",
+    "seed": "34b3498badd0cba57e0ed2cf4bc28704b75f4b8aca447d8bb715ba22ab6e198b",
+    "order": [
+     "obi-z",
+     "obi-ﬁ",
+     "obi-😀"
+    ],
+    "outcome": "drawn",
+    "seats": [
+     "obi-z",
+     "obi-ﬁ"
+    ],
+    "verifiers": [],
+    "vendors": 1,
+    "skipped": []
+   }
+  },
+  {
    "name": "draw: every entry a seat",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1504,20 +1885,20 @@
     "randomness": "1f4ef2bcd2f072a743a910b5c1e18fae3505da8bb32f76726552f6bf8192d14d"
    },
    "output": {
-    "pool_hash": "ce051293adb8424be092c67db9eecc25a77d68de6af1c54725a953730f82aac8",
-    "seed": "678027ca0ad7130c439bd46a54a61525c29ceacae0dbf0ef07980597ee9fb03d",
+    "pool_hash": "39e46ca1959f71866d0266f556b596e714554d7835ec6a0b4b36b680a74f9fe3",
+    "seed": "b244cfe9caba41e05f946c392249b5d93031796d9170dd0a885dd28178aa003c",
     "order": [
-     "obi-erin",
      "obi-dan",
+     "obi-bob",
      "obi-carol",
-     "obi-bob"
+     "obi-erin"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-erin",
      "obi-dan",
+     "obi-bob",
      "obi-carol",
-     "obi-bob"
+     "obi-erin"
     ],
     "verifiers": [],
     "vendors": 1,
@@ -1533,6 +1914,7 @@
    "name": "draw error: no randomness",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1607,6 +1989,7 @@
    "name": "draw error: randomness in upper case",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1682,6 +2065,7 @@
    "name": "draw error: an unknown member in the pool",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1758,6 +2142,7 @@
    "name": "draw error: an entry without vendors",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1789,6 +2174,7 @@
    "name": "draw error: a seat count that isn't an integer",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1864,6 +2250,7 @@
    "name": "draw error: declined isn't a list of ids",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1940,6 +2327,7 @@
    "name": "draw error: entries out of order",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -1977,6 +2365,7 @@
    "name": "draw error: an entry twice",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2014,6 +2403,7 @@
    "name": "draw error: an owner twice",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2051,6 +2441,7 @@
    "name": "draw error: vendors out of order",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2086,6 +2477,7 @@
    "name": "draw error: an excluded owner's agent in the pool",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2115,9 +2507,199 @@
    "error": "bad_pool"
   },
   {
+   "name": "draw error: entries in UTF-16 order, not UTF-8",
+   "input": {
+    "pool": {
+     "draw": 1,
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "alice"
+     ],
+     "seats": 1,
+     "verifiers": 0,
+     "diversity": {
+      "owners": 0,
+      "vendors": 0
+     },
+     "entries": [
+      {
+       "id": "obi-😀",
+       "owner": "a",
+       "vendors": []
+      },
+      {
+       "id": "obi-ﬁ",
+       "owner": "b",
+       "vendors": []
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
+   },
+   "error": "bad_pool"
+  },
+  {
+   "name": "draw error: a draw version this text doesn't define",
+   "input": {
+    "pool": {
+     "draw": 2,
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "alice"
+     ],
+     "seats": 3,
+     "verifiers": 1,
+     "diversity": {
+      "owners": 3,
+      "vendors": 2
+     },
+     "entries": [
+      {
+       "id": "obi-bob",
+       "owner": "bob",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-carol",
+       "owner": "carol",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-dan",
+       "owner": "dan",
+       "vendors": [
+        "openai"
+       ]
+      },
+      {
+       "id": "obi-erin",
+       "owner": "erin",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-frank",
+       "owner": "frank",
+       "vendors": [
+        "google"
+       ]
+      },
+      {
+       "id": "obi-grace",
+       "owner": "grace",
+       "vendors": []
+      },
+      {
+       "id": "obi-heidi",
+       "owner": "heidi",
+       "vendors": [
+        "anthropic",
+        "openai"
+       ]
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
+   },
+   "error": "bad_version"
+  },
+  {
+   "name": "draw error: no draw version",
+   "input": {
+    "pool": {
+     "sphere": "e2e",
+     "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
+     "at": {
+      "seq": 41,
+      "hash": "70c7e2676c07211de10c99222022d2273223c47a98143b4cecad7085998cad4b"
+     },
+     "request": "review_request",
+     "exclude": [
+      "alice"
+     ],
+     "seats": 3,
+     "verifiers": 1,
+     "diversity": {
+      "owners": 3,
+      "vendors": 2
+     },
+     "entries": [
+      {
+       "id": "obi-bob",
+       "owner": "bob",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-carol",
+       "owner": "carol",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-dan",
+       "owner": "dan",
+       "vendors": [
+        "openai"
+       ]
+      },
+      {
+       "id": "obi-erin",
+       "owner": "erin",
+       "vendors": [
+        "anthropic"
+       ]
+      },
+      {
+       "id": "obi-frank",
+       "owner": "frank",
+       "vendors": [
+        "google"
+       ]
+      },
+      {
+       "id": "obi-grace",
+       "owner": "grace",
+       "vendors": []
+      },
+      {
+       "id": "obi-heidi",
+       "owner": "heidi",
+       "vendors": [
+        "anthropic",
+        "openai"
+       ]
+      }
+     ]
+    },
+    "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
+   },
+   "error": "bad_input"
+  },
+  {
    "name": "draw error: exclude out of order",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2151,6 +2733,7 @@
    "name": "draw error: no seats",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2226,6 +2809,7 @@
    "name": "draw error: more owners asked than seats",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2301,6 +2885,7 @@
    "name": "draw error: more vendors asked than seats",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2376,6 +2961,7 @@
    "name": "draw error: a declined id not in the pool",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2454,6 +3040,7 @@
    "name": "draw error: a declined id twice",
    "input": {
     "pool": {
+     "draw": 1,
      "sphere": "e2e",
      "motion": "ea6f11ed199c05acc23557a8036947f5ca4b0322e553e7caeecc0cc51e235e7c",
      "at": {
@@ -2533,15 +3120,15 @@
  "anchor": [
   {
    "name": "anchor for obi-bob",
-   "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
+   "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
    "to": "obi-bob",
-   "id": "4d8cd32c-fc00-8bda-8829-4491db153e85"
+   "id": "021ac7c7-b35c-8456-817e-afd35aea62f3"
   },
   {
    "name": "anchor for obi-dan",
-   "pool_hash": "77c9b374fed052b91c917101a4cc8e56b9f19fb6952cf12df3d4836c1118320b",
+   "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
    "to": "obi-dan",
-   "id": "c4805856-5673-84e5-a04d-2db407554dc8"
+   "id": "d4be4612-39f0-8875-bc5e-f10982ee1433"
   },
   {
    "name": "anchor for a pool hash of zeros",
@@ -2552,32 +3139,39 @@
  ],
  "round": [
   {
-   "name": "quicknet: anchored exactly 300 seconds before round 1000000: that round",
+   "name": "quicknet: anchored exactly 300 seconds before round 1000000's time: the round after it",
    "anchored_at": "2023-09-27T08:24:24Z",
+   "genesis_time": 1692803367,
+   "period": 3,
+   "round": 1000001
+  },
+  {
+   "name": "quicknet: anchored 301 seconds before round 1000000's time: that round",
+   "anchored_at": "2023-09-27T08:24:23Z",
    "genesis_time": 1692803367,
    "period": 3,
    "round": 1000000
   },
   {
-   "name": "quicknet: one second later: the next round",
+   "name": "quicknet: one second later: still the round after it",
    "anchored_at": "2023-09-27T08:24:25Z",
    "genesis_time": 1692803367,
    "period": 3,
    "round": 1000001
   },
   {
-   "name": "quicknet: two seconds later: still the next round",
-   "anchored_at": "2023-09-27T08:24:26Z",
+   "name": "quicknet: three seconds later: the next one",
+   "anchored_at": "2023-09-27T08:24:27Z",
    "genesis_time": 1692803367,
    "period": 3,
-   "round": 1000001
+   "round": 1000002
   },
   {
    "name": "quicknet: 2026",
    "anchored_at": "2026-10-27T12:00:00Z",
    "genesis_time": 1692803367,
    "period": 3,
-   "round": 33433112
+   "round": 33433113
   },
   {
    "name": "before the beacon began: round 1",
@@ -2587,11 +3181,18 @@
    "round": 1
   },
   {
+   "name": "the Unix epoch itself",
+   "anchored_at": "1970-01-01T00:00:00Z",
+   "genesis_time": 1692803367,
+   "period": 3,
+   "round": 1
+  },
+  {
    "name": "a beacon with a 30-second period",
    "anchored_at": "2026-10-27T12:00:00Z",
    "genesis_time": 1595431050,
    "period": 30,
-   "round": 6589056
+   "round": 6589057
   }
  ]
 }

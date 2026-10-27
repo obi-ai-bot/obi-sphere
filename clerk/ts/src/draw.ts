@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { bls12_381 } from "@noble/curves/bls12-381.js";
 import type { Json } from "./index.ts";
 
-export type DrawErrorCode = "bad_input" | "bad_members" | "bad_pool" | "bad_panel" | "bad_declined";
+export type DrawErrorCode = "bad_input" | "bad_version" | "bad_members" | "bad_pool" | "bad_panel" | "bad_declined";
 
 export class DrawError extends Error {
   readonly code: DrawErrorCode;
@@ -23,8 +23,11 @@ export class DrawError extends Error {
 type Obj = { [key: string]: Json };
 type Entry = { id: string; owner: string; vendors: string[] };
 
-/** The protocol's allowed clock skew, in seconds: the round follows its anchor by at least this much. */
+/** The protocol's allowed clock skew, in seconds: the round follows its anchor by more than this. */
 export const CLOCK_SKEW_SECONDS = 300;
+
+/** The version of the draw this code implements: the pool record's `draw` (draw.md section 2). */
+export const DRAW_VERSION = 1;
 
 const fail = (code: DrawErrorCode): never => {
   throw new DrawError(code);
@@ -50,11 +53,11 @@ const sha256 = (...parts: (string | Buffer)[]) => {
   return h.digest();
 };
 
-/** RFC 8785 canonical JSON (protocol.md section 9), for the values the draw hashes. */
+/** RFC 8785 canonical JSON (protocol.md section 9), for the values the draw hashes: a bad_input error on a number that isn't an integer. */
 export function canonicalize(value: Json): string {
   if (value === null || typeof value === "boolean") return JSON.stringify(value);
   if (typeof value === "number") {
-    if (!Number.isSafeInteger(value)) throw new TypeError("canonical JSON here takes integers only");
+    if (!Number.isSafeInteger(value)) fail("bad_input");
     return String(value === 0 ? 0 : value);
   }
   if (typeof value === "string") return JSON.stringify(value);
@@ -97,7 +100,7 @@ export function pool(input: Json): Obj {
   const entries = [...best.values()]
     .map((m) => ({ id: m.obi_id as string, owner: m.owner as string, vendors: [...new Set((m.vendors as string[] | undefined) ?? [])].sort(byBytes) }))
     .sort((a, b) => byBytes(a.id, b.id));
-  const out: Obj = {};
+  const out: Obj = { draw: DRAW_VERSION };
   for (const k of TERMS) out[k] = input[k];
   out.exclude = [...new Set(exclude)].sort(byBytes);
   out.entries = entries;
@@ -132,12 +135,14 @@ export function unixSeconds(timestamp: string): number {
   return t / 1000;
 }
 
-/** The first beacon round whose time is at least `anchoredAt` plus the clock skew (draw.md section 4). */
+/** The first beacon round whose time is more than the clock skew after `anchoredAt` (draw.md section 4). */
 export function beaconRound(anchoredAt: string, genesisTime: number, period: number): number {
   if (!isInt(genesisTime) || !isInt(period) || period < 1) fail("bad_input");
-  const t = unixSeconds(anchoredAt) + CLOCK_SKEW_SECONDS;
-  if (t <= genesisTime) return 1;
-  return Math.ceil((t - genesisTime) / period) + 1;
+  const anchored = unixSeconds(anchoredAt);
+  if (anchored < 0) fail("bad_input");
+  const t = anchored + CLOCK_SKEW_SECONDS;
+  if (t < genesisTime) return 1;
+  return Math.floor((t - genesisTime) / period) + 2;
 }
 
 /** drand's quicknet, the beacon draw.md names (section 4, "The beacon"). */
@@ -153,14 +158,17 @@ export const QUICKNET = {
 // hashed to the curve as RFC 9380 says, with this domain separation tag).
 const QUICKNET_DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
 
-/** Whether `signatureHex` is the beacon's signature of `round`, under the beacon's G2 public key (quicknet's scheme). */
-export function verifyBeacon(publicKeyHex: string, round: number, signatureHex: string): boolean {
-  if (!isInt(round) || round < 1 || !/^([0-9a-f]{2})+$/.test(publicKeyHex) || !/^([0-9a-f]{2})+$/.test(signatureHex)) return false;
+/**
+ * Whether `signatureHex` is quicknet's signature of `round`. The key is quicknet's own, never one from a record:
+ * a check that took the key from its input would take a key anyone could sign with.
+ */
+export function verifyBeacon(round: number, signatureHex: string): boolean {
+  if (!isInt(round) || round < 1 || !/^([0-9a-f]{2})+$/.test(signatureHex)) return false;
   const message = Buffer.alloc(8);
   message.writeBigUInt64BE(BigInt(round));
   const short = bls12_381.shortSignatures;
   try {
-    return short.verify(Buffer.from(signatureHex, "hex"), short.hash(sha256(message), QUICKNET_DST), Buffer.from(publicKeyHex, "hex"));
+    return short.verify(Buffer.from(signatureHex, "hex"), short.hash(sha256(message), QUICKNET_DST), Buffer.from(QUICKNET.public_key, "hex"));
   } catch {
     return false;
   }
@@ -185,8 +193,9 @@ function canMeet(taken: Set<string>, slots: number, rest: Entry[], need: number)
 export function draw(input: Json): Obj {
   if (!exact(input, ["pool", "randomness"], ["declined"])) return fail("bad_input");
   const rec = input.pool;
-  if (!exact(rec, [...TERMS, "entries"])) return fail("bad_input");
+  if (!exact(rec, ["draw", ...TERMS, "entries"])) return fail("bad_input");
   checkTerms(rec);
+  if (!isInt(rec.draw)) fail("bad_input");
   if (!isHex(input.randomness)) fail("bad_input");
   const declined = has(input, "declined") ? input.declined : [];
   if (!isIds(declined)) return fail("bad_input");
@@ -196,6 +205,7 @@ export function draw(input: Json): Obj {
   }
   const entries = rec.entries as Entry[];
   const exclude = rec.exclude as string[];
+  if (rec.draw !== DRAW_VERSION) fail("bad_version");
 
   if (!ascending(entries.map((e) => e.id))) fail("bad_pool");
   if (new Set(entries.map((e) => e.owner)).size !== entries.length) fail("bad_pool");

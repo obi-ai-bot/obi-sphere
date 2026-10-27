@@ -86,7 +86,6 @@ fn beacon_checks() {
     assert_eq!(b["period"], quicknet::PERIOD);
     for c in v["beacon_checks"].as_array().unwrap() {
         let got = verify_beacon(
-            quicknet::PUBLIC_KEY,
             c["round"].as_u64().unwrap(),
             c["signature"].as_str().unwrap(),
         );
@@ -101,7 +100,7 @@ fn canonical_json_matches_the_spec_vectors() {
         .unwrap()
     {
         assert_eq!(
-            canonicalize(&v["input"]),
+            canonicalize(&v["input"]).unwrap(),
             v["canonical"].as_str().unwrap(),
             "{}",
             v["name"]
@@ -117,6 +116,14 @@ fn a_pool_the_clerk_builds_is_one_the_draw_takes() {
             assert!(draw(&input).is_ok(), "{}", case["name"]);
         }
     }
+}
+
+#[test]
+fn canonical_json_refuses_numbers_that_are_not_integers() {
+    assert_eq!(
+        canonicalize(&serde_json::json!({"n": 1.5})),
+        Err(DrawError::BadInput)
+    );
 }
 
 #[test]

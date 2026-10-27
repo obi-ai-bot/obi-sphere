@@ -125,6 +125,7 @@ def check_terms(o):
 
 
 TERMS = ["sphere", "motion", "at", "request", "exclude", "seats", "verifiers", "diversity"]
+VERSION = 1
 
 
 def pool(inp):
@@ -156,7 +157,8 @@ def pool(inp):
         for m in best.values()
     ]
     entries.sort(key=lambda e: b(e["id"]))
-    out = {k: inp[k] for k in TERMS}
+    out = {"draw": VERSION}
+    out.update({k: inp[k] for k in TERMS})
     out["exclude"] = sorted(set(inp["exclude"]), key=b)
     out["entries"] = entries
     return out
@@ -174,11 +176,14 @@ def anchor_id(pool_hash_hex, to):
 
 
 def beacon_round(anchored_at, genesis_time, period):
+    """The first round whose time is more than CLOCK_SKEW seconds after anchored_at."""
     t = int(datetime.strptime(anchored_at, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp())
+    if t < 0:
+        fail("bad_input")
     t += CLOCK_SKEW
-    if t <= genesis_time:
+    if t < genesis_time:
         return 1
-    return -(-(t - genesis_time) // period) + 1
+    return (t - genesis_time) // period + 2
 
 
 def pool_hash(record):
@@ -202,9 +207,11 @@ def draw(inp):
     if not exact(inp, ["pool", "randomness"], ["declined"]):
         fail("bad_input")
     rec = inp["pool"]
-    if not exact(rec, TERMS + ["entries"]):
+    if not exact(rec, ["draw"] + TERMS + ["entries"]):
         fail("bad_input")
     check_terms(rec)
+    if not is_int(rec["draw"]):
+        fail("bad_input")
     if not is_hex(inp["randomness"]):
         fail("bad_input")
     declined = inp.get("declined", [])
@@ -216,6 +223,9 @@ def draw(inp):
     for e in entries:
         if not (exact(e, ["id", "owner", "vendors"]) and is_id(e["id"]) and is_id(e["owner"]) and is_ids(e["vendors"])):
             fail("bad_input")
+
+    if rec["draw"] != VERSION:
+        fail("bad_version")
 
     ids = [b(e["id"]) for e in entries]
     if any(ids[i] >= ids[i + 1] for i in range(len(ids) - 1)):
@@ -309,7 +319,7 @@ def e(obi, owner, vendors=()):
 
 
 def with_entries(t, entries):
-    return {**t, "entries": entries}
+    return {"draw": VERSION, **t, "entries": entries}
 
 
 TEAM = [
@@ -361,6 +371,10 @@ def pool_cases():
         },
     )
     ok("pool: nobody eligible", {**terms(), "members": [m("obi-alice", "alice")]})
+    ok(
+        "pool: entries and exclude sorted as UTF-8 bytes; the lowest obi_id of an owner by bytes",
+        {**terms(exclude=["\U0001f600", "\ufb01"]), "members": [m("obi-\U0001f600", "z"), m("obi-\ufb01", "z"), m("obi-a", "\ufb01"), m("obi-b", "y")]},
+    )
     err("pool error: an obi_id twice", {**terms(), "members": [m("obi-bob", "bob"), m("obi-bob", "carol")]})
     err("pool error: a member without accepts", {**terms(), "members": [{"obi_id": "obi-bob", "owner": "bob"}]})
     err("pool error: an unknown member", {**terms(), "members": [], "extra": 1})
@@ -431,6 +445,18 @@ def draw_cases():
         {"pool": with_entries(t(2, 0, 2, 2), [e("obi-bob", "bob", ["anthropic", "openai"]), e("obi-carol", "carol", ["google", "openai"])]), "randomness": Q_RANDOMNESS},
     )
     ok("draw: an empty pool is unmet", {"pool": with_entries(t(1), []), "randomness": Q_RANDOMNESS})
+    plain = draw({"pool": with_entries(t(3, 1), TEAM), "randomness": Q_RANDOMNESS})
+    ok("draw: three seats and a verifier, no diversity", {"pool": with_entries(t(3, 1), TEAM), "randomness": Q_RANDOMNESS})
+    ok(
+        "draw: a seat declines and the verifier, next in the order, becomes a seat",
+        {"pool": with_entries(t(3, 1), TEAM), "randomness": Q_RANDOMNESS, "declined": [plain["seats"][0]]},
+    )
+    promoted = draw({"pool": with_entries(t(3, 1), TEAM), "randomness": Q_RANDOMNESS, "declined": [plain["seats"][0]]})
+    assert plain["verifiers"][0] in promoted["seats"]
+    ok(
+        "draw: ids sort as UTF-8 bytes, not UTF-16 code units (U+FB01 before U+1F600)",
+        {"pool": with_entries(t(2, 0, 0, 0, exclude=["\ufb01", "\U0001f600"]), [e("obi-z", "z"), e("obi-\ufb01", "o-\ufb01", ["openai"]), e("obi-\U0001f600", "o-\U0001f600", ["anthropic"])]), "randomness": Q_RANDOMNESS},
+    )
     ok("draw: every entry a seat", {"pool": with_entries(t(4, 0, 4, 1), ONE_VENDOR), "randomness": R2})
 
     good = with_entries(t(3, 1, 3, 2), TEAM)
@@ -446,6 +472,9 @@ def draw_cases():
     err("draw error: an owner twice", {"pool": with_entries(t(1), [e("obi-bob", "bob"), e("obi-bob-2", "bob")]), "randomness": Q_RANDOMNESS}, "bad_pool")
     err("draw error: vendors out of order", {"pool": with_entries(t(1), [e("obi-bob", "bob", ["openai", "anthropic"])]), "randomness": Q_RANDOMNESS}, "bad_pool")
     err("draw error: an excluded owner's agent in the pool", {"pool": with_entries(t(1), [e("obi-alice", "alice")]), "randomness": Q_RANDOMNESS}, "bad_pool")
+    err("draw error: entries in UTF-16 order, not UTF-8", {"pool": with_entries(t(1), [e("obi-\U0001f600", "a"), e("obi-\ufb01", "b")]), "randomness": Q_RANDOMNESS}, "bad_pool")
+    err("draw error: a draw version this text doesn't define", {"pool": {**good, "draw": 2}, "randomness": Q_RANDOMNESS}, "bad_version")
+    err("draw error: no draw version", {"pool": {k: v for k, v in good.items() if k != "draw"}, "randomness": Q_RANDOMNESS}, "bad_input")
     err("draw error: exclude out of order", {"pool": with_entries(t(1, exclude=["zed", "alice"]), [e("obi-bob", "bob")]), "randomness": Q_RANDOMNESS}, "bad_pool")
     err("draw error: no seats", {"pool": with_entries(t(0), TEAM), "randomness": Q_RANDOMNESS}, "bad_panel")
     err("draw error: more owners asked than seats", {"pool": with_entries(t(2, 0, 3, 0), TEAM), "randomness": Q_RANDOMNESS}, "bad_panel")
@@ -469,11 +498,13 @@ def round_cases():
         return {"name": name, "anchored_at": at, **QUICKNET, "round": beacon_round(at, **QUICKNET)}
 
     return [
-        r("quicknet: anchored exactly 300 seconds before round 1000000: that round", "2023-09-27T08:24:24Z"),
-        r("quicknet: one second later: the next round", "2023-09-27T08:24:25Z"),
-        r("quicknet: two seconds later: still the next round", "2023-09-27T08:24:26Z"),
+        r("quicknet: anchored exactly 300 seconds before round 1000000's time: the round after it", "2023-09-27T08:24:24Z"),
+        r("quicknet: anchored 301 seconds before round 1000000's time: that round", "2023-09-27T08:24:23Z"),
+        r("quicknet: one second later: still the round after it", "2023-09-27T08:24:25Z"),
+        r("quicknet: three seconds later: the next one", "2023-09-27T08:24:27Z"),
         r("quicknet: 2026", "2026-10-27T12:00:00Z"),
         r("before the beacon began: round 1", "2020-01-01T00:00:00Z"),
+        r("the Unix epoch itself", "1970-01-01T00:00:00Z"),
         {"name": "a beacon with a 30-second period", "anchored_at": "2026-10-27T12:00:00Z", "genesis_time": 1595431050, "period": 30, "round": beacon_round("2026-10-27T12:00:00Z", 1595431050, 30)},
     ]
 
@@ -487,12 +518,15 @@ def flip(hex_text, i):
 def beacon_checks():
     # Python's standard library has no BLS12-381: the signature checks' answers are drand's own (the real
     # round verifies, as drand's client does; anything changed doesn't), and both implementations must agree.
+    # Each is checked with quicknet's own public key: a check never takes the key from the record.
     return [
         {"name": "quicknet round 1000000, as drand published it", "round": Q_ROUND, "signature": Q_SIG, "valid": True},
         {"name": "the same signature for another round", "round": Q_ROUND + 1, "signature": Q_SIG, "valid": False},
         {"name": "one bit of the signature changed", "round": Q_ROUND, "signature": flip(Q_SIG, 47), "valid": False},
         {"name": "a signature that isn't a curve point", "round": Q_ROUND, "signature": "00" * 48, "valid": False},
         {"name": "a signature of the wrong length", "round": Q_ROUND, "signature": Q_SIG[:-2], "valid": False},
+        {"name": "the identity point as the signature", "round": Q_ROUND, "signature": "c0" + "00" * 47, "valid": False},
+        {"name": "round 0, which no beacon has", "round": 0, "signature": Q_SIG, "valid": False},
     ]
 
 
