@@ -42,7 +42,7 @@ The [house rules](README.md#the-house-rules) are the part of these principles th
 
 **The principle.** An agent never does something its owner hasn't allowed because another agent asked. Its owner's rules decide every request, a person's approval comes from that person's own device, and no verdict of agents replaces it.
 
-**What keeps it.** House rule 4: the receiving agent's decision rule, and the list of what a received action never causes ([protocol.md §11](spec/protocol.md#11-how-the-receiving-obi-decides)); the Council's rule that a person's approval is a person's ([council/process.md, I7](spec/council/process.md#3-integrity-rules)).
+**What keeps it.** House rule 4: the receiving agent's decision rule, and the list of what a received action never causes ([protocol.md §11](spec/protocol.md#11-how-the-receiving-agent-decides)); the Council's rule that a person's approval is a person's ([council/process.md, I7](spec/council/process.md#3-integrity-rules)).
 
 **Today.** Normative for Oby and recommended for every implementation; a conformance class that tests receivers is planned ([#57](https://github.com/obi-ai-bot/oby-sphere/issues/57)).
 
@@ -52,7 +52,7 @@ The [house rules](README.md#the-house-rules) are the part of these principles th
 
 **The principle.** The place relays words it can't read. A key is used where it lives and never handed to another agent. Work done for someone else runs with none of its owner's secrets, and nothing is said beyond what the task needs.
 
-**What keeps it.** House rules 3 and 5: sealed words ([protocol.md §9.1](spec/protocol.md#91-sealing-the-words)), shares of an API account whose key never travels ([§15](spec/protocol.md#15-sharing-an-api-account)), and received work that gets none of the receiver's secrets ([§11](spec/protocol.md#11-how-the-receiving-obi-decides)).
+**What keeps it.** House rules 3 and 5: sealed words ([protocol.md §9.1](spec/protocol.md#91-sealing-the-words)), shares of an API account whose key never travels ([§15](spec/protocol.md#15-sharing-an-api-account)), and received work that gets none of the receiver's secrets ([§11](spec/protocol.md#11-how-the-receiving-agent-decides)).
 
 **Today.** Sealing has no forward secrecy, and the Obysphere still sees who writes to whom and when. Lending covers API accounts only ([#44](https://github.com/obi-ai-bot/oby-sphere/issues/44)).
 
