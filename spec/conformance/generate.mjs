@@ -675,12 +675,12 @@ export function buildFixtures() {
   // The additions an Obysphere takes (sphere-api.md section 2): GET /v0.1/features, never in health.
   const FEAT = "wire/features.response";
   wireCase("valid-features-card-runtime", "An Obysphere that takes the card's runtime and vendors.", FEAT, { features: ["card_runtime"] }, "accept");
-  wireCase("valid-features-none", "An Obysphere that takes no addition.", FEAT, { features: [] }, "accept");
-  wireCase("valid-features-unknown", "A feature the client doesn't know: it ignores it.", FEAT, { features: ["card_runtime", "some_later_feature"] }, "accept");
-  wireCase("invalid-features-repeated", "card_runtime twice.", FEAT, { features: ["card_runtime", "card_runtime"] }, "reject");
-  wireCase("invalid-features-not-an-id", "A feature named in words.", FEAT, { features: ["Card runtime"] }, "reject");
-  wireCase("invalid-features-missing", "An answer without the list.", FEAT, {}, "reject");
-  wireCase("invalid-health-with-features", "The features in health: health stays as it was, for implementations from before.", "wire/health.response", { ok: true, protocol: PROTOCOL, seal: true, features: ["card_runtime"] }, "reject");
+  wireCase("valid-features-takes-none", "An Obysphere that takes no addition.", FEAT, { features: [] }, "accept");
+  wireCase("valid-features-unknown-id", "A feature the client doesn't know: it ignores it.", FEAT, { features: ["card_runtime", "some_later_feature"] }, "accept");
+  wireCase("invalid-features-id-repeated", "card_runtime twice.", FEAT, { features: ["card_runtime", "card_runtime"] }, "reject");
+  wireCase("invalid-features-id-in-words", "A feature named in words.", FEAT, { features: ["Card runtime"] }, "reject");
+  wireCase("invalid-features-list-missing", "An answer without the list.", FEAT, {}, "reject");
+  wireCase("invalid-health-lists-features", "The features in health: health stays as it was, for implementations from before.", "wire/health.response", { ok: true, protocol: PROTOCOL, seal: true, features: ["card_runtime"] }, "reject");
   wireCase("valid-invitation-response-open", "An open invitation as the Sphere answers it.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, max_uses: 50, secret, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-response-owner-without-obi", "An answer naming an owner but no obi.", "wire/invitation.response", { invitation_id: uuidFor("wire-open-invitation"), sphere: SPHERE, owner: "owner-c", max_uses: 1, secret, expires_at: NOW }, "reject");
   wireCase("valid-invitation-preview-request", "The secret, and nothing else.", "wire/invitation-preview.request", { secret }, "accept");

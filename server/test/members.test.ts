@@ -445,7 +445,7 @@ describe("publishing a card with an addition (identity.md section 2.3)", () => {
     const early = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: key, cardSeq: 2, issuedAt: w.clock.ts(), params: RUNTIME });
     const refused = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token, body: { card: early } });
     expect(refused.status).toBe(409);
-    expect(refused.body.error.code).toBe("conflict");
+    expect(refused.body.error.code).toBe("feature_not_taken");
     expect(refused.body.error.message).toContain("obi-wellington");
     // obi-wellington's owner signs it a card whose version says it takes card_runtime.
     const wToken = await w.obiToken("obi-wellington");
@@ -460,7 +460,21 @@ describe("publishing a card with an addition (identity.md section 2.3)", () => {
     const plain = await makeCard({ sphere: "e2e", obi: "obi-sangam", owner: "sangam", ownerKey: sKey, obiKey: await newKey(), issuedAt: w.clock.ts() });
     expect((await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card: plain } })).status).toBe(201);
     const later = await makeCard({ sphere: "e2e", obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, cardSeq: 3, issuedAt: w.clock.ts(), params: RUNTIME });
-    expect((await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken, body: { card: later } })).body.error.code).toBe("conflict");
+    expect((await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken, body: { card: later } })).body.error.code).toBe("feature_not_taken");
+    // obi-ernesto's card carries them already: obi-sangam doesn't hold back its next card, a key rotation included.
+    const rotated = await newKey();
+    const kept = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey, obiKey: rotated, cardSeq: 3, issuedAt: w.clock.ts(), params: { ...RUNTIME, vendors: ["anthropic", "openai"] } });
+    const r = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token: await w.obiToken("obi-ernesto"), body: { card: kept } });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+  });
+
+  it("reads +card-runtime only as build metadata, and a features list as taking what it names", async () => {
+    const { featuresTaken } = await import("../src/protocol/card");
+    const card = (version: string, features?: string[]) => ({ version, capabilities: { extensions: [{ params: { accepts: [], ...(features ? { features } : {}) } }] } }) as never;
+    for (const [version, takes] of [["1.0.0+card-runtime", true], ["1.0.0+sha.7.card-runtime", true], ["1.0.0-card-runtime", false], ["1.0.0+card-runtimes", false], ["1.0.0", false]] as const) {
+      expect(featuresTaken(card(version)).has("card_runtime"), version).toBe(takes);
+    }
+    expect(featuresTaken(card("1.0.0", ["card_runtime", "some_later_feature"]))).toEqual(new Set(["card_runtime", "some_later_feature"]));
   });
 
   it("is 409 conflict at redeem too, and counts only active members", async () => {
@@ -470,7 +484,7 @@ describe("publishing a card with an addition (identity.md section 2.3)", () => {
     const card = await makeCard({ sphere: "e2e", obi: "obi-sangam", owner: "sangam", ownerKey: sKey, obiKey: await newKey(), issuedAt: w.clock.ts(), params: RUNTIME });
     const r = await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card } });
     expect(r.status).toBe(409);
-    expect(r.body.error.code).toBe("conflict");
+    expect(r.body.error.code).toBe("feature_not_taken");
     // With both other members revoked, nothing holds it back.
     const admin = await w.ownerToken();
     for (const obi of ["obi-wellington", "obi-ernesto"]) expect((await w.call("DELETE", `/v0.1/spheres/e2e/members/${obi}`, { token: admin })).status).toBe(200);

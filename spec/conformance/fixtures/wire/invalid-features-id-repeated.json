@@ -1,7 +1,7 @@
 {
   "case": "wire",
-  "name": "invalid-features-not-an-id",
-  "description": "A feature named in words.",
+  "name": "invalid-features-id-repeated",
+  "description": "card_runtime twice.",
   "expect": "reject",
   "reason": "bad_request",
   "context": {
@@ -9,7 +9,8 @@
   },
   "input": {
     "features": [
-      "Card runtime"
+      "card_runtime",
+      "card_runtime"
     ]
   }
 }

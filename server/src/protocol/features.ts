@@ -1,4 +1,4 @@
-// The additions to obi/0.1 this server takes (spec/README.md, "Versions"), as `GET /v0.1/health`
+// The additions to obi/0.1 this server takes (spec/README.md, "Versions"), as `GET /v0.1/features`
 // lists them: each a feature id of spec/schemas/v0.1/common.schema.json.
 
 /** `card_runtime`: a card's `features`, `runtime` and `vendors` (spec/identity.md section 2.3). */

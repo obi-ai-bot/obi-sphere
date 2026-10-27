@@ -1,6 +1,6 @@
 {
   "case": "wire",
-  "name": "valid-features-unknown",
+  "name": "valid-features-unknown-id",
   "description": "A feature the client doesn't know: it ignores it.",
   "expect": "accept",
   "context": {

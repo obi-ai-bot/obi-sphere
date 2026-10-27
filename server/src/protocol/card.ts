@@ -60,8 +60,8 @@ export function featuresTaken(card: AgentCard): Set<string> {
 
 /** Why a card can't be published yet ("Publishing a card with an addition"): the first member of
  *  `others` (the other active members' cards, by agent id) that doesn't take an addition it uses. */
-export function publishingProblem(p: CardParams, others: { obi: string; card: AgentCard }[]): string | null {
-  for (const feature of featuresUsed(p)) {
+export function publishingProblem(p: CardParams, others: { obi: string; card: AgentCard }[], carried: Set<string> = new Set()): string | null {
+  for (const feature of featuresUsed(p).filter((f) => !carried.has(f))) {
     const behind = others.find((o) => !featuresTaken(o.card).has(feature));
     if (behind) return `${behind.obi}'s card doesn't take ${feature}: a card with its members waits until every active member's does`;
   }

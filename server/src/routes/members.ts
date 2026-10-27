@@ -22,14 +22,15 @@ const obiTaken = async (db: D1Database, sphere: string, obi: string) => (await g
 const keyTaken = async (db: D1Database, sphere: string, keyId: string) =>
   (await db.prepare("SELECT 1 AS taken FROM member_keys WHERE sphere = ?1 AND key_id = ?2").bind(sphere, keyId).first()) !== null;
 
-/** 409 conflict for a card that publishes an addition another active member doesn't take yet
- *  (identity.md section 2.3, "Publishing a card with an addition"). */
-async function requirePublishable(db: D1Database, sphere: string, obi: string, card: AgentCard): Promise<void> {
-  const p = cardParams(card);
-  if (featuresUsed(p).length === 0) return;
+/** 409 feature_not_taken for a card that publishes an addition another active member doesn't take
+ *  yet (identity.md section 2.3, "Publishing a card with an addition"). What the card it replaces
+ *  (`current`) carries already isn't held back, so a member can always rotate its key. */
+async function requirePublishable(db: D1Database, sphere: string, obi: string, card: AgentCard, current?: AgentCard): Promise<void> {
+  const carried = new Set(current ? featuresUsed(cardParams(current)) : []);
+  if (featuresUsed(cardParams(card)).every((f) => carried.has(f))) return;
   const rows = await db.prepare("SELECT obi, card FROM members WHERE sphere = ?1 AND status = 'active' AND obi != ?2").bind(sphere, obi).all<{ obi: string; card: string }>();
-  const problem = publishingProblem(p, rows.results.map((r) => ({ obi: r.obi, card: JSON.parse(r.card) as AgentCard })));
-  if (problem) throw apiError("conflict", problem);
+  const problem = publishingProblem(cardParams(card), rows.results.map((r) => ({ obi: r.obi, card: JSON.parse(r.card) as AgentCard })), carried);
+  if (problem) throw apiError("feature_not_taken", problem);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -287,7 +288,7 @@ export async function updateCard(request: Request, env: Env, deps: Deps, sphereI
     const current = keys.find((k) => k.valid_until_seq === null);
     const rotate = current?.key_id !== p.key_id;
     if (rotate && (await keyTaken(env.DB, sphere.id, p.key_id))) throw apiError("conflict", "this key_id is in use");
-    await requirePublishable(env.DB, sphere.id, obi, card);
+    await requirePublishable(env.DB, sphere.id, obi, card, JSON.parse(member.card) as AgentCard);
     const h = sphere.head_seq;
     const statements = [env.DB.prepare("UPDATE members SET card = ?1, card_seq = ?2 WHERE sphere = ?3 AND obi = ?4").bind(canonicalize(card), p.card_seq, sphere.id, obi)];
     let newKeys = keys;
