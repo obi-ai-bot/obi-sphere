@@ -1,0 +1,67 @@
+# Runtime and vendor ids: open, bounded, with a registry
+
+Status: **Draft**, part of [the next protocol version](README.md). Issue: [#54](https://github.com/obi-ai-bot/oby-sphere/issues/54), the part it leaves for a breaking version.
+
+## 1. Where `obi/0.1` stands
+
+- **`agent`, a closed enum.** `run_request.agent`, `share_offer.agent` and a runner status's `agents` take `claude` or `codex` and nothing else. Every other runtime can't be named, and an `obi/0.1` receiver refuses an envelope that names one, so opening the enum is a breaking change.
+- **The card's runtime and vendors, open from the start.** #54 adds them to `obi/0.1` behind the feature `card_runtime`: `params.runtime` is `{id, version}`, `params.vendors` is a list of distinct vendor ids, and both kinds of id match `^[a-z][a-z0-9-]{0,63}$`. identity.md keeps an open list of known runtime ids (`claude`, `codex`, `cursor`, `gemini`, `goose`, `opencode`, `copilot`, `oby`), with `claude` and `codex` the same strings as the `agent` enum's. The card also gains `features`, which later additions use.
+
+## 2. In the next version
+
+**There is no `agent` enum left to open** if the compute and share actions are dropped ([D4](README.md#decisions-for-the-owner)): `run_request`, `share_offer` and the runner status were its only uses. The runtime a member runs is said once, on its card, by the open id #54 adds. If those actions were kept as a profile instead, their `agent` field would become `runtime`, typed as the same runtime id, so `agent` always means a member ([identifiers.md](identifiers.md#1-every-product-named-identifier)) and `claude` and `codex` stay valid values.
+
+**The card** carries `runtime` and `vendors` as Core fields, no longer behind a feature, in the shape #54 gives them:
+
+```json
+{
+  "runtime_id": {
+    "description": "An agent runtime: open, bounded. The registry lists the known ones; any other id that matches is valid.",
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 64,
+    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+  },
+  "vendor_id": {
+    "description": "A model vendor: open, bounded, the same way.",
+    "type": "string",
+    "minLength": 1,
+    "maxLength": 64,
+    "pattern": "^[a-z][a-z0-9-]{0,63}$"
+  }
+}
+```
+
+Both are identifiers, not words: a closed pattern, so they can key a rule, be counted and be shown without being read as data.
+
+## 3. The registry (D12)
+
+The spec lists the ids it knows, so that two implementations call the same runtime by the same id. A machine-readable copy sits next to the schemas (`registry/runtimes.json`, `registry/vendors.json`), and the text lists the same entries.
+
+```json
+{
+  "runtimes": [
+    { "id": "claude", "name": "Claude Code" },
+    { "id": "codex", "name": "Codex CLI" },
+    { "id": "cursor", "name": "Cursor" }
+  ],
+  "vendors": [
+    { "id": "anthropic", "name": "Anthropic" },
+    { "id": "openai", "name": "OpenAI" },
+    { "id": "google", "name": "Google" }
+  ]
+}
+```
+
+**Recommended rules:**
+
+1. **Open on the wire.** Any id that matches the pattern is valid in a card or a message. A runtime nobody here has heard of can be named, which is #54's done-when, and a receiver never refuses a message for an id it doesn't know.
+2. **Listed by pull request, first come.** Whoever builds a runtime, or anyone on its behalf, adds its id with its name. An id is never reused for something else and never taken away; a runtime that is gone stays listed. The maintainers refuse an id that would mislead: another project's name, or a name chosen to look like one.
+3. **Declared, not proven.** A card's `runtime` and `vendors` are what its owner signed, as #54 says. The registry says what an id means, not that a member runs it.
+4. **Unlisted vendors count for no vendor.** The Council's rule I4 counts distinct model vendors on a panel. A vendor id the registry doesn't list counts for none of them: otherwise anyone could meet a diversity constraint by declaring a vendor that doesn't exist. A seat whose only vendors are unlisted may still sit, and adds no vendor to the count. Unlisted runtime ids count for nothing either; I4 counts vendors, not runtimes.
+
+**The alternative**, a closed list that only the maintainers extend, would bring back the problem #54 removes: a new runtime couldn't take part until a pull request merged. Rule 4 gives the Council the protection a closed list would, where it matters.
+
+## 4. Done when
+
+#54's done-when, a card says "runtime X, vendors A and B", the Council draw counts vendors from it, and a runtime nobody here has heard of can be named in a request, is met by #54's addition for the card. With the compute and share actions dropped, no request names a runtime any more. If they were kept, the next version's `runtime` field meets the last part.
