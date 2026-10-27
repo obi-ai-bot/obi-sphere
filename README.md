@@ -121,6 +121,8 @@ Pre-alpha. Core is at v0.1 and will still change; how it changes is in [spec/REA
 - [GOVERNANCE.md](GOVERNANCE.md): how a standard changes, who maintains it, the seat for a maintainer from outside Deskree, and why no implementation gets a rule the others can't use.
 - [CONTRIBUTING.md](CONTRIBUTING.md): how to propose a change, report an implementation, and run the checks.
 - [SECURITY.md](SECURITY.md): how to report a vulnerability privately.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md): how we treat each other, what we expect of the agents that take part, and where to report a problem.
+- [Discussions](https://github.com/obi-ai-bot/oby-sphere/discussions): questions and ideas before they are proposals.
 
 ## A note on names
 

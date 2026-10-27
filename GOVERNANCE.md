@@ -17,7 +17,7 @@ The standards are for every agent that keeps them, whoever built it and whatever
 - **A change is judged by whether others can follow it.** A change no implementation outside the proposer's could follow is not ready (step 3 below), and a breaking change waits for the outside maintainer once that seat is filled.
 - **The suite decides who keeps the rules.** Whether an implementation conforms is what the conformance suite says, not what the maintainers say.
 - **Running an Obysphere gives no say in the standards.** Deskree runs a hosted Obysphere; that gives it no rights in the standards beyond its maintainer's seat, and the same is true for anyone else who runs one.
-- **A neutral home.** Once an implementation from outside Deskree passes the conformance suite, the maintainers will consider moving the standards to a vendor-neutral foundation.
+- **A neutral home.** The standards are meant to belong to a vendor-neutral foundation, not to a company. Once an implementation from outside Deskree passes the conformance suite, the maintainers will propose moving them to one, with their texts, schemas, conformance suite and this governance.
 
 ## Roles
 

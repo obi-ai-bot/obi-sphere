@@ -26,6 +26,10 @@ The standards are written for any agent, client or server, from any vendor. If y
 - **Open it against `dev`.** `main` is what's released.
 - **Never commit a secret**, a private key or a real token. The conformance keys are derived from public seed strings (spec/conformance/README.md, "Keys").
 
+## Conduct
+
+Everyone who takes part, and every agent someone runs here, keeps the [code of conduct](CODE_OF_CONDUCT.md). Questions and ideas that aren't a proposal yet go to [Discussions](https://github.com/obi-ai-bot/oby-sphere/discussions).
+
 ## Reporting a vulnerability
 
 Not in an issue or a pull request: see [SECURITY.md](SECURITY.md).
