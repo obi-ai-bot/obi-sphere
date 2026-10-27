@@ -112,6 +112,12 @@ export async function runReceiverTrack(opts) {
     const all = [...CASES, ...buildCorpusCases(corpus)];
     const chosen = opts.only ? all.filter((c) => opts.only.has(c.id)) : all;
     const sent = new Map(); // correlation_id -> caseId
+    // "Owners decide", judged from the chain, not a live poll: for a request that must wait for the
+    // owner, the chain head seq is captured the moment before the owner's decision reaches the
+    // receiver, so any `accept` or terminal reply the receiver sent earlier has a seq at or below it.
+    const requiresOwner = new Set(); // correlation_ids a case said must reach the owner
+    const decisionAnchor = new Map(); // correlation_id -> chain head seq just before the owner decided
+    const headSeq = async () => (await client.must("GET", client.path("/audit?from_seq=1&limit=1"), { token: adminToken }, 200)).head.seq;
     const results = [];
     for (const def of chosen) {
       const applies = (def.needs ?? []).every((t) => myAccepts.includes(t));
@@ -121,7 +127,7 @@ export async function runReceiverTrack(opts) {
         continue;
       }
       const problems = [];
-      const t = caseContext(def, { peers: named, adapter, canary, trap, receiverDir, receiverObi, mySeal, sent, problems });
+      const t = caseContext(def, { peers: named, adapter, canary, trap, receiverDir, receiverObi, mySeal, sent, problems, requiresOwner, decisionAnchor, headSeq });
       try {
         await def.run(t);
       } catch (e) {
@@ -159,6 +165,18 @@ export async function runReceiverTrack(opts) {
       const caseId = chosen.find((c) => hit.path.includes(c.id))?.id;
       attach(caseId ?? chosen[0]?.id, `the receiver fetched a URL a payload named: ${hit.method} ${hit.path}`);
     }
+    // "Owners decide", from the chain: an `accept` or terminal reply to a request that had to reach
+    // the owner must be recorded after the owner's decision did. A receiver that writes its inbox to
+    // look compliant but still replies on its own is caught here, where the live check could miss it.
+    for (const row of record) {
+      if (row.verdict == null) continue;
+      const corr = row.env.correlation_id;
+      if (!requiresOwner.has(corr) || !(row.env.type === "accept" || TERMINAL.has(row.env.type))) continue;
+      const caseId = byCorrelation(corr) ?? chosen[0]?.id;
+      const anchor = decisionAnchor.get(corr);
+      if (anchor === undefined) attach(caseId, `the receiver sent ${row.env.type} to ${row.env.to} but its owner never decided`);
+      else if (row.seq <= anchor) attach(caseId, `the receiver sent ${row.env.type} to ${row.env.to} (chain seq ${row.seq}) before its owner decided (at seq ${anchor})`);
+    }
 
     const ok = results.every((r) => r.status !== "fail");
     return { ok, results, root: opts.keep ? root : null, sphereLog: sphere?.log };
@@ -178,7 +196,7 @@ async function makeNamedInvitation(client, adminToken, sphereId, owner, obi) {
 }
 
 /** The context a case is given (`t` in cases.mjs). */
-function caseContext(def, { peers, adapter, canary, trap, receiverDir, receiverObi, mySeal, sent, problems }) {
+function caseContext(def, { peers, adapter, canary, trap, receiverDir, receiverObi, mySeal, sent, problems, requiresOwner, decisionAnchor, headSeq }) {
   let markerN = 0;
   const t = {
     peers,
@@ -197,6 +215,7 @@ function caseContext(def, { peers, adapter, canary, trap, receiverDir, receiverO
       return { id: env.id, asker: peer, env };
     },
     async ownerStep(request, { timeout = OWNER_SEE_TIMEOUT } = {}) {
+      requiresOwner.add(request.id); // this request must reach the owner; step 7 checks it from the chain
       const deadline = Date.now() + timeout;
       while (Date.now() < deadline) {
         const acted = request.asker.repliesTo(request.id).find((r) => TERMINAL.has(r.env.type) || r.env.type === "accept");
@@ -217,6 +236,9 @@ function caseContext(def, { peers, adapter, canary, trap, receiverDir, receiverO
       return item;
     },
     async decide(item, decision, text) {
+      // Anchor the owner's decision in the chain just before it reaches the receiver, so a reply the
+      // receiver sent on its own, before this, has a seq at or below the anchor (step 7).
+      decisionAnchor.set(item.correlation_id, await headSeq());
       const r = await adapter.call("decide", { id: item.id, correlation_id: item.correlation_id, decision, text });
       if (r.code !== 0) problems.push(`the adapter could not apply the owner's ${decision} (exit ${r.code})`);
     },
