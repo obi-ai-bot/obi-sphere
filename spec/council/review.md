@@ -15,7 +15,7 @@ convener                                                     the Sphere's chain
  1  motion and pool (sections 2, 3)
  2  a call to every pool member: question, id from the pool hash ──►  anchors: the pool is fixed
        a member may stand aside: answer, choice 1                ◄──
- 3  wait for quicknet's round R (≥ the last call + 300 s); draw
+ 3  wait for quicknet's round R (> the first call + 300 s); draw
  4  one review_request to each seat                              ──►  one exchange per seat:
        accept, result (outcome, findings, acceptance)            ◄──   no seat sees another's
  5  one review_request to the verifier: one custom
@@ -68,13 +68,15 @@ Before the draw, the convener sends every pool entry a **call**: a `question` (p
 
 A call is a question like any other: its receiver's owner decides whether and how to answer, and its text is data (protocol.md sections 8 and 11). It asks for an answer in words and a choice, never for work.
 
-**anchored_at** is the latest `recorded_at` among the calls in the chain. A call the Sphere refuses (its policy, a revoked member) isn't sent: that entry is declined, and the record says so.
+**Recognising calls.** A call is a `question` from the convener, `about` the subject, whose `id` is a version 8 UUID; any member can tell one in the chain without the record. Every call MUST be recorded before round *R*'s time. Between the motion's `created_at` and round *R*'s time, the convener's only calls about the subject are this pool's (draw.md section 7, check 2).
+
+**anchored_at** is the earliest `recorded_at` among the calls in the chain (draw.md section 3). A call the Sphere refuses (its policy, a revoked member) isn't sent: that entry has no call and stays in the pool, as an entry is declined only by what the chain shows.
 
 **Standing aside.** A pool member stands aside when its call's exchange ends, before round *R*'s time, with an `answer` whose `choice` is 1, or with a `decline`. Members that stood aside are the first draw's `declined` (draw.md section 6). An answer after round *R*'s time changes nothing: a member drawn after it declines its review request instead.
 
 ## 5. The draw and the seats' requests
 
-The convener waits for round *R*, the first quicknet round at least 300 seconds after `anchored_at` (draw.md section 4), checks its signature, and draws (draw.md section 5) with the members that stood aside as `declined`. An unmet draw ends the motion: it goes to its owner.
+The convener waits for round *R*, the first quicknet round more than 300 seconds after `anchored_at` (draw.md section 4), checks its signature, and draws (draw.md section 5) with the members that stood aside as `declined`. An unmet draw ends the motion: it goes to its owner.
 
 Each voting seat gets **one `review_request`**, its own envelope and exchange:
 
@@ -88,7 +90,7 @@ Each voting seat gets **one `review_request`**, its own envelope and exchange:
 
 A seat reviews the subject as data, in a sandbox with none of its owner's secrets (rule I8; protocol.md section 11).
 
-**Declines and replacements.** A seat whose exchange ends in a `decline`, or that has sent no `accept` by `deadlines.seats`, is declined. Until `deadlines.seats`, the convener runs the draw again with it in `declined` (draw.md section 6) and sends the replacement its request; every other seat keeps its place. After `deadlines.seats` no seat is replaced, and a seat with no result by `deadlines.reviews` is absent. A declined seat's later result never counts: it is no longer a seat.
+**Declines and replacements.** A seat whose exchange ends in a `decline`, or that has sent no `accept` by `deadlines.seats` to a request that is in the chain, is declined. A seat the convener never sent its request isn't declined: it is absent, and nobody takes its place (draw.md section 6). Until `deadlines.seats`, the convener runs the draw again with it in `declined` (draw.md section 6) and sends the replacement its request; every other seat keeps its place. After `deadlines.seats` no seat is replaced, and a seat with no result by `deadlines.reviews` is absent. A declined seat's later result never counts: it is no longer a seat.
 
 ## 6. The challenge and the tally
 
@@ -137,8 +139,8 @@ The verdict is the convener's **record**, signed. A JSON object:
 | `motion`, `motion_hash` | The motion and its hash. |
 | `pool`, `pool_hash` | The pool record and its hash (draw.md section 2). |
 | `cards` | The card of every member active at the pool's `at.seq`, as the convener trusted it (draw.md section 7, check 1). |
-| `calls` | `[{to, id}]`: each call sent, and the entries whose call the Sphere refused (`id` null). |
-| `anchored_at` | The latest call's `recorded_at`. |
+| `calls` | `[{to, id}]`: each call in the chain. |
+| `anchored_at` | The earliest call's `recorded_at`. |
 | `beacon` | `{chain, round, signature, randomness}`: quicknet's round *R*. |
 | `draws` | Each run of the draw: its `declined` and its output (draw.md section 5). The last gives the seats and the verifier. |
 | `through` | `{seq, hash}`: the chain's head the tally read up to, after `deadlines.challenge` or once the challenge was answered. |

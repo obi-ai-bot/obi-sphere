@@ -5,10 +5,8 @@ use std::io::BufRead;
 fn main() {
     for line in std::io::stdin().lock().lines() {
         let line = line.expect("read stdin");
-        let input: serde_json::Value =
-            serde_json::from_str(&line).expect("one JSON value per line");
-        let out =
-            obi_clerk::count(&input).unwrap_or_else(|e| serde_json::json!({ "error": e.code() }));
+        let input: serde_json::Value = serde_json::from_str(&line).expect("one JSON value per line");
+        let out = obi_clerk::count(&input).unwrap_or_else(|e| serde_json::json!({ "error": e.code() }));
         println!("{out}");
     }
 }
