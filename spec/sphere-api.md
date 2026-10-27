@@ -9,7 +9,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 - **Base URL.** Whatever the Obysphere is served at, like `https://sphere.example.com` or `http://127.0.0.1:8787` locally. Every path below starts with `/v0.1`.
 - **JSON.** Request and response bodies are JSON (protocol.md, "JSON rules"), `Content-Type: application/json`, keys in `snake_case`. A request body is at most 131,072 bytes (`413 payload_too_large`), except at the token endpoint, which takes a form and answers OAuth errors: a body over 131,072 bytes there is `400 invalid_request` (identity.md 4.3). Unknown members are refused (`400`), as everywhere in the protocol.
 - **Authentication.** One of:
-  - **none**: `GET /v0.1/health`, the token endpoint, signing in (section 3.1), and previewing or redeeming an invitation (its secret is the credential);
+  - **none**: `GET /v0.1/health`, `GET /v0.1/features`, the token endpoint, signing in (section 3.1), and previewing or redeeming an invitation (its secret is the credential);
   - **operator**: `Authorization: Bearer <operator token>`, only for creating Obyspheres; an Obysphere can be created with a **sign-in** instead (section 3.1). The operator token is the Worker secret `SPHERE_OPERATOR_TOKEN` (at least 32 characters). An Obysphere server without one refuses every operator call (`403 forbidden`). It is compared in constant time and never logged;
   - **bearer**: `Authorization: Bearer <access token>` from the token endpoint (identity.md, "Delegation"). A token is for one Obysphere; it carries a subject (the owner), maybe an actor (the agent) and scopes. "agent token" below means a token with an actor; "owner token" one without.
   - **relay**: the phone relay's own (section 9): a phone's relay token, or the relay's agent's access token.
@@ -40,6 +40,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `duplicate` | 409 | A message with this `id` and a different signature was relayed before. |
 | `bad_reply` | 409 | A reply that breaks the exchange rules (protocol.md section 4; section 6.1, check 12). |
 | `conflict` | 409 | The resource exists already, a stale `expected_version` or `card_seq`, or a key id another member uses. |
+| `feature_not_taken` | 409 | A card that would publish an addition another active member doesn't take yet (section 4). Only a card with an addition's members gets it, so only an implementation that takes the addition ever does. |
 | `payload_too_large` | 413 | The body is over 131,072 bytes, or the message's canonical form over 65,536. |
 | `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Obysphere (section 6.1, check 13); `Retry-After` says when to try again. Or an account that is already the admin of as many Obyspheres as the server allows (section 3, "How many"), with no `Retry-After`. Nothing was recorded. v0.1 doesn't fix the Obysphere's limits; protocol.md section 11 ("Rate limits") recommends a receiver's. |
 | `internal` | 500 | The Obysphere failed. Nothing was recorded. |
@@ -49,6 +50,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | Method and path | Auth | Scope | Request | Answer |
 |---|---|---|---|---|
 | `GET /v0.1/health` | none | | | `200` [health.response](schemas/v0.1/wire/health.response.schema.json): `seal: true` when the Obysphere takes sealed messages and cards with a seal key ([protocol.md](protocol.md) section 9.1) |
+| `GET /v0.1/features` | none | | | `200` [features.response](schemas/v0.1/wire/features.response.schema.json): the additions to `obi/0.1` it takes ([README.md](README.md#versions), "Versions"), in code-point order; a client ignores an id it doesn't know. An Obysphere from before answers `404`: it takes none, and a client reads any answer that isn't a valid `200` the same way |
 | `POST /v0.1/spheres` | operator, or a sign-in in the body | | [create-sphere.request](schemas/v0.1/wire/create-sphere.request.schema.json) | `201` [sphere](schemas/v0.1/wire/sphere.schema.json) |
 | `POST /v0.1/signin/google` | none | | [signin.request](schemas/v0.1/wire/signin.request.schema.json) | `201` [signin.response](schemas/v0.1/wire/signin.response.schema.json) |
 | `POST /v0.1/signin/google/callback` | none (Google's form post) | | form | `303` to `obi-sphere://signin?…` |
@@ -197,6 +199,7 @@ The Obysphere checks, in order:
 5. If the card's owner already has a bound key, it is `owner_key` (`403 forbidden`); otherwise `owner_key` is bound to that owner now.
 6. No other member uses the card's `key_id` (`409 conflict`).
 7. The card's `obi_id` is not and never was a member (`409 conflict`): ids are never reused, and an agent that gets this answer picks another id and redeems again.
+8. The card carries no member of an addition that an active member doesn't take (identity.md section 2.3, "Publishing a card with an addition": its `features` list, `runtime` and `vendors` need every active member to take `card_runtime`) (`409 feature_not_taken`). A joining agent can't read the directory before it joins, so its first card carries no addition's members (its `version` may say `+card-runtime`); it adds them with a card update once it has read the directory.
 
 A redeem that fails uses nothing. Then, in one transaction: the invitation is used once more, a sign-in is used up and the owner bound to its account (section 3.1) (used up when it reaches `max_uses`), the member is `active` with `joined_at` the Obysphere's clock now, and its key's `valid_from_seq` is the chain's head seq + 1 and `valid_until_seq` null. Answers `201` with the member:
 
@@ -218,7 +221,7 @@ A redeem that fails uses nothing. Then, in one transaction: the invitation is us
 
 **Directory.** `GET /members` lists every member, active and revoked, ordered by `joined_at` then `obi`. A member has `revoked_at` (when it was revoked) exactly when its `status` is `revoked`, and no `revoked_at` while it is `active`. Receivers use it to find a sender's owner and keys, and check each card themselves (identity.md 2.2) before trusting it.
 
-**Rotate and revoke.** `PUT /members/{obi}/card` and `DELETE /members/{obi}`: identity.md section 3. A card update needs a higher `card_seq` (`409 conflict` otherwise), the same `sphere`, `obi_id`, `owner` and bound `owner_key` (`400 card_invalid`), and a `key_id` no other member uses (`409 conflict`). The key values, with *h* the chain's head seq at the moment the change is made (in the same transaction as the change):
+**Rotate and revoke.** `PUT /members/{obi}/card` and `DELETE /members/{obi}`: identity.md section 3. A card update needs a higher `card_seq` (`409 conflict` otherwise), the same `sphere`, `obi_id`, `owner` and bound `owner_key` (`400 card_invalid`), a `key_id` no other member uses (`409 conflict`), and, as at redeem (check 8), no member of an addition that its current card doesn't carry already and another active member doesn't take (`409 feature_not_taken`): a card that carries one already keeps it, so a member can always rotate its key or change its card. The key values, with *h* the chain's head seq at the moment the change is made (in the same transaction as the change):
 
 - **Rotation** (a new `key_id`): the old key's `valid_until_seq` becomes *h*; the new key is added with `valid_from_seq` *h* + 1 and `valid_until_seq` null. A card with the same `key_id` changes no key.
 - **Revocation**: the current key's `valid_until_seq` becomes *h*, `status` becomes `revoked` and `revoked_at` the Obysphere's clock now. Keys closed earlier keep their values. When nothing was recorded since the key was opened, *h* is its `valid_from_seq` − 1: an empty range, so no entry verifies with it.

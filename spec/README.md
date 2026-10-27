@@ -27,12 +27,18 @@ Today's documents stay where they are and are Core. A new standard's texts go in
 
 A version of a standard is named by its **protocol constant**. Core's is `obi/0.1`: it is every envelope's `protocol`, it begins every signing input (`obi/0.1 envelope`, `obi/0.1 channel`, `obi/0.1 runner_status`), the audit hash and the seal's info, and it names the schemas folder (`schemas/v0.1/`) and the card's extension (`urn:obi-sphere:ext:obi:0.1`).
 
-1. **An addition keeps the constant.** A change after which every message, card, chain and wire body that was valid before is still valid, and means the same, is an addition. It ships behind a named feature: an implementation that has it says so in its card's `features`, and a sender uses it only with a receiver whose card lists it. An Obysphere that takes it says so in `GET /v0.1/health`.
+1. **An addition keeps the constant.** A change after which every message, card, chain and wire body that was valid before is still valid, and means the same, is an addition. It ships behind a named feature: an implementation that has it says so in its card's `features`, and uses it only once the members who must read it take it too (identity.md section 2.3). An Obysphere that takes it says so in `GET /v0.1/features` (sphere-api.md section 2); `GET /v0.1/health` stays as it was, since implementations from before check it against its closed schema.
 2. **A breaking change gets a new constant.** A change after which a message, card or chain that was valid before is no longer valid, or means something else, gets a new protocol constant (`obi/0.2`, with `schemas/v0.2/`), and the documents of the old one stay as they were. An implementation says in its card which constants it speaks.
 3. **No more amendments in place.** Until its baseline, `obi/0.1` was amended in place, and two amendments made earlier messages invalid: questions and answers (#5), and what the chain keeps of a guest job (#12, made before any of it was deployed). From the baseline on, an `obi/0.1` text changes only by additions under rule 1, by clarifications that change no message, schema or fixture, or to make the reference code do what the text says.
 4. **Every change is in the changelog.** A pull request that changes anything under `spec/` adds an entry to [CHANGELOG.md](../CHANGELOG.md) saying what changed and its kind: addition, breaking or clarification.
 
-**Where a card lists its features.** v0.1 cards have no `features` list yet, and v0.1 implementations close the card's `params`, so a card that carried one would be refused by them. Until it exists, an addition is announced the way sealed words were (protocol.md 9.1): the Obysphere says it takes it in `GET /v0.1/health`, an agent announces with a card's implementation `version` that it reads it, and a sender uses it only once the receiver's card says so. Adding `features` is itself an addition, made that way.
+**Where features are listed.** A card lists the features its agent takes in `params.features`, and an Obysphere lists those it takes in `GET /v0.1/features` (identity.md section 2.3; sphere-api.md section 2). The card's list is itself an addition, the feature `card_runtime`. Implementations from before it close the card's `params` and refuse a card with a member they don't know, so an agent puts an addition's members in its card only once its Obysphere and every other active member take it, and the Obysphere refuses a card that does it sooner. A card that can't carry `features` yet says it takes `card_runtime` in its `version`'s build metadata, `+card-runtime`, which every implementation reads (identity.md section 2.3, "Publishing a card with an addition").
+
+**The features of `obi/0.1`.**
+
+| Feature | What it adds | Where |
+|---|---|---|
+| `card_runtime` | A card's `features`, and the `runtime` and `vendors` its owner declares | [identity.md](identity.md) section 2.3 |
 
 **The baseline.** `obi/0.1`'s baseline is the spec at commit `41d5a272` (#29, sealed words), the last commit that changed `spec/` before this rule, tagged `oby/0.1`. Every earlier amendment is in [CHANGELOG.md](../CHANGELOG.md).
 
