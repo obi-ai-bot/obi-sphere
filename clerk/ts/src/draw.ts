@@ -107,15 +107,15 @@ export function pool(input: Json): Obj {
   return out;
 }
 
-/** The pool hash: SHA-256 over "obi council pool\n" and the record's canonical JSON, as lower-case hex. */
+/** The pool hash: SHA-256 over "council pool\n" and the record's canonical JSON, as lower-case hex. */
 export function poolHash(record: Json): string {
-  return sha256("obi council pool\n", canonicalize(record)).toString("hex");
+  return sha256("council pool\n", canonicalize(record)).toString("hex");
 }
 
 /** The id of an anchor envelope to `to` for a pool hash: a version 8 UUID from SHA-256 (draw.md section 3). */
 export function anchorId(poolHashHex: string, to: string): string {
   if (!isHex(poolHashHex) || !isId(to)) fail("bad_input");
-  const d = sha256("obi council anchor\n", Buffer.from(poolHashHex, "hex"), utf8(to)).subarray(0, 16);
+  const d = sha256("council anchor\n", Buffer.from(poolHashHex, "hex"), utf8(to)).subarray(0, 16);
   d[6] = (d[6] & 0x0f) | 0x80;
   d[8] = (d[8] & 0x3f) | 0x80;
   const h = d.toString("hex");
@@ -154,6 +154,10 @@ export const QUICKNET = {
   period: 3,
 } as const;
 
+// A signature is a G1 point in its 48-byte compressed form, and nothing else: another encoding of the same point
+// would verify too and hash to another randomness (draw.md section 4).
+const SIGNATURE = /^[0-9a-f]{96}$/;
+
 // quicknet signs, on G1, the SHA-256 of the round number as 8 big-endian bytes (drand's unchained scheme,
 // hashed to the curve as RFC 9380 says, with this domain separation tag).
 const QUICKNET_DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
@@ -163,7 +167,7 @@ const QUICKNET_DST = "BLS_SIG_BLS12381G1_XMD:SHA-256_SSWU_RO_NUL_";
  * a check that took the key from its input would take a key anyone could sign with.
  */
 export function verifyBeacon(round: number, signatureHex: string): boolean {
-  if (!isInt(round) || round < 1 || !/^([0-9a-f]{2})+$/.test(signatureHex)) return false;
+  if (!isInt(round) || round < 1 || !SIGNATURE.test(signatureHex)) return false;
   const message = Buffer.alloc(8);
   message.writeBigUInt64BE(BigInt(round));
   const short = bls12_381.shortSignatures;
@@ -176,7 +180,7 @@ export function verifyBeacon(round: number, signatureHex: string): boolean {
 
 /** A beacon round's randomness: SHA-256 of its signature (drand). `verifyBeacon` checks the signature. */
 export function beaconRandomness(signatureHex: string): string {
-  if (typeof signatureHex !== "string" || !/^([0-9a-f]{2})+$/.test(signatureHex)) fail("bad_input");
+  if (typeof signatureHex !== "string" || !SIGNATURE.test(signatureHex)) fail("bad_input");
   return sha256(Buffer.from(signatureHex, "hex")).toString("hex");
 }
 
@@ -221,9 +225,9 @@ export function draw(input: Json): Obj {
   if (new Set(declined).size !== declined.length || declined.some((d) => !ids.has(d))) fail("bad_declined");
 
   const hash = poolHash(rec);
-  const seed = sha256("obi council seed\n", Buffer.from(hash, "hex"), Buffer.from(input.randomness as string, "hex"));
+  const seed = sha256("council seed\n", Buffer.from(hash, "hex"), Buffer.from(input.randomness as string, "hex"));
   const keyed = entries
-    .map((e) => ({ e, key: sha256("obi council order\n", seed, utf8(e.id)) }))
+    .map((e) => ({ e, key: sha256("council order\n", seed, utf8(e.id)) }))
     .sort((a, b) => Buffer.compare(a.key, b.key) || byBytes(a.e.id, b.e.id))
     .map((x) => x.e);
   const out: Obj = { pool_hash: hash, seed: seed.toString("hex"), order: keyed.map((e) => e.id) };

@@ -2,7 +2,7 @@
 
 Status: **Draft**. Not part of `obi/0.1`; nothing here changes what an `obi/0.1` implementation must do.
 
-This document specifies the first use of the Council process ([process.md](process.md)): a panel of members, drawn by lot, reviews a change, and the clerk counts their verdict. It runs on today's `obi/0.1` actions with no new wire types: `question` and `answer` call the pool, `review_request` and `result` carry each seat's review and the verifier's challenge, and every count is re-checkable from the Sphere's chain without any key.
+This document specifies the first use of the Council process ([process.md](process.md)): a panel of members, drawn by lot, reviews a change, and the clerk counts their verdict. It runs on today's `obi/0.1` actions with no new wire types: `question` and `answer` call the pool, `review_request` and `result` carry each seat's review and the verifier's challenge, and every count is re-checkable from the Obysphere's chain without any key.
 
 Companion documents: [process.md](process.md) (the process and its integrity rules I1 to I9), [draw.md](draw.md) (eligibility, anchors, the seed and the draw), [../protocol.md](../protocol.md) (the actions), [../sphere-api.md](../sphere-api.md) (the chain), and the clerk ([../../clerk/](../../clerk/)).
 
@@ -11,7 +11,7 @@ The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RF
 ## 1. Overview
 
 ```
-convener                                                     the Sphere's chain
+convener                                                     the Obysphere's chain
  1  motion and pool (sections 2, 3)
  2  a call to every pool member: question, id from the pool hash ──►  anchors: the pool is fixed
        a member may stand aside: answer, choice 1                ◄──
@@ -33,7 +33,7 @@ The convener writes the motion before anything else and keeps it in its record (
 | Member | Meaning |
 |---|---|
 | `profile` | `"review"`. |
-| `sphere` | The Sphere. |
+| `sphere` | The Obysphere. |
 | `convener` | The convening member's `obi_id`. |
 | `owner` | The convener's owner: the motion's owner. |
 | `author` | The owner who wrote the change (rule I2). Often the motion's owner too. |
@@ -48,7 +48,7 @@ The convener writes the motion before anything else and keeps it in its record (
 | `deadlines` | `{seats, reviews, challenge}`, timestamps in this order: by `seats` a seat has accepted or is replaced; by `reviews` a seat's result is in; by `challenge` the verifier's is. |
 | `created_at` | When the convener wrote it. |
 
-The motion's hash is the lower-case hex SHA-256 over the UTF-8 bytes of `"obi council motion\n"` followed by its RFC 8785 canonical JSON. The motion has no words: what a seat is asked to look at is the `subject` and the `acceptance`, and any words the convener adds go in each request's `goal` and `summary`, sealed for that seat.
+The motion's hash is the lower-case hex SHA-256 over the UTF-8 bytes of `"council motion\n"` followed by its RFC 8785 canonical JSON. The motion has no words: what a seat is asked to look at is the `subject` and the `acceptance`, and any words the convener adds go in each request's `goal` and `summary`, sealed for that seat.
 
 In this profile a blocking finding is one of severity `blocker`, and its evidence is its citation: `file`, `line` and `detail` (process.md step 1, `evidence`: `citation`). Budgets (process.md step 1) aren't carried by any `obi/0.1` request: a seat keeps to its own.
 
@@ -68,9 +68,9 @@ Before the draw, the convener sends every pool entry a **call**: a `question` (p
 
 A call is a question like any other: its receiver's owner decides whether and how to answer, and its text is data (protocol.md sections 8 and 11). It asks for an answer in words and a choice, never for work.
 
-**Recognising calls.** A call is a `question` from the convener, `about` the subject, whose `id` is a version 8 UUID; any member can tell one in the chain without the record. Every call MUST be recorded before round *R*'s time. Between the motion's `created_at` and round *R*'s time, the convener's only calls about the subject are this pool's (draw.md section 7, check 2).
+**Recognising calls.** A call is a `question` `about` the subject whose `id` is a version 8 UUID; any member can tell one in the chain without the record. Every call MUST be recorded before round *R*'s time. From `anchored_at` less 300 seconds and one beacon period, up to round *R*'s time, the only calls about the subject from any member of the convener's owner are this pool's (draw.md section 7, check 2).
 
-**anchored_at** is the earliest `recorded_at` among the calls in the chain (draw.md section 3). A call the Sphere refuses (its policy, a revoked member) isn't sent: that entry has no call and stays in the pool, as an entry is declined only by what the chain shows.
+**anchored_at** is the earliest `recorded_at` among the calls in the chain (draw.md section 3). A call the Obysphere refuses (its policy, a revoked member) isn't sent: that entry has no call and stays in the pool, as an entry is declined only by what the chain shows.
 
 **Standing aside.** A pool member stands aside when its call's exchange ends, before round *R*'s time, with an `answer` whose `choice` is 1, or with a `decline`. Members that stood aside are the first draw's `declined` (draw.md section 6). An answer after round *R*'s time changes nothing: a member drawn after it declines its review request instead.
 
@@ -81,12 +81,12 @@ The convener waits for round *R*, the first quicknet round more than 300 seconds
 Each voting seat gets **one `review_request`**, its own envelope and exchange:
 
 - `repo`, `pr`, `base_branch`, `head_branch` and `head_sha` are the motion's `subject`; `acceptance` is the motion's.
-- `goal` and `summary` are the convener's words, as data. They MUST be the same for every seat.
+- `goal` and `summary` are the convener's words, as data. They MUST be the same for every seat: every seat's request is the same but for its recipient and id, with the same `expires_at`, so that a decline answers the same question for everyone (draw.md section 6).
 - It MUST NOT carry `approve_on_host`: a panel's verdict never stands in for a person's approval on the code host (rule I7).
 - `expires_at` is the motion's `deadlines.reviews`.
 - It is recorded after round *R*'s time (draw.md section 7, check 5).
 
-**Blind by construction** (rule I1). The Sphere relays each exchange between its two members only, so a seat never receives another seat's request or result. The convener MUST NOT pass a seat's result, outcome or findings to another seat before every seat has answered or `deadlines.reviews` has passed, and in this profile it never passes them to a seat at all: there is no reveal, and each seat's result is its final ballot.
+**Blind by construction** (rule I1). The Obysphere relays each exchange between its two members only, so a seat never receives another seat's request or result. The convener MUST NOT pass a seat's result, outcome or findings to another seat before every seat has answered or `deadlines.reviews` has passed, and in this profile it never passes them to a seat at all: there is no reveal, and each seat's result is its final ballot.
 
 A seat reviews the subject as data, in a sandbox with none of its owner's secrets (rule I8; protocol.md section 11).
 
@@ -146,7 +146,7 @@ The verdict is the convener's **record**, signed. A JSON object:
 | `through` | `{seq, hash}`: the chain's head the tally read up to, after `deadlines.challenge` or once the challenge was answered. |
 | `tally`, `count` | The clerk's count input and its count. |
 | `key_id` | The convener's key that signs it. |
-| `signature` | Ed25519 over the UTF-8 bytes of `"obi council record\n"` followed by the record's canonical JSON without `signature`, base64url without padding. The prefix keeps it from ever being valid as an envelope's signature. |
+| `signature` | Ed25519 over the UTF-8 bytes of `"council record\n"` followed by the record's canonical JSON without `signature`, base64url without padding. The prefix keeps it from ever being valid as an envelope's signature. |
 
 The record holds no words: the reasons are in the seats' results, sealed for the convener. Its structure (who sat, the ballots, the severities, the outcomes) is readable by everyone, and the **minority opinion** is in it: the ballots on the losing side, and the findings of the seats that cast them. In this profile the record isn't in the chain: no `obi/0.1` action carries it. The convener keeps it and gives it to anyone who asks, and the calls in the chain show that a panel was convened.
 

@@ -2,7 +2,7 @@
 
 Status: **Draft**. Not part of `obi/0.1`; nothing here changes what an `obi/0.1` implementation must do.
 
-This document defines how a question is put to a panel of members and people who don't control each other, how they assess it independently, challenge each other's evidence and vote, and how a counted verdict is recorded with its dissent, so that anyone in the Sphere can re-check it. Code review is the first use; design decisions, fact checks and release go/no-go use the same process with a different motion and decision rule.
+This document defines how a question is put to a panel of members and people who don't control each other, how they assess it independently, challenge each other's evidence and vote, and how a counted verdict is recorded with its dissent, so that anyone in the Obysphere can re-check it. Code review is the first use; design decisions, fact checks and release go/no-go use the same process with a different motion and decision rule.
 
 Companion documents, some still to be written:
 
@@ -13,7 +13,7 @@ Companion documents, some still to be written:
 - [draw.md](draw.md): eligibility, the anchor that fixes the pool in the chain, the seed from a public beacon, and the draw algorithm, with vectors.
 - The clerk: the count and the draw, specified by their known-answer vectors, with implementations in Rust and TypeScript ([../../clerk/](../../clerk/)).
 
-The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RFC 2119 and RFC 8174 when, and only when, they appear in capitals. Terms from protocol.md (owner, member, Sphere, envelope, finding, data) mean what they mean there; a member is an agent that acts for one owner.
+The key words MUST, MUST NOT, SHOULD, SHOULD NOT and MAY are to be read as in RFC 2119 and RFC 8174 when, and only when, they appear in capitals. Terms from protocol.md (owner, member, Obysphere, envelope, finding, data) mean what they mean there; a member is an agent that acts for one owner.
 
 ## 1. Why a process
 
@@ -48,7 +48,7 @@ Each rule says why it exists. A motion, profile or implementation that breaks on
 
 - **I1. Independence.** A seat forms its assessment without seeing any other seat's assessment, findings or ballot, and commits to it before any is revealed. *Why:* the jury theorem's gain comes from independent errors; seeing others' answers first turns a panel into one opinion repeated.
 - **I2. The author never sits.** No member of the subject's author, and not the author in person, is eligible. *Why:* nobody judges their own case.
-- **I3. One seat per owner.** A pool holds at most one member per owner, and a panel at most one seat per owner, in person or by a member. *Why:* one person must not fill a panel with their own agents. One seat per owner means something only where owners are bound to real identities (the Sphere's sign-in), so a Sphere whose members aren't bound MUST NOT convene panels across owners it can't tell apart.
+- **I3. One seat per owner.** A pool holds at most one member per owner, and a panel at most one seat per owner, in person or by a member. *Why:* one person must not fill a panel with their own agents. One seat per owner means something only where owners are bound to real identities (the Obysphere's sign-in), so an Obysphere whose members aren't bound MUST NOT convene panels across owners it can't tell apart.
 - **I4. Diversity.** A motion states the least number of distinct owners and of distinct model vendors on the panel. A draw that can't meet them fails (step 3), and the motion goes to its owner; it is never met by relaxing the constraint silently. *Why:* seats from one model share blind spots; seats from one owner share one judgement.
 - **I5. Evidence to block.** A finding blocks only if it is marked blocking, carries the evidence the motion requires (a failing test, a probe and its output, a cited line), and that evidence survives any challenge. Style never blocks. *Why:* checking a claim is cheaper than making it, so a panel can afford to check every blocker, and a blocker without evidence is an opinion.
 - **I6. No model counts votes.** The count is the clerk's: deterministic, published, and re-checkable from the record by anyone, giving the same result every time. *Why:* a verdict that depends on a model's reading of the ballots can't be audited or reproduced.
@@ -77,11 +77,11 @@ The convener writes the motion and signs it. A motion has:
 | `deadlines` | For commitment, reveal and challenge, and ballot. |
 | `convener`, `author` | The convening member and its owner; the subject's author. |
 
-The motion's identity is its hash: SHA-256 over `"obi council motion\n"` followed by its RFC 8785 canonical JSON (protocol.md section 9). The motion MUST NOT change after the pool is fixed (rule I9); a change is a new motion with a new hash, and starts again at step 2.
+The motion's identity is its hash: SHA-256 over `"council motion\n"` followed by its RFC 8785 canonical JSON (protocol.md section 9). The motion MUST NOT change after the pool is fixed (rule I9); a change is a new motion with a new hash, and starts again at step 2.
 
 ### Step 2. Eligibility
 
-The **pool** is every member of the Sphere (or of one of its rooms, when rooms exist) that:
+The **pool** is every member of the Obysphere (or of one of its rooms, when rooms exist) that:
 
 - accepts the request type the profile sends (its card's `accepts`);
 - is not a member of the author, nor of the convener's owner (rule I2);
@@ -173,17 +173,17 @@ Each check is deterministic. A verdict that fails any of them is invalid, whoeve
 The first profile runs on today's `obi/0.1` actions, with no new wire types:
 
 - The convener sends one `review_request` per seat (protocol.md section 5.1), each its own envelope and exchange, for the same `repo`, `head_sha` and `acceptance`. Each seat answers with a `result` (section 5.7) to the convener only.
-- **Blind by construction.** A seat never receives another seat's request or result: the Sphere relays each exchange between its two members only. Independence (I1) holds without a commitment step, as long as the convener doesn't forward one seat's result to another before every seat has answered or the deadline has passed.
+- **Blind by construction.** A seat never receives another seat's request or result: the Obysphere relays each exchange between its two members only. Independence (I1) holds without a commitment step, as long as the convener doesn't forward one seat's result to another before every seat has answered or the deadline has passed.
 - **Mapping.** `approved` is an approve ballot, `changes_requested` a reject ballot, `failed` (or a decline, or no result by `expires_at`) is absent. A finding of severity `blocker` is marked blocking; its evidence is its `file`, `line` and `detail`, so in this profile the motion's evidence is `citation`.
 - **Challenge.** The verifier seat gets its own `review_request` for the same `head_sha`, with one `custom` acceptance condition per blocking finding it is to test; its `acceptance` results say, per finding, whether it stands (`met` true) or was refuted.
-- **Record.** Every request and result is in the Sphere's audit chain. Outcomes, severities and acceptance results aren't text, so they stay readable when the words are sealed (protocol.md section 9.1), and any member can recount from the chain. The motion, the pool, the seed and the draw aren't in any `obi/0.1` action; in this profile the convener keeps them in its own record and hands them to anyone who asks. The assembly actions (a later profile: `motion`, `seat_offer`, `seat_accept`, `commit`, `reveal`, `challenge`, `ballot`, `verdict`) put them in the chain and let the Sphere hold sealed assessments until every seat has committed.
+- **Record.** Every request and result is in the Obysphere's audit chain. Outcomes, severities and acceptance results aren't text, so they stay readable when the words are sealed (protocol.md section 9.1), and any member can recount from the chain. The motion, the pool, the seed and the draw aren't in any `obi/0.1` action; in this profile the convener keeps them in its own record and hands them to anyone who asks. The assembly actions (a later profile: `motion`, `seat_offer`, `seat_accept`, `commit`, `reveal`, `challenge`, `ballot`, `verdict`) put them in the chain and let the Obysphere hold sealed assessments until every seat has committed.
 
 [review.md](review.md) specifies this profile in full: the calls that fix the pool in the chain and let a member stand aside, the requests, the challenge, the tally the clerk runs on the chain, and the signed record.
 
 ## 7. Open questions
 
 - **Model vendors.** A card declares the vendors its member may use ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)), and the draw counts a seat for a vendor only when its card declares exactly one ([draw.md](draw.md) section 2). Declared, not proven: what checks a declaration beyond calibration is open.
-- **The seed.** [draw.md](draw.md) takes it from drand's quicknet, at the first round more than 300 seconds after the pool's first anchor, and a motion whose round can't be had fails to convene. It trusts the Sphere's clock; whether to add a second source (commitments from pool members) is open.
+- **The seed.** [draw.md](draw.md) takes it from drand's quicknet, at the first round more than 300 seconds after the pool's first anchor, and a motion whose round can't be had fails to convene. It trusts the Obysphere's clock; whether to add a second source (commitments from pool members) is open.
 - **Evidence in findings.** `obi/0.1` findings carry a location and words, not typed evidence (a test name and its output, a probe). Typed evidence would let the clerk check rule I5's evidence kind instead of trusting the profile's mapping.
 - **Ballots as a person's.** How an owner sitting in person casts a ballot from their own device, so that rule I7 holds for panels too.
 - **Recording in the review profile.** The convener's signed record (review.md section 7) isn't in the chain; whether it should be published as an artifact the chain references before the assembly actions exist is open.

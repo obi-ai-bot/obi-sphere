@@ -168,7 +168,7 @@ def pool(inp):
 
 
 def anchor_id(pool_hash_hex, to):
-    d = bytearray(sha(b"obi council anchor\n", bytes.fromhex(pool_hash_hex), b(to))[:16])
+    d = bytearray(sha(b"council anchor\n", bytes.fromhex(pool_hash_hex), b(to))[:16])
     d[6] = (d[6] & 0x0F) | 0x80
     d[8] = (d[8] & 0x3F) | 0x80
     h = d.hex()
@@ -187,7 +187,7 @@ def beacon_round(anchored_at, genesis_time, period):
 
 
 def pool_hash(record):
-    return sha(b"obi council pool\n", canonical(record).encode("utf-8")).hex()
+    return sha(b"council pool\n", canonical(record).encode("utf-8")).hex()
 
 
 # --- The draw (sections 5 to 7) ----------------------------------------------------------------------
@@ -250,8 +250,8 @@ def draw(inp):
         fail("bad_declined")
 
     ph = pool_hash(rec)
-    seed = sha(b"obi council seed\n", bytes.fromhex(ph), bytes.fromhex(inp["randomness"]))
-    keyed = sorted(entries, key=lambda e: (sha(b"obi council order\n", seed, b(e["id"])), b(e["id"])))
+    seed = sha(b"council seed\n", bytes.fromhex(ph), bytes.fromhex(inp["randomness"]))
+    keyed = sorted(entries, key=lambda e: (sha(b"council order\n", seed, b(e["id"])), b(e["id"])))
     order = [e["id"] for e in keyed]
     out = {"pool_hash": ph, "seed": seed.hex(), "order": order}
 
@@ -526,6 +526,9 @@ def beacon_checks():
         {"name": "a signature that isn't a curve point", "round": Q_ROUND, "signature": "00" * 48, "valid": False},
         {"name": "a signature of the wrong length", "round": Q_ROUND, "signature": Q_SIG[:-2], "valid": False},
         {"name": "the identity point as the signature", "round": Q_ROUND, "signature": "c0" + "00" * 47, "valid": False},
+        # The same point, uncompressed (96 bytes): a signature is the 48-byte compressed form only, since another
+        # encoding of one point would hash to another randomness, and so another seed.
+        {"name": "the same signature, uncompressed", "round": Q_ROUND, "signature": "03ad29e4c409f9470fc2ef02f90214df49e02b441a1a241a82d622d9f608ef98fd8b11a029f1bee9d9e83b45088abe7201776ff7408b39c5f6f9fa50746efd7eea17fbb61f2e7b9c849ff0528e5a3deeedd029d0df345199963d75ba93b5a02a", "valid": False},
         {"name": "round 0, which no beacon has", "round": 0, "signature": Q_SIG, "valid": False},
     ]
 

@@ -48,6 +48,12 @@
    "valid": false
   },
   {
+   "name": "the same signature, uncompressed",
+   "round": 1000000,
+   "signature": "03ad29e4c409f9470fc2ef02f90214df49e02b441a1a241a82d622d9f608ef98fd8b11a029f1bee9d9e83b45088abe7201776ff7408b39c5f6f9fa50746efd7eea17fbb61f2e7b9c849ff0528e5a3deeedd029d0df345199963d75ba93b5a02a",
+   "valid": false
+  },
+  {
    "name": "round 0, which no beacon has",
    "round": 0,
    "signature": "83ad29e4c409f9470fc2ef02f90214df49e02b441a1a241a82d622d9f608ef98fd8b11a029f1bee9d9e83b45088abe72",
@@ -650,25 +656,25 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "78040bac935bc22fd02593e3c46195dbf4c970eb6f3c2ab9f362e78aad09151b",
-    "seed": "ce9ec58a99ca8b71bb5f74a26e9e20562d125ce2ba77e8f09bb2757f02c2ab92",
+    "pool_hash": "05c2ead9da64b64d9646628eef3dbdc20614b0083d28ece24d582f7a38808ce3",
+    "seed": "266c9d5db164cdf626dd8ec956ab8aa657e6e0dc1ea0bf09d1e7f706368390e5",
     "order": [
-     "obi-grace",
-     "obi-heidi",
      "obi-frank",
      "obi-carol",
+     "obi-dan",
+     "obi-heidi",
      "obi-erin",
-     "obi-bob",
-     "obi-dan"
+     "obi-grace",
+     "obi-bob"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-grace",
-     "obi-heidi",
-     "obi-frank"
+     "obi-frank",
+     "obi-carol",
+     "obi-dan"
     ],
     "verifiers": [],
-    "vendors": 1,
+    "vendors": 3,
     "skipped": []
    }
   },
@@ -747,29 +753,29 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
-    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
+    "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
+    "seed": "dc3cd154a3bc1b9526aed785aca60339c96118e2252ad3a6787760ede9834935",
     "order": [
-     "obi-grace",
      "obi-heidi",
-     "obi-dan",
-     "obi-carol",
-     "obi-erin",
+     "obi-grace",
      "obi-bob",
+     "obi-dan",
+     "obi-erin",
+     "obi-carol",
      "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-grace",
-     "obi-dan",
-     "obi-carol"
+     "obi-heidi",
+     "obi-bob",
+     "obi-dan"
     ],
     "verifiers": [
-     "obi-heidi"
+     "obi-grace"
     ],
     "vendors": 2,
     "skipped": [
-     "obi-heidi"
+     "obi-grace"
     ]
    }
   },
@@ -848,30 +854,27 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "3623c918f0f8cd22870396d16cd74e22d1528feb1f58cfb5e1a9b24c05a814a6",
-    "seed": "54c524d51b8c973f22bfebe37ecafdbe98806236bba86ae1db46bedcde5ec3f0",
+    "pool_hash": "5d051e0a0983b30fbc0905f7ee7ce8be615915555e69c6950de247df82a7b481",
+    "seed": "eb0e6428d4e43e86891935ffc5d9883b7eb0ffdb0629de8e020c4f471bf501e3",
     "order": [
      "obi-grace",
-     "obi-bob",
      "obi-frank",
-     "obi-carol",
      "obi-erin",
+     "obi-dan",
      "obi-heidi",
-     "obi-dan"
+     "obi-carol",
+     "obi-bob"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-bob",
      "obi-frank",
+     "obi-erin",
      "obi-dan"
     ],
     "verifiers": [],
     "vendors": 3,
     "skipped": [
-     "obi-grace",
-     "obi-carol",
-     "obi-erin",
-     "obi-heidi"
+     "obi-grace"
     ]
    }
   },
@@ -950,28 +953,30 @@
     "randomness": "1f4ef2bcd2f072a743a910b5c1e18fae3505da8bb32f76726552f6bf8192d14d"
    },
    "output": {
-    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
-    "seed": "d47b7375c07000c8a3e7f07e7f3ca2df88b4a04898981987204928005194b632",
+    "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
+    "seed": "adc462f874e7931277c9ccc4e09c45605201795cb4a85299f0478463c2dd977a",
     "order": [
-     "obi-carol",
+     "obi-heidi",
+     "obi-grace",
+     "obi-dan",
+     "obi-bob",
      "obi-frank",
      "obi-erin",
-     "obi-grace",
-     "obi-heidi",
-     "obi-bob",
-     "obi-dan"
+     "obi-carol"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-carol",
-     "obi-frank",
-     "obi-erin"
+     "obi-heidi",
+     "obi-dan",
+     "obi-bob"
     ],
     "verifiers": [
      "obi-grace"
     ],
     "vendors": 2,
-    "skipped": []
+    "skipped": [
+     "obi-grace"
+    ]
    }
   },
   {
@@ -1048,26 +1053,26 @@
     },
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
     "declined": [
-     "obi-grace"
+     "obi-heidi"
     ]
    },
    "output": {
-    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
-    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
+    "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
+    "seed": "dc3cd154a3bc1b9526aed785aca60339c96118e2252ad3a6787760ede9834935",
     "order": [
-     "obi-grace",
      "obi-heidi",
-     "obi-dan",
-     "obi-carol",
-     "obi-erin",
+     "obi-grace",
      "obi-bob",
+     "obi-dan",
+     "obi-erin",
+     "obi-carol",
      "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-heidi",
-     "obi-dan",
-     "obi-carol"
+     "obi-grace",
+     "obi-bob",
+     "obi-dan"
     ],
     "verifiers": [
      "obi-erin"
@@ -1150,35 +1155,35 @@
     },
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
     "declined": [
-     "obi-dan",
-     "obi-heidi",
-     "obi-carol"
+     "obi-bob",
+     "obi-grace",
+     "obi-dan"
     ]
    },
    "output": {
-    "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
-    "seed": "d0f65ab140f7b3e3f5d0219c2ab9f6b8d6bb3808487d39869ba16afa85da64f5",
+    "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
+    "seed": "dc3cd154a3bc1b9526aed785aca60339c96118e2252ad3a6787760ede9834935",
     "order": [
-     "obi-grace",
      "obi-heidi",
-     "obi-dan",
-     "obi-carol",
-     "obi-erin",
+     "obi-grace",
      "obi-bob",
+     "obi-dan",
+     "obi-erin",
+     "obi-carol",
      "obi-frank"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-grace",
+     "obi-heidi",
      "obi-erin",
      "obi-frank"
     ],
     "verifiers": [
-     "obi-bob"
+     "obi-carol"
     ],
     "vendors": 2,
     "skipped": [
-     "obi-bob"
+     "obi-carol"
     ]
    }
   },
@@ -1237,13 +1242,13 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "8eb5dd1e06badd036905c1728b7583734ebb8d34568586f35c397c0aab203925",
-    "seed": "6d3c6b01d31167df80debd0c615e8d6d2895ea23ecb1efe3a4fe39fb63bf064f",
+    "pool_hash": "89bf96a4abc0d46092c6071ba0b71ae8edf7be7d99e2454dd7b968dee8d88a91",
+    "seed": "593e9f9972512c9143529953cac09c211e623d45d4d220ff5d18ea45bdd7c784",
     "order": [
+     "obi-bob",
      "obi-carol",
      "obi-erin",
-     "obi-dan",
-     "obi-bob"
+     "obi-dan"
     ],
     "outcome": "unmet",
     "seats": [],
@@ -1307,19 +1312,19 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "5a24d343e28becd1b79f19857d3339eedffefd85a320cdacc03fecb89a4d7740",
-    "seed": "0cf159a0705490db018641b80debde704e4f736ded3033497352e3607d991cd7",
+    "pool_hash": "42512eea7f62570b7a783cf63a8be27a4da1cdc1b6055686c17e914010241a5f",
+    "seed": "8cf49fcedc6d270661e86d5262953e70c9b61d324a70fde8508655b466355263",
     "order": [
-     "obi-bob",
-     "obi-erin",
      "obi-carol",
-     "obi-dan"
+     "obi-erin",
+     "obi-dan",
+     "obi-bob"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-bob",
+     "obi-carol",
      "obi-erin",
-     "obi-carol"
+     "obi-dan"
     ],
     "verifiers": [],
     "vendors": 1,
@@ -1384,12 +1389,12 @@
     ]
    },
    "output": {
-    "pool_hash": "2a5f759e3a9fd3aebff977994b3c4d3874dea85def38c2d4569ef61e03ead80b",
-    "seed": "3608099624b5bd4fe9ac6c487f8b9ed9cb60d1a28cfe6cca13fc288f68fce874",
+    "pool_hash": "ab5794ee43716824f9df34f190cdc8d299f573c3f4c1963af886b75c69daf0e0",
+    "seed": "8170b196079139828c2dd46c3ed99d24c666430cbf381c8dff375bab4c88c957",
     "order": [
-     "obi-erin",
      "obi-bob",
      "obi-carol",
+     "obi-erin",
      "obi-dan"
     ],
     "outcome": "unmet",
@@ -1453,13 +1458,13 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "9377fa5fee4c71676cf33f1e7b921e647f4872c4e06769dce756c70be538dcfe",
-    "seed": "d95ef0fb7593c2238bb277f4d9be50e89a6c844dfdfcf48690b0a058f59c3ecb",
+    "pool_hash": "9fdc86c8e11b181f0561343529a8459edcad5d4aa5281ba868567bf3b021c76c",
+    "seed": "259e066a78f80dcbd500210975026804ecb8649a0a26875575ab28d7ca0c82ff",
     "order": [
-     "obi-erin",
      "obi-carol",
-     "obi-dan",
-     "obi-bob"
+     "obi-bob",
+     "obi-erin",
+     "obi-dan"
     ],
     "outcome": "drawn",
     "seats": [
@@ -1469,7 +1474,8 @@
     "verifiers": [],
     "vendors": 2,
     "skipped": [
-     "obi-carol"
+     "obi-carol",
+     "obi-bob"
     ]
    }
   },
@@ -1516,11 +1522,11 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "6f5f50f743e0151f0d75b441d7a377e9f974cae4b76c99798c7abfbb38f6c109",
-    "seed": "36d3b3355c15741130b864cc7067e4d06dea62b52b3030f070a945d73c7fbe91",
+    "pool_hash": "53a89e3fecf6dd3dfce3c01abc3b90eba465487919a06a4e791bf0f78f93f6d4",
+    "seed": "6fb57fa7dfd68d39c7c2c7a4b3512bc9d20ed19590cabdd07eb68ce57f7befa5",
     "order": [
-     "obi-carol",
-     "obi-bob"
+     "obi-bob",
+     "obi-carol"
     ],
     "outcome": "unmet",
     "seats": [],
@@ -1555,8 +1561,8 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "65c02eed4b62cfb5c2337f1221e537bf5e8c2caa589ce444e4b9e5f271e8f735",
-    "seed": "393caf35d0bbd59027aaa73026c72d5b593d75317fb94ce81a63ead25a9f4b46",
+    "pool_hash": "dc2f8e9eca2432297a9a835f826172ac0a1e58080e9d2c2a1acc3e5d64f89e4d",
+    "seed": "5f9931fbe8b484f023056b6561a0a6cd229bc2ac184d20a6f11cb36df5eceea5",
     "order": [],
     "outcome": "unmet",
     "seats": [],
@@ -1640,27 +1646,27 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "19d445050a4ef7d3cc1d403e6edc02832d029dc2f8ebdf9d23acbd30f983d3db",
-    "seed": "05c1cba28a2ac44c768519c1d810ae0a205255a3691914e90abab97057eb3286",
+    "pool_hash": "c95a69e7566b86060b3220bb2a209deacd0f07376d5966d93bff117d0e8fc041",
+    "seed": "5205958d7f16d116cda5e25793bace63a7b2cca3e4462d294d08894ad42c9ffa",
     "order": [
-     "obi-carol",
      "obi-dan",
-     "obi-frank",
-     "obi-bob",
      "obi-erin",
+     "obi-bob",
      "obi-heidi",
+     "obi-frank",
+     "obi-carol",
      "obi-grace"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-carol",
      "obi-dan",
-     "obi-frank"
-    ],
-    "verifiers": [
+     "obi-erin",
      "obi-bob"
     ],
-    "vendors": 3,
+    "verifiers": [
+     "obi-heidi"
+    ],
+    "vendors": 2,
     "skipped": []
    }
   },
@@ -1738,31 +1744,31 @@
     },
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3",
     "declined": [
-     "obi-carol"
+     "obi-dan"
     ]
    },
    "output": {
-    "pool_hash": "19d445050a4ef7d3cc1d403e6edc02832d029dc2f8ebdf9d23acbd30f983d3db",
-    "seed": "05c1cba28a2ac44c768519c1d810ae0a205255a3691914e90abab97057eb3286",
+    "pool_hash": "c95a69e7566b86060b3220bb2a209deacd0f07376d5966d93bff117d0e8fc041",
+    "seed": "5205958d7f16d116cda5e25793bace63a7b2cca3e4462d294d08894ad42c9ffa",
     "order": [
-     "obi-carol",
      "obi-dan",
-     "obi-frank",
-     "obi-bob",
      "obi-erin",
+     "obi-bob",
      "obi-heidi",
+     "obi-frank",
+     "obi-carol",
      "obi-grace"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-dan",
-     "obi-frank",
-     "obi-bob"
+     "obi-erin",
+     "obi-bob",
+     "obi-heidi"
     ],
     "verifiers": [
-     "obi-erin"
+     "obi-frank"
     ],
-    "vendors": 3,
+    "vendors": 1,
     "skipped": []
    }
   },
@@ -1813,20 +1819,20 @@
     "randomness": "b22aad4794f7451896f7a371aa46106fd84d919f3f569acd5b2fddf1d1440af3"
    },
    "output": {
-    "pool_hash": "b420067c08a0cb9ddcac3cb972c3b573aa7ec5411fd00f67919685c00d707c0e",
-    "seed": "34b3498badd0cba57e0ed2cf4bc28704b75f4b8aca447d8bb715ba22ab6e198b",
+    "pool_hash": "5132657a21bad32260892ac7efc6b4a8d20b93d5f923b33456c7caae64a2dfd8",
+    "seed": "a55c3a90a09df15a2e761b1e1b67e78490a157041359201cb4d0db965f795a30",
     "order": [
-     "obi-z",
+     "obi-😀",
      "obi-ﬁ",
-     "obi-😀"
+     "obi-z"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-z",
+     "obi-😀",
      "obi-ﬁ"
     ],
     "verifiers": [],
-    "vendors": 1,
+    "vendors": 2,
     "skipped": []
    }
   },
@@ -1885,20 +1891,20 @@
     "randomness": "1f4ef2bcd2f072a743a910b5c1e18fae3505da8bb32f76726552f6bf8192d14d"
    },
    "output": {
-    "pool_hash": "39e46ca1959f71866d0266f556b596e714554d7835ec6a0b4b36b680a74f9fe3",
-    "seed": "b244cfe9caba41e05f946c392249b5d93031796d9170dd0a885dd28178aa003c",
+    "pool_hash": "c90f8f7d74465a320579713e819204e906cb2a36d798bb1298c490f434f64fd1",
+    "seed": "89d025b58ba025b61c78d9a66a5228613a952da54db01a43658ebccd84fa6179",
     "order": [
-     "obi-dan",
-     "obi-bob",
      "obi-carol",
-     "obi-erin"
+     "obi-dan",
+     "obi-erin",
+     "obi-bob"
     ],
     "outcome": "drawn",
     "seats": [
-     "obi-dan",
-     "obi-bob",
      "obi-carol",
-     "obi-erin"
+     "obi-dan",
+     "obi-erin",
+     "obi-bob"
     ],
     "verifiers": [],
     "vendors": 1,
@@ -3120,21 +3126,21 @@
  "anchor": [
   {
    "name": "anchor for obi-bob",
-   "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+   "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
    "to": "obi-bob",
-   "id": "021ac7c7-b35c-8456-817e-afd35aea62f3"
+   "id": "e56d885f-d213-8f9b-bb24-12cd0cf7030b"
   },
   {
    "name": "anchor for obi-dan",
-   "pool_hash": "136b9129ea0386938935bdcfd1608238c12bf87b6285aa15c7112029baee6e1d",
+   "pool_hash": "c505f1e78d70de4c7674b52ec6b3bb35ea20406e8cdf3595260d6ec5722f22d1",
    "to": "obi-dan",
-   "id": "d4be4612-39f0-8875-bc5e-f10982ee1433"
+   "id": "4c15f286-ac1d-81d8-86a0-174f0b817726"
   },
   {
    "name": "anchor for a pool hash of zeros",
    "pool_hash": "0000000000000000000000000000000000000000000000000000000000000000",
    "to": "obi-bob",
-   "id": "cb455e47-29ee-8e3a-8d1f-db858d1d3e3c"
+   "id": "ca5fecf9-9469-88e2-9e2d-d81d5e040487"
   }
  ],
  "round": [

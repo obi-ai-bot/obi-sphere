@@ -81,14 +81,14 @@ An input that can't be counted gives one error code: the first that applies, che
 | TypeScript | Rust (`obi_clerk::draw`) | Does |
 |---|---|---|
 | `pool(input)` | `pool` | Builds the pool record from the members active at a point in the chain: the eligible ones, one per owner. |
-| `poolHash(record)` | `pool_hash` | SHA-256 over `"obi council pool\n"` and the record's RFC 8785 canonical JSON. |
+| `poolHash(record)` | `pool_hash` | SHA-256 over `"council pool\n"` and the record's RFC 8785 canonical JSON. |
 | `anchorId(poolHash, to)` | `anchor_id` | The id of an anchor envelope to `to`: a version 8 UUID from the pool hash. |
-| `beaconRound(anchoredAt, genesis, period)` | `beacon_round` | The first beacon round at least 300 seconds after the last anchor. |
-| `verifyBeacon(publicKey, round, signature)` | `verify_beacon` | Whether a drand quicknet round's signature verifies (BLS12-381, via [`@noble/curves`](https://github.com/paulmillr/noble-curves) and [`drand-verify`](https://github.com/noislabs/drand-verify)). |
-| `beaconRandomness(signature)` | `beacon_randomness` | A round's randomness: the SHA-256 of its signature. |
+| `beaconRound(anchoredAt, genesis, period)` | `beacon_round` | The first beacon round more than 300 seconds after the first anchor. |
+| `verifyBeacon(round, signature)` | `verify_beacon` | Whether a drand quicknet round's 48-byte signature verifies with quicknet's own key, never one from the input (BLS12-381, via [`@noble/curves`](https://github.com/paulmillr/noble-curves) and [`drand-verify`](https://github.com/noislabs/drand-verify)). |
+| `beaconRandomness(signature)` | `beacon_randomness` | A round's randomness: the SHA-256 of its 48-byte signature. |
 | `draw({pool, randomness, declined?})` | `draw` | The seed, the order, and the seats and verifiers, or `unmet`. |
 
-Errors are codes, as for the count: `bad_input`, `bad_members` (`pool`), `bad_pool`, `bad_panel`, `bad_declined` (draw.md section 5).
+Errors are codes, as for the count: `bad_input`, `bad_version`, `bad_members` (`pool`), `bad_pool`, `bad_panel`, `bad_declined` (draw.md section 5).
 
 ## The review tally
 

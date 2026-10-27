@@ -265,10 +265,10 @@ pub fn pool(input: &Value) -> Result<Value, DrawError> {
     Ok(Value::Object(out))
 }
 
-/// The pool hash: SHA-256 over "obi council pool\n" and the record's canonical JSON, as lower-case hex.
+/// The pool hash: SHA-256 over "council pool\n" and the record's canonical JSON, as lower-case hex.
 pub fn pool_hash(record: &Value) -> Result<String, DrawError> {
     Ok(hex(&sha256(&[
-        b"obi council pool\n",
+        b"council pool\n",
         canonicalize(record)?.as_bytes(),
     ])))
 }
@@ -279,7 +279,7 @@ pub fn anchor_id(pool_hash_hex: &str, to: &str) -> Result<String, DrawError> {
         return Err(BadInput);
     }
     let digest = sha256(&[
-        b"obi council anchor\n",
+        b"council anchor\n",
         &hex_bytes(pool_hash_hex),
         to.as_bytes(),
     ]);
@@ -377,9 +377,10 @@ pub mod quicknet {
     pub const PERIOD: u64 = 3;
 }
 
-fn even_hex(s: &str) -> bool {
-    !s.is_empty()
-        && s.len() % 2 == 0
+/// A signature is a G1 point in its 48-byte compressed form, and nothing else: another encoding of the same
+/// point would verify too and hash to another randomness (draw.md section 4).
+fn is_signature(s: &str) -> bool {
+    s.len() == 96
         && s.bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
@@ -389,7 +390,7 @@ fn even_hex(s: &str) -> bool {
 /// never one from a record: a check that took the key from its input would take a key anyone could sign with.
 pub fn verify_beacon(round: u64, signature_hex: &str) -> bool {
     use drand_verify::{G2PubkeyRfc, Pubkey};
-    if !(1..=MAX_INT).contains(&round) || !even_hex(signature_hex) {
+    if !(1..=MAX_INT).contains(&round) || !is_signature(signature_hex) {
         return false;
     }
     let Ok(key) = G2PubkeyRfc::from_variable(&hex_bytes(quicknet::PUBLIC_KEY)) else {
@@ -401,7 +402,7 @@ pub fn verify_beacon(round: u64, signature_hex: &str) -> bool {
 
 /// A beacon round's randomness: SHA-256 of its signature (drand). [`verify_beacon`] checks the signature.
 pub fn beacon_randomness(signature_hex: &str) -> Result<String, DrawError> {
-    if !even_hex(signature_hex) {
+    if !is_signature(signature_hex) {
         return Err(BadInput);
     }
     Ok(hex(&sha256(&[&hex_bytes(signature_hex)])))
@@ -489,11 +490,11 @@ pub fn draw(input: &Value) -> Result<Value, DrawError> {
 
     let hash = pool_hash(&Value::Object(rec.clone()))?;
     let randomness = hex_bytes(o["randomness"].as_str().unwrap());
-    let seed = sha256(&[b"obi council seed\n", &hex_bytes(&hash), &randomness]);
+    let seed = sha256(&[b"council seed\n", &hex_bytes(&hash), &randomness]);
     let mut keyed: Vec<([u8; 32], Entry)> = entries
         .iter()
         .map(|(eid, _, vendors)| {
-            let key = sha256(&[b"obi council order\n", &seed, eid.as_bytes()]);
+            let key = sha256(&[b"council order\n", &seed, eid.as_bytes()]);
             let counted = (vendors.len() == 1).then(|| vendors[0]);
             (key, Entry { id: eid, counted })
         })
