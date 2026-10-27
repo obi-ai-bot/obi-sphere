@@ -10,7 +10,7 @@ Found by reading every schema in `schemas/v0.1/`, the three documents, the confo
 
 | `obi/0.1` | Where | Next version |
 |---|---|---|
-| `obi/0.1` | `protocol` in the envelope, the card's `params`, the runner status, `GET /v0.1/health` and the Sphere resource; the schemas folder `v0.1/`; the HTTP paths' `/v0.1` | `NAME/0.2` ([D1](#2-the-protocol-constant-d1)); `schemas/v0.2/`; `/v0.2` |
+| `obi/0.1` | `protocol` in the envelope, the card's `params`, the runner status, `GET /v0.1/health` and the Obysphere resource; the schemas folder `v0.1/`; the HTTP paths' `/v0.1` | `NAME/0.2` ([D1](#2-the-protocol-constant-d1)); `schemas/v0.2/`; `/v0.2` |
 | `obi/0.1 envelope` + LF | an envelope's signing input (protocol.md section 9) | `NAME/0.2 envelope` + LF |
 | `obi/0.1 audit` + LF | an audit entry's hash input (sphere-api.md section 7) | `NAME/0.2 audit` + LF |
 | `obi/0.1 seal` + LF | the sealing key's HKDF info (protocol.md section 9.1) | `NAME/0.2 seal` + LF |
@@ -25,8 +25,8 @@ Found by reading every schema in `schemas/v0.1/`, the three documents, the confo
 | `urn:obi-sphere:ext:obi:0.1` | the card's one extension | `https://STANDARDS-HOST/ext/core/0.2` ([D2](#3-uris-d2)) |
 | `obi_extension` | the extension's `$defs` name in agent-card.schema.json | `extension` |
 | `obi-action` | the tag on each of the card's skills | `typed-action` |
-| `obi-sphere:<sphere id>` | the `aud` of the owner's and the agent's assertions (identity.md section 4.1) | the Sphere's URL, `<base URL>/v0.2/spheres/<sphere>`, the form the #60 addition brings to `obi/0.1`; the old form is dropped |
-| `obi-sphere://signin` | where a sign-in's callback sends the browser (sphere-api.md section 3.1) | the client's own redirect, as the OpenID Connect addition (#60) defines it |
+| `obi-sphere:<sphere id>` | the `aud` of the owner's and the agent's assertions (identity.md section 4.1) | the Obysphere's URL, `<base URL>/v0.2/spheres/<sphere>`, the form planned as an addition to `obi/0.1` with #60; the old form is dropped |
+| `obi-sphere://signin` | where a sign-in's callback sends the browser (sphere-api.md section 3.1) | a redirect that names no product: the client's own, as the OpenID Connect work (#60) will define it |
 | `by Oby:` | the marker on every review an agent posts on a code host, and what a receiver looks for to tell an agent's review from a person's (protocol.md section 11) | `by agent:` ([D3](#4-the-code-host-marker-d3)), and both are recognised |
 | `obi-base` | the branch a `run_request`'s bundle starts from | gone (`base`) |
 | `https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/…` | every schema's `$id` | `https://STANDARDS-HOST/schemas/v0.2/…` ([D2](#3-uris-d2)) |

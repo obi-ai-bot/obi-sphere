@@ -13,11 +13,12 @@ Mostly mechanical:
 - **New delegations.** A delegation's `aud` names the Obysphere and the version's path, so every agent needs a new delegation from its owner for `NAME/0.2`. An owner signs it with the same owner key, before the switch. Its scopes are converted: `send:handoff` becomes `send:work_request`, and `send:run_request` and `send:share_offer` are gone.
 - **Policy, remembered decisions and sharing rules by scope**, converted so that nothing is allowed outside what a rule named before. The one difference is deliberate: matching scope by scope, a request about several repositories that a rule names one by one is allowed by that rule, where `obi/0.1` allowed it only under `*`.
   - a repository `r` becomes `repo:r`, and `owner/*` becomes `repo:owner/*`;
-  - in a policy rule, a sharing rule or a remembered **accept**, `obi/0.1`'s `*`, which matched every repository and every request with none, becomes `repo:*` and `none` together. It does not become `*`, which in the next version also matches documents, datasets and topics;
+  - in a policy rule, a sharing rule or a remembered **accept**, `obi/0.1`'s `*` matched every repository and, for a question, a question about none. For `question` it becomes `repo:*` and `none` together; for `handoff` and `review_request`, which always name a repository, `repo:*` alone, so a converted rule never covers work described only in words. It never becomes `*`, which in the next version also matches documents, datasets and topics;
   - in a remembered **decline**, `*` stays `*`: a sender an owner turned away from everything stays turned away from the new kinds too;
   - a rule, decision or sharing rule for `handoff` becomes the same one for `work_request`, with its scopes converted as above, so it covers work in repositories only;
   - an owner who wants more widens it themselves, after the switch.
 - **`handoff` becomes `work_request`.** `{goal, repo, base_branch, issue?, pr?, acceptance, summary?}` becomes `{goal, subject: {kind: "branch", repo, branch: base_branch}, about?: [the issue or pull request], acceptance, summary?}`. Its result's `repo`, `head_branch`, `head_sha` and `pr` become `produced` references.
+- **The card endpoint.** `PUT …/members/{agent}/card` also takes an owner token in one case: an organisation's answerer, or in the way back from a suspension a member's owner, registering a card for an agent whose own tokens are gone ([owners.md, section 4](owners.md#4-its-agents-cards)).
 - **Dropped.** The compute and share actions, the job channel, the runner status and their endpoints and scopes ([core-and-profiles.md, section 10](core-and-profiles.md#10-the-compute-and-share-actions-d4)). An implementation that never had them changes nothing here.
 - **New, to implement or not.** `work_request` and its conditions; the new reference and scope kinds; organisation owners (a receiver must at least verify their cards and show who answers: [owners.md](owners.md)). What is being added to `obi/0.1` behind features comes without the feature flag ([README.md, "Additions to `obi/0.1`, folded in"](README.md#additions-to-obi01-folded-in)).
 
@@ -41,7 +42,7 @@ A server speaks both versions while its Obyspheres move: `/v0.1/…` as today, a
 
 ## 4. The switch (D8)
 
-**Recommended: one switch per Obysphere**, made by its admin, at a sequence number of its chain. It is the same idea as the rule for additions that is coming to `obi/0.1` with the card's `features`: since every member reads and verifies the whole chain, a message that uses an addition is relayed only when every active member's card lists its feature. A new version is used only once every member can read it.
+**Recommended: one switch per Obysphere**, made by its admin, at a sequence number of its chain. It is the same idea as the rule this Draft proposes for additions (README.md, "Why a new version"): since every member reads and verifies the whole chain, a message that uses an addition is relayed only when every active member's card lists its feature. A new version is used only once every member can read it, except that a switch suspends the members that can't, rather than waiting for them.
 
 1. **When.** The admin chooses when. Members whose waiting next-version card is missing, voided, or names other keys than their current `obi/0.1` card at that moment are **suspended** by the switch.
 2. **Suspended** is a member status between active and revoked. The member stays in the directory with its keys, sends nothing and receives nothing (`403 member_suspended`), and policy and the Council treat it as absent. **The way back:** its owner (for an organisation's agent, an answerer) registers a next-version card with the member's current keys, with their own owner token, since the member's `/v0.1` tokens are gone; the member then gets tokens with a next-version delegation, and is active again. Nothing it had is lost. An admin may revoke it as any member.
@@ -64,7 +65,7 @@ If organisation owners come to `obi/0.1` first, as an addition (README.md, D13),
 - **signs a next-version charter**: the same answerers, approvers and thresholds, `protocol` `NAME/0.2`, the next `charter_seq`, `prev` the hash of its last `obi/0.1` charter, signed by `thresholds.charter` answerers under the `NAME/0.2 charter` prefix. Pinning follows that `prev` link across the versions as it follows any other;
 - has each of its agents' next-version cards and delegations signed by `thresholds.card` answerers, as section 3 says for every member.
 
-At the switch, the next-version charter becomes current with the cards. An organisation with no next-version charter has its agents suspended, like a member with no card.
+Its waiting cards name the waiting charter. A waiting charter is not a successor until the switch: it never counts in the "two successors" rule (owners.md, section 2). **A later `obi/0.1` charter voids it**, with the organisation's waiting cards and delegations, as a later `obi/0.1` card voids a waiting card (section 3): otherwise the switch would undo a change made meanwhile, such as someone leaving or a rotated key. At the switch, the waiting charter becomes current with the cards only if its `prev` is the hash of the organisation's current charter. An organisation with no such charter has its agents suspended, like a member with no card.
 
 ## 6. Implementations
 
