@@ -38,8 +38,14 @@ export class SphereError extends Error {
   }
 }
 
-/** An error code as the API writes one: snake_case, short. Anything else is reported as `http_error`. */
-const errorCode = (c: unknown): string | undefined => (typeof c === "string" && /^[a-z_]{1,40}$/.test(c) ? c : undefined);
+/** The error codes the spec gives the API (sphere-api.md section 1) and the token endpoint (RFC 6749 5.2): anything else is reported as `http_error`. */
+const ERROR_CODES = new Set([
+  "bad_request", "invalid_envelope", "wrong_sphere", "unknown_key", "bad_signature", "expired", "clock_skew", "card_invalid", "unauthorized",
+  "insufficient_scope", "forbidden", "policy_denied", "recipient_revoked", "not_sealed", "invitation_invalid", "not_found", "unknown_recipient",
+  "duplicate", "bad_reply", "conflict", "payload_too_large", "rate_limited", "internal",
+  "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client", "unsupported_grant_type", "invalid_scope",
+]);
+const errorCode = (c: unknown): string | undefined => (typeof c === "string" && ERROR_CODES.has(c) ? c : undefined);
 
 export interface Health {
   status?: string;
@@ -119,6 +125,12 @@ export interface AuditPage {
   entries: AuditEntry[];
   head: { seq: number; hash: string };
 }
+/** A finished sign-in (sphere-api.md section 3.1). */
+export interface Signin {
+  state: string;
+  code: string;
+}
+
 export interface SphereInfo {
   sphere: string;
   name: string;
@@ -231,12 +243,21 @@ export class SphereApi {
     return this.call("POST", this.#sphere(sphere, `/invitations/${encodeURIComponent(invitationId)}/preview`), { json: { secret }, schema: "wire/invitation-preview.response" });
   }
 
-  redeem(sphere: string, invitationId: string, body: { secret: string; owner_key: string; card: AgentCard }): Promise<Member> {
+  redeem(sphere: string, invitationId: string, body: { secret: string; owner_key: string; card: AgentCard; signin?: Signin }): Promise<Member> {
     return this.call("POST", this.#sphere(sphere, `/invitations/${encodeURIComponent(invitationId)}/redeem`), { json: body, schema: "wire/member", ok: [201] });
   }
 
+  /**
+   * The directory. Each entry is checked on its own: one that breaks the member schema (another
+   * version's card, say) is left out rather than failing the whole answer.
+   */
   async members(token: string, sphere: string): Promise<Member[]> {
-    return (await this.call<{ members: Member[] }>("GET", this.#sphere(sphere, "/members"), { token, schema: "wire/members.response" })).members;
+    const answer = await this.call<{ sphere?: unknown; members?: unknown }>("GET", this.#sphere(sphere, "/members"), { token });
+    const keys = answer && typeof answer === "object" ? Object.keys(answer).sort().join(",") : "";
+    if (keys !== "members,sphere" || answer.sphere !== sphere || !Array.isArray(answer.members) || answer.members.length > 1000) {
+      throw new SphereError(200, "bad_response", "the directory isn't a members answer for this Sphere");
+    }
+    return answer.members.filter((m): m is Member => matches("wire/member", m));
   }
 
   member(token: string, sphere: string, obi: string): Promise<Member> {
@@ -265,12 +286,27 @@ export class SphereApi {
   }
 
   /** The deliveries waiting for the token's Obi (section 6.2); `wait` up to 25 seconds holds the call until one arrives. */
+  /**
+   * Each delivery's own fields are checked here; its envelope is the receiver's to judge (protocol.md
+   * section 10), so one that is invalid comes back for the receiver to refuse and acknowledge rather
+   * than failing the whole answer.
+   */
   async deliveries(token: string, sphere: string, o: { limit?: number; wait?: number } = {}): Promise<Delivery[]> {
     const q = new URLSearchParams();
     if (o.limit !== undefined) q.set("limit", String(o.limit));
     if (o.wait !== undefined) q.set("wait", String(o.wait));
     const qs = q.size ? `?${q}` : "";
-    return (await this.call<{ deliveries: Delivery[] }>("GET", this.#sphere(sphere, `/deliveries${qs}`), { token, schema: "wire/deliveries.response" })).deliveries;
+    const answer = await this.call<{ deliveries?: unknown }>("GET", this.#sphere(sphere, `/deliveries${qs}`), { token });
+    const ok = answer && typeof answer === "object" && Object.keys(answer).join(",") === "deliveries" && Array.isArray(answer.deliveries) && answer.deliveries.length <= 100;
+    if (!ok) throw new SphereError(200, "bad_response", "the answer isn't a deliveries answer");
+    const shaped = (d: unknown): d is Delivery => {
+      const x = d as Record<string, unknown>;
+      return !!x && typeof x === "object" && Object.keys(x).sort().join(",") === "delivery_id,envelope,relayed_at,seq" &&
+        typeof x.delivery_id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(x.delivery_id) &&
+        Number.isSafeInteger(x.seq) && (x.seq as number) >= 1 && typeof x.relayed_at === "string" && !!x.envelope && typeof x.envelope === "object" && !Array.isArray(x.envelope);
+    };
+    if (!(answer.deliveries as unknown[]).every(shaped)) throw new SphereError(200, "bad_response", "a delivery's own fields don't match the protocol");
+    return answer.deliveries as Delivery[];
   }
 
   async ack(token: string, sphere: string, deliveryIds: string[]): Promise<number> {
@@ -285,14 +321,16 @@ export class SphereApi {
     return this.call("GET", this.#sphere(sphere, `/audit${qs}`), { token, schema: "wire/audit.response" });
   }
 
-  /** The whole chain from seq 1, page by page, up to the head the first page answered (section 7.1). */
-  async auditAll(token: string, sphere: string): Promise<AuditPage> {
+  /** The whole chain from seq 1, page by page, up to the head the first page answered (section 7.1), and at most `maxEntries`. */
+  async auditAll(token: string, sphere: string, o: { maxEntries?: number } = {}): Promise<AuditPage> {
     const first = await this.audit(token, sphere, { fromSeq: 1, limit: 1000 });
+    if (first.head.seq > (o.maxEntries ?? 1_000_000)) throw new SphereError(200, "bad_response", `the chain says it has ${first.head.seq} entries, more than ${o.maxEntries ?? 1_000_000} this call reads`);
     const entries = [...first.entries];
     while (entries.length < first.head.seq) {
       const page = await this.audit(token, sphere, { fromSeq: entries.length + 1, limit: 1000 });
       const fresh = page.entries.filter((e) => e.seq <= first.head.seq);
-      if (!fresh.length || fresh[0]!.seq !== entries.length + 1) throw new SphereError(200, "bad_response", `the chain stops at ${entries.length}, short of its head ${first.head.seq}`);
+      // A page short of what it could hold, before the head, is a Sphere dragging it out.
+      if (!fresh.length || fresh[0]!.seq !== entries.length + 1 || (fresh.length < 1000 && entries.length + fresh.length < first.head.seq)) throw new SphereError(200, "bad_response", `the chain stops at ${entries.length}, short of its head ${first.head.seq}`);
       entries.push(...fresh);
     }
     return { sphere: first.sphere, entries, head: first.head };

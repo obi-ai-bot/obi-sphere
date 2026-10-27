@@ -73,13 +73,13 @@ await asker.ack([a.delivery_id]);
 step(6, "ada-agent verifies the whole chain: hashes, links, every signature with the key valid at its seq, the exchange rules, and its own sends");
 const verdict = await asker.verifyChain();
 if (!verdict.ok) throw new Error(`the chain does not verify: ${verdict.code} ${verdict.message}`);
-console.log(`   ok: ${verdict.entries.length} entries, head seq ${verdict.head.seq} ${verdict.head.hash}`);
-for (const e of verdict.entries) console.log(`   seq ${e.seq}  ${e.envelope.type.padEnd(8)} ${e.envelope.from} -> ${e.envelope.to}  ${e.envelope.seal ? "sealed" : "in the clear"}  ${e.hash.slice(0, 16)}…`);
+console.log(`   ok: ${verdict.entries.length} entries, head seq ${verdict.head.seq} ${verdict.head.hash}; signed with keys no trusted card named: ${verdict.unvouched.length ? verdict.unvouched.join(", ") : "none"}`);
+for (const e of verdict.entries) console.log(`   seq ${e.seq}  ${e.type.padEnd(8)} ${e.from} -> ${e.to}  ${e.sealed ? "sealed" : "in the clear"}  ${e.hash.slice(0, 16)}…`);
 
 if (chainOut) {
   const members = await api.members(await asker.accessToken(), sphere);
   const keys: Record<string, unknown> = {};
   for (const m of members) for (const k of m.keys) keys[k.key_id] = { obi: m.obi, public_key: k.public_key, valid_from_seq: k.valid_from_seq, valid_until_seq: k.valid_until_seq };
-  writeFileSync(chainOut, JSON.stringify({ chain: { sphere, entries: verdict.entries }, keys }, null, 2));
+  writeFileSync(chainOut, JSON.stringify({ chain: { sphere, entries: verdict.raw() }, keys }, null, 2));
 }
 console.log("\nDone: joined, asked, received, answered, received, and the chain verifies.");

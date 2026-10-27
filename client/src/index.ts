@@ -7,4 +7,5 @@ export * from "./text.ts";
 export * from "./invite.ts";
 export * from "./sphere.ts";
 export * from "./owner.ts";
-export { Member, emptyMemory, type MemberMemory, type MemberOptions, type JoinOptions, type Peer, type Received, type ReceivedMessage } from "./member.ts";
+export type { Member as DirectoryMember } from "./sphere.ts";
+export { Member, emptyMemory, type ChainEntry, type MemberMemory, type MemberOptions, type JoinOptions, type Peer, type Received, type ReceivedMessage } from "./member.ts";
