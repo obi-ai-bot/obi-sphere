@@ -45,10 +45,11 @@ The convener writes the motion before anything else and keeps it in its record (
 | `seats` | The number of voting seats. |
 | `verifiers` | 0 or 1: whether a verifier challenges the blocking findings. |
 | `diversity` | `{owners, vendors}` (draw.md section 2). |
-| `deadlines` | `{seats, reviews, challenge}`, timestamps in this order: by `seats` a seat has accepted or is replaced; by `reviews` a seat's result is in; by `challenge` the verifier's is. |
+| `deadlines` | `{seats, reviews, challenge}`, timestamps in this order: until `seats` a seat that declines is replaced; a seat's result counts only when it is recorded by `reviews`, and the verifier's only by `challenge`. |
+| `words` | `{goal, summary}`: the lower-case hex SHA-256 of the UTF-8 bytes of the `goal` and `summary` every seat's request carries (`summary` null when there is none). Each seat checks the words it opens against them (section 5). |
 | `created_at` | When the convener wrote it. |
 
-The motion's hash is the lower-case hex SHA-256 over the UTF-8 bytes of `"council motion\n"` followed by its RFC 8785 canonical JSON. The motion has no words: what a seat is asked to look at is the `subject` and the `acceptance`, and any words the convener adds go in each request's `goal` and `summary`, sealed for that seat.
+The motion's hash is the lower-case hex SHA-256 over the UTF-8 bytes of `"council motion\n"` followed by its RFC 8785 canonical JSON. The motion holds no words, only their hashes: what a seat is asked to look at is the `subject` and the `acceptance`, and the convener's words go in each request's `goal` and `summary`, sealed for that seat.
 
 In this profile a blocking finding is one of severity `blocker`, and its evidence is its citation: `file`, `line` and `detail` (process.md step 1, `evidence`: `citation`). Budgets (process.md step 1) aren't carried by any `obi/0.1` request: a seat keeps to its own.
 
@@ -62,11 +63,11 @@ Before the draw, the convener sends every pool entry a **call**: a `question` (p
 
 - `id` is the anchor id for the pool hash and the entry's `obi_id`.
 - `about` is the subject: `[{"kind": "pr", "repo", "pr"}]`, or `[{"kind": "repo", "repo"}]` when the change has no pull request. Every member can read it, so every anchoring of a subject is visible in the chain (draw.md section 8, "Re-rolling").
-- `choices` has two entries: index 0 means the member will sit if drawn, index 1 that it stands aside. The words are the convener's; the meaning is the index's.
-- `text` says, as data, what the panel is and gives the motion hash and the pool hash, so its receiver can later check the record against what it was told. A RECOMMENDED form: `Council call: a review of acme/app#7 at 6d20146f. Motion <hash>. Pool <hash>. Seats are drawn by lot from drand's quicknet round 300 seconds after the last call. Choose 0 to stand, 1 to stand aside.`
+- `choices` is exactly `["sit", "stand aside"]`: index 0 means the member will sit if drawn, index 1 that it stands aside. The words are fixed, so a convener can't word one member's choices differently from another's.
+- `text` says, as data, what the panel is and gives the motion hash and the pool hash, so its receiver can later check the record against what it was told. A RECOMMENDED form: `Council call: a review of acme/app#7 at 6d20146f. Motion <hash>. Pool <hash>. Seats are drawn by lot from drand's quicknet round more than 300 seconds after the first call.`
 - `expires_at` is the motion's `deadlines.seats`.
 
-A call is a question like any other: its receiver's owner decides whether and how to answer, and its text is data (protocol.md sections 8 and 11). It asks for an answer in words and a choice, never for work.
+A call is a question like any other: its receiver's owner decides whether and how to answer, and its text is data (protocol.md sections 8 and 11). It asks for an answer in words and a choice, never for work. A receiver whose call's `choices` aren't exactly these two SHOULD treat the call as invalid and tell its owner.
 
 **Recognising calls.** A call is a `question` `about` the subject whose `id` is a version 8 UUID; any member can tell one in the chain without the record. Every call MUST be recorded before round *R*'s time. From `anchored_at` less 300 seconds and one beacon period, up to round *R*'s time, the only calls about the subject from any member of the convener's owner are this pool's (draw.md section 7, check 2).
 
@@ -81,30 +82,32 @@ The convener waits for round *R*, the first quicknet round more than 300 seconds
 Each voting seat gets **one `review_request`**, its own envelope and exchange:
 
 - `repo`, `pr`, `base_branch`, `head_branch` and `head_sha` are the motion's `subject`; `acceptance` is the motion's.
-- `goal` and `summary` are the convener's words, as data. They MUST be the same for every seat: every seat's request is the same but for its recipient and id, with the same `expires_at`, so that a decline answers the same question for everyone (draw.md section 6).
+- `goal` and `summary` are the convener's words, as data, the same for every seat: their SHA-256 are the motion's `words`. A seat checks the words it opens against them; when they differ it MUST decline with reason `other` and tell its owner, and a re-checker treats the verdict as invalid (section 8).
 - It MUST NOT carry `approve_on_host`: a panel's verdict never stands in for a person's approval on the code host (rule I7).
-- `expires_at` is the motion's `deadlines.reviews`.
-- It is recorded after round *R*'s time (draw.md section 7, check 5).
+- `expires_at` is the motion's `deadlines.reviews`, the same instant for every seat.
+- It is recorded after round *R*'s time, and no later than 600 seconds after it, or after the decline that gave the seat its place (draw.md section 7, check 5). A seat whose request isn't in the chain by then makes the verdict invalid: the convener can't leave a seat out, or hold a request back to time a replacement.
 
 **Blind by construction** (rule I1). The Obysphere relays each exchange between its two members only, so a seat never receives another seat's request or result. The convener MUST NOT pass a seat's result, outcome or findings to another seat before every seat has answered or `deadlines.reviews` has passed, and in this profile it never passes them to a seat at all: there is no reveal, and each seat's result is its final ballot.
 
 A seat reviews the subject as data, in a sandbox with none of its owner's secrets (rule I8; protocol.md section 11).
 
-**Declines and replacements.** A seat whose exchange ends in a `decline`, or that has sent no `accept` by `deadlines.seats` to a request that is in the chain, is declined. A seat the convener never sent its request isn't declined: it is absent, and nobody takes its place (draw.md section 6). Until `deadlines.seats`, the convener runs the draw again with it in `declined` (draw.md section 6) and sends the replacement its request; every other seat keeps its place. After `deadlines.seats` no seat is replaced, and a seat with no result by `deadlines.reviews` is absent. A declined seat's later result never counts: it is no longer a seat.
+**Declines and replacements.** A seat whose exchange ends in a `decline` before `deadlines.seats` is declined, and the convener runs the draw again with it in `declined` (draw.md section 6) and sends the replacement its request; every other seat keeps its place. Silence declines nobody: a seat that never accepts, or answers after `deadlines.reviews`, is absent, and nobody takes its place. A declined seat's later result never counts: it is no longer a seat.
 
 ## 6. The challenge and the tally
 
 ### The challenge
 
-Once every seat has answered, or `deadlines.reviews` has passed, the **blocking findings** are the findings of severity `blocker` in the seats' counted results (below), in the order of the seats as the draw took them, and within a result in its own order.
+The **blocking findings** are the findings of severity `blocker` in the seats' counted results (below), in the order of the seats as the last draw took them, and within a result in its own order.
 
-With a verifier and 1 to 10 blocking findings, the convener sends the verifier one `review_request` for the same subject, whose `acceptance` is one `custom` condition per blocking finding, in that order. Each condition's text names its finding (its seat's place, `file`, `line` and the finding's title) and asks whether it stands, as data. `expires_at` is `deadlines.challenge`. The verifier tries to refute each one, by reading the cited lines and running what it can in its own sandbox, and answers with a `result`: an acceptance entry `met: true` means the finding **stands**, `met: false` that it is **refuted**. Its own findings aren't counted.
+With a verifier and at least one blocking finding, once every seat has answered or `deadlines.reviews` has passed, the convener sends the verifier `review_request`s for the same subject whose `acceptance` together hold one `custom` condition per blocking finding, in that order: ten to a request (the most a request carries), in as many requests as it takes, all recorded by `deadlines.challenge` less 600 seconds. Each condition's text is exactly `Finding <n>: <file>:<line>`, then a line break and the finding's title: *n* counts from 1 across the requests, and `file` and `line` are the finding's, which the chain shows to everyone. The verifier MUST compare each condition's file and line with the blocking findings it reads in the chain, in order, and refuse the challenge (decline, reason `other`) when they differ: so a convener can't send it to refute a finding other than the one the chain holds. `expires_at` is `deadlines.challenge`.
 
-A finding stays standing when nobody refutes it: with no verifier, with more than 10 blocking findings, or when the verifier declines, fails or doesn't answer by `deadlines.challenge` (process.md step 5: the burden is on the challenger). A verifier that declines may be replaced as a seat is, until `deadlines.challenge`.
+The verifier tries to refute each finding, by reading the cited lines and running what it can in its own sandbox, and answers each request with a `result`: an acceptance entry `met: true` means the finding **stands**, `met: false` that it is **refuted**. Its own findings aren't counted.
+
+A finding stays standing when nobody refutes it: with no verifier, or when the verifier declines, fails or doesn't answer by `deadlines.challenge` (process.md step 5: the burden is on the challenger). A verifier that declines may be replaced as a seat is, until `deadlines.challenge` less 600 seconds. With a verifier, a challenge in this shape is required: a verdict whose blocking findings were never put to the verifier is invalid (section 8).
 
 ### The tally
 
-The **tally** turns the panel's envelopes into the clerk's count input. It reads only what stays readable when the words are sealed (types, members, outcomes, commit ids, finding ids and severities, acceptance kinds and results: protocol.md section 9.1), so any member holding the chain can tally again without a key. Its input:
+The **tally** turns the chain into the clerk's count input. It reads only what stays readable when the words are sealed (types, members, times, outcomes, commit ids, finding ids and severities, acceptance kinds and results: protocol.md section 9.1), so any member holding the chain can tally again without a key. Its input:
 
 | Member | Meaning |
 |---|---|
@@ -113,18 +116,22 @@ The **tally** turns the panel's envelopes into the clerk's count input. It reads
 | `rule`, `quorum`, `veto` | The motion's. |
 | `seats` | The voting seats, as the last draw took them. |
 | `verifier` | The verifier, when there is one. |
-| `envelopes` | The chain's envelopes, in chain order, up to the record's `through` (section 7). |
+| `round_at` | Round *R*'s time. |
+| `deadlines` | `{reviews, challenge}`, the motion's. |
+| `entries` | The chain's entries (`{seq, recorded_at, envelope}`), in chain order. |
 
 The tally, as the clerk implements it (`reviewTally` in TypeScript, `review::tally` in Rust):
 
-1. **Requests.** A member's request is the `review_request` from the convener to it whose `repo` is the subject's (ignoring ASCII case) and whose `head_sha` is the subject's. Two such requests to one member make the input invalid (`two_requests`): a panel sends each member one.
-2. **Counted results.** A request's exchange ends with its receiver's first `result` or `decline`. It counts when that is a `result` for `review_request`, for the subject's `repo` and `head_sha`, with outcome `approved` or `changes_requested`. A `failed` result, a decline, no answer, or a review of another commit is absent.
+1. **Requests.** The panel's requests to a member are the `review_request`s from the convener to it, recorded after `round_at`, whose `repo` is the subject's (ignoring ASCII case) and whose `head_sha` is the subject's. A review the convener asked for before the round, an ordinary one or a dropped panel's, is never the panel's. Two such requests to one seat make the input invalid (`two_requests`); the verifier may have several (the challenge).
+2. **Counted results.** A request's exchange ends with its receiver's first `result` or `decline`. It counts when that is a `result` for `review_request`, for the subject's `repo` and `head_sha`, with outcome `approved` or `changes_requested`, recorded by the deadline: `deadlines.reviews` for a seat, `deadlines.challenge` for the verifier. A `failed` result, a decline, no answer, a late answer, or a review of another commit is absent. A counted result whose findings lack an `id` or a `severity`, or whose acceptance entries lack an integer `index`, a `kind` or a boolean `met`, makes the input invalid (`bad_input`).
 3. **Ballots.** For each seat in order whose result counts: `approve` for `approved`, `reject` for `changes_requested`.
 4. **Findings.** Each counted result's findings, in order, as `{id: "<seat>/<finding id>", blocking: severity is blocker, evidence: true, challenge: "none"}`.
-5. **Challenge.** With a verifier and 1 to 10 blocking findings: when the verifier's request has exactly one condition per blocking finding, all `custom`, and its result counts (step 2), each blocking finding *i* takes `stands` or `refuted` from the result's `custom` acceptance entry with index *i*, and keeps `none` without one. Otherwise every finding keeps `none`.
+5. **Challenge.** With a verifier and at least one blocking finding: when every one of the verifier's requests has 1 to 10 conditions, all `custom`, and together one per blocking finding, each blocking finding takes `stands` or `refuted` from the `custom` acceptance entry at its place in its request's counted result, and keeps `none` without one. Otherwise every finding keeps `none`.
 6. The count input is `{rule, quorum, veto, seats, ballots, findings}`.
 
-Errors, the first that applies: `bad_input` (the shape: a missing or unknown member, a `head_sha` that isn't a commit id, an envelope without `id`, `type`, `from`, `to`, `correlation_id` or an object `body`), `bad_panel` (a rule other than the three, no seats or a seat twice, the convener or the verifier among the seats), `two_requests`.
+Since nothing after the deadlines counts, the tally of a chain read at any time after `deadlines.challenge` is the same.
+
+Errors, the first that applies: `bad_input` (the shape: a missing or unknown member, a `head_sha` that isn't a commit id, a time that isn't a protocol timestamp from 1970, an entry without an integer `seq`, a `recorded_at` or an envelope with `id`, `type`, `from`, `to`, `correlation_id` and an object `body`); `bad_panel` (a rule other than the three or with members it doesn't take, a quorum below 1 or above the seats, a seat twice, the convener or the verifier among the seats, deadlines out of order or not after `round_at`); then, while tallying, `two_requests`, or `bad_input` for a counted result's malformed findings or acceptance.
 
 ### The count
 
@@ -132,7 +139,7 @@ The clerk counts the tally (clerk/README.md): `approve`, `reject` (by the votes,
 
 ## 7. Signing the verdict
 
-The verdict is the convener's **record**, signed. A JSON object:
+The convener counts once `deadlines.challenge` has passed, or sooner once every seat's exchange and the verifier's have ended. The verdict is the convener's **record**, signed. A JSON object:
 
 | Member | Meaning |
 |---|---|
@@ -143,7 +150,7 @@ The verdict is the convener's **record**, signed. A JSON object:
 | `anchored_at` | The earliest call's `recorded_at`. |
 | `beacon` | `{chain, round, signature, randomness}`: quicknet's round *R*. |
 | `draws` | Each run of the draw: its `declined` and its output (draw.md section 5). The last gives the seats and the verifier. |
-| `through` | `{seq, hash}`: the chain's head the tally read up to, after `deadlines.challenge` or once the challenge was answered. |
+| `through` | `{seq, hash}`: the chain's head when the convener counted. |
 | `tally`, `count` | The clerk's count input and its count. |
 | `key_id` | The convener's key that signs it. |
 | `signature` | Ed25519 over the UTF-8 bytes of `"council record\n"` followed by the record's canonical JSON without `signature`, base64url without padding. The prefix keeps it from ever being valid as an envelope's signature. |
@@ -154,21 +161,25 @@ The record holds no words: the reasons are in the seats' results, sealed for the
 
 A member re-checks a verdict from the record and the chain:
 
-1. The chain verifies up to `through` (sphere-api.md section 7.1, `verifyChain`), and `through` is in it.
+1. The chain verifies (sphere-api.md section 7.1, `verifyChain`), and `through` is in it.
 2. The motion hashes to `motion_hash`, and the record's signature verifies with the convener's key `key_id`, valid at `through.seq`.
-3. The draw re-checks (draw.md section 7): the pool, the calls as its anchors, the round, and each draw run, with `declined` holding exactly the members that stood aside before round *R*'s time, and the seats declined as section 5 says.
-4. Every `review_request` from the convener for the subject, recorded after its first call and up to `through`, went to a seat or the verifier of the last draw run.
-5. The tally of the chain's envelopes up to `through` is the record's `tally`, and the clerk's count of it is the record's `count`.
+3. The draw re-checks (draw.md section 7): the pool, the calls as its anchors, the round, and each draw run, with the first run's `declined` exactly the members that stood aside before round *R*'s time, and each later run's adding exactly the seats that declined before `deadlines.seats`.
+4. Every `review_request` from the convener for the subject recorded after round *R*'s time went to a member of some draw run, and every recipient outside the last run is in its `declined`. Every seat of the last run got its request within 600 seconds of round *R*'s time, or of the decline that gave it its place, with `expires_at` equal to `deadlines.reviews` and the same readable fields as every other seat's.
+5. With a verifier and blocking findings, the verifier's requests hold the challenge section 6 describes, recorded by `deadlines.challenge` less 600 seconds.
+6. No envelope passed between two members of the panel (its seats and its verifier) from round *R*'s time to `deadlines.challenge`: seats that can tell who else sits must not confer (rule I1).
+7. The tally of the chain is the record's `tally`, and the clerk's count of it is the record's `count`.
 
-Each check is deterministic. A verdict that fails one is invalid, whoever signed it.
+Each check is deterministic. A verdict that fails one is invalid, whoever signed it. A seat, or the verifier, that found its opened words don't match the motion's `words`, or a condition that doesn't match the chain's finding, says so to its owner: that verdict is invalid too, though only the receivers of the sealed words can tell.
 
 ## 9. What this profile leaves out
 
 - **Reveals and second ballots.** No seat sees another's review, so there is no reveal, no commitment step and no change of mind: each result is a final ballot. Whether reveals improve verdicts or only herd them is the evaluation's question (eval/), and the assembly profile's.
 - **Typed evidence.** A finding's evidence is its citation; the clerk trusts the profile's mapping (process.md section 7, "Evidence in findings").
+- **Sealed words.** A request's words are sealed for each receiver, so only that receiver can compare them with the motion's `words`, and only the verifier can compare a condition's text with the chain's finding. A convener could word one seat's request to provoke a decline, and only that seat would know: the check is the receivers', and what they report is their owners' word.
+- **Strategic declines.** A seat that declines on purpose hands its place to the next entry, whom everyone can compute (draw.md section 8).
 - **Persons.** Owners can't sit in person, and the verdict never replaces a person's approval (rule I7).
 - **The record in the chain.** It waits for the assembly actions (process.md section 6).
 
 ## 10. The vectors
 
-[clerk/vectors/review.json](../../clerk/vectors/review.json) has the tally's vectors: a panel's envelopes, with sealed words, and the count input they give, or the error. They cover a refuted, an upheld and an unanswered challenge, challenges that don't count, declines, absences, a review of another commit, a reply from someone else, and every error. The answers come from [clerk/vectors/review.py](../../clerk/vectors/review.py), a third implementation in Python's standard library, written apart from the Rust and TypeScript ones; every output is a count input the clerk counts.
+[clerk/vectors/review.json](../../clerk/vectors/review.json) has the tally's vectors: the chain's entries, with sealed words, round *R*'s time and the deadlines, and the count input they give, or the error. They cover a refuted, an upheld, an unanswered and a late challenge, eleven blockers challenged in two requests, challenges that don't count, declines, absences, a late result, a review asked for before the round, a review of another commit, a reply from someone else, and every error. The answers come from [clerk/vectors/review.py](../../clerk/vectors/review.py), a third implementation in Python's standard library, written apart from the Rust and TypeScript ones; every output is a count input the clerk counts.

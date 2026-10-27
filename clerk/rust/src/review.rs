@@ -1,14 +1,18 @@
-//! The review profile's tally (`spec/council/review.md`, section 6): from a panel's envelopes in the chain to
-//! the clerk's count input. It reads only what stays readable when the words are sealed (types, members,
-//! outcomes, commit ids, finding ids and severities, acceptance kinds and results), so anyone holding the
-//! chain can count again without a key. The known-answer vectors in `clerk/vectors/review.json` pin it down,
-//! and the TypeScript in `clerk/ts` gives the same answers.
+//! The review profile's tally (`spec/council/review.md`, section 6): from the chain's entries to the clerk's
+//! count input. It reads only what stays readable when the words are sealed (types, members, times, outcomes,
+//! commit ids, finding ids and severities, acceptance kinds and results), so anyone holding the chain can
+//! count again without a key. The known-answer vectors in `clerk/vectors/review.json` pin it down, and the
+//! TypeScript in `clerk/ts` gives the same answers.
 
 use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Map, Value};
 
+use crate::draw::unix_seconds;
 use crate::MAX_INT;
+
+/// The most conditions one challenge request carries (protocol.md section 5.1: 1 to 10).
+pub const MOST_CONDITIONS: usize = 10;
 
 /// Why a tally input can't be used. The code is what the vectors name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -42,10 +46,32 @@ fn id(v: Option<&Value>) -> Option<&str> {
     v?.as_str().filter(|s| !s.is_empty())
 }
 
+fn int(v: Option<&Value>) -> Option<u64> {
+    v?.as_u64().filter(|n| *n <= MAX_INT)
+}
+
+/// A protocol timestamp's seconds since 1970, or `None` when it isn't one.
+fn seconds(v: Option<&Value>) -> Option<u64> {
+    unix_seconds(v?.as_str()?).ok()
+}
+
 fn is_sha(s: &str) -> bool {
     (s.len() == 40 || s.len() == 64)
         && s.bytes()
             .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+}
+
+/// The object `v`, when it has every member of `keys` and no member outside `keys` and `optional`.
+fn exact<'a>(
+    v: Option<&'a Value>,
+    keys: &[&str],
+    optional: &[&str],
+) -> Option<&'a Map<String, Value>> {
+    let o = v?.as_object()?;
+    let fits = keys.iter().all(|k| o.contains_key(*k))
+        && o.keys()
+            .all(|k| keys.contains(&k.as_str()) || optional.contains(&k.as_str()));
+    fits.then_some(o)
 }
 
 /// Repositories compare ignoring ASCII case (protocol.md section 5.9).
@@ -54,9 +80,38 @@ fn same_repo(a: Option<&Value>, b: &str) -> bool {
         .is_some_and(|a| a.eq_ignore_ascii_case(b))
 }
 
-/// The clerk's count input for a review panel, from its envelopes in chain order (review.md section 6).
+fn check_rule(rule: &Map<String, Value>, quorum: u64, seats: usize) -> Result<(), TallyError> {
+    let ok = match rule.get("kind").and_then(Value::as_str) {
+        Some("majority" | "unanimity") => rule.len() == 1,
+        Some("supermajority") => {
+            let num = int(rule.get("num"));
+            let den = int(rule.get("den"));
+            rule.len() == 3 && matches!((num, den), (Some(n), Some(d)) if 1 <= n && n <= d)
+        }
+        _ => false,
+    };
+    if !ok || quorum < 1 || quorum > seats as u64 {
+        return Err(BadPanel);
+    }
+    Ok(())
+}
+
+struct Entry<'a> {
+    at: u64,
+    env: &'a Map<String, Value>,
+}
+
+impl Entry<'_> {
+    fn field(&self, k: &str) -> &str {
+        self.env.get(k).and_then(Value::as_str).unwrap_or_default()
+    }
+    fn body(&self) -> &Map<String, Value> {
+        self.env["body"].as_object().expect("checked")
+    }
+}
+
+/// The clerk's count input for a review panel, from the chain's entries in chain order (review.md section 6).
 pub fn tally(input: &Value) -> Result<Value, TallyError> {
-    let o = input.as_object().ok_or(BadInput)?;
     let keys = [
         "convener",
         "subject",
@@ -64,19 +119,12 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
         "quorum",
         "veto",
         "seats",
-        "envelopes",
+        "round_at",
+        "deadlines",
+        "entries",
     ];
-    if !keys.iter().all(|k| o.contains_key(*k))
-        || !o
-            .keys()
-            .all(|k| keys.contains(&k.as_str()) || k == "verifier")
-    {
-        return Err(BadInput);
-    }
-    let subject = o["subject"]
-        .as_object()
-        .filter(|s| s.len() == 2)
-        .ok_or(BadInput)?;
+    let o = exact(Some(input), &keys, &["verifier"]).ok_or(BadInput)?;
+    let subject = exact(o.get("subject"), &["repo", "head_sha"], &[]).ok_or(BadInput)?;
     let repo = id(subject.get("repo")).ok_or(BadInput)?;
     let head = subject
         .get("head_sha")
@@ -86,10 +134,7 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
     let convener = id(o.get("convener")).ok_or(BadInput)?;
     let rule = o["rule"].as_object().ok_or(BadInput)?;
     let veto = o["veto"].as_bool().ok_or(BadInput)?;
-    let quorum = o["quorum"]
-        .as_u64()
-        .filter(|n| *n <= MAX_INT)
-        .ok_or(BadInput)?;
+    let quorum = int(o.get("quorum")).ok_or(BadInput)?;
     let seats: Vec<&str> = o["seats"]
         .as_array()
         .ok_or(BadInput)?
@@ -101,75 +146,112 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
         Some(v) => Some(id(Some(v)).ok_or(BadInput)?),
         None => None,
     };
-    let envelopes = o["envelopes"].as_array().ok_or(BadInput)?;
-    for e in envelopes {
+    let round_at = seconds(o.get("round_at")).ok_or(BadInput)?;
+    let deadlines = exact(o.get("deadlines"), &["reviews", "challenge"], &[]).ok_or(BadInput)?;
+    let reviews_by = seconds(deadlines.get("reviews")).ok_or(BadInput)?;
+    let challenge_by = seconds(deadlines.get("challenge")).ok_or(BadInput)?;
+    let raw = o["entries"].as_array().ok_or(BadInput)?;
+    let mut entries = Vec::with_capacity(raw.len());
+    for e in raw {
+        let e = exact(Some(e), &["seq", "recorded_at", "envelope"], &[]).ok_or(BadInput)?;
+        int(e.get("seq")).ok_or(BadInput)?;
+        let at = seconds(e.get("recorded_at")).ok_or(BadInput)?;
+        let env = e["envelope"].as_object().ok_or(BadInput)?;
         let ok = ["id", "type", "from", "to", "correlation_id"]
             .iter()
-            .all(|k| id(e.get(*k)).is_some())
-            && e.get("body").is_some_and(Value::is_object);
+            .all(|k| id(env.get(*k)).is_some())
+            && env.get("body").is_some_and(Value::is_object);
         if !ok {
             return Err(BadInput);
         }
+        entries.push(Entry { at, env });
     }
 
-    let kind = rule.get("kind").and_then(Value::as_str);
-    if !matches!(kind, Some("majority" | "supermajority" | "unanimity")) {
-        return Err(BadPanel);
-    }
+    check_rule(rule, quorum, seats.len())?;
     let distinct: HashSet<&str> = seats.iter().copied().collect();
-    if seats.is_empty() || distinct.len() != seats.len() || distinct.contains(convener) {
+    if distinct.len() != seats.len() || distinct.contains(convener) {
         return Err(BadPanel);
     }
     if verifier.is_some_and(|v| distinct.contains(v) || v == convener) {
         return Err(BadPanel);
     }
+    if !(round_at < reviews_by && reviews_by <= challenge_by) {
+        return Err(BadPanel);
+    }
 
-    let str_of = |e: &Value, k: &str| {
-        e.get(k)
-            .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_string()
-    };
-    let request_to = |member: &str| -> Result<Option<&Value>, TallyError> {
-        let found: Vec<&Value> = envelopes
+    // The panel's review_requests to `member`: from the convener, for the subject, recorded after round R's time.
+    let requests_to = |member: &str| -> Vec<&Entry> {
+        entries
             .iter()
             .filter(|e| {
-                let b = &e["body"];
-                str_of(e, "type") == "review_request"
-                    && str_of(e, "from") == convener
-                    && str_of(e, "to") == member
-                    && same_repo(b.get("repo"), repo)
-                    && b.get("head_sha").and_then(Value::as_str) == Some(head)
+                e.field("type") == "review_request"
+                    && e.field("from") == convener
+                    && e.field("to") == member
+                    && same_repo(e.body().get("repo"), repo)
+                    && e.body().get("head_sha").and_then(Value::as_str) == Some(head)
+                    && e.at > round_at
             })
-            .collect();
-        if found.len() > 1 {
-            return Err(TwoRequests);
-        }
-        Ok(found.first().copied())
+            .collect()
     };
-    // The review's result, when the reply that ended the request's exchange is one, for the subject's commit.
-    let review_result = |request: Option<&Value>, member: &str| -> Option<&Map<String, Value>> {
-        let request_id = str_of(request?, "id");
-        let end = envelopes.iter().find(|e| {
-            str_of(e, "correlation_id") == request_id
-                && str_of(e, "from") == member
-                && matches!(str_of(e, "type").as_str(), "result" | "decline")
-        })?;
-        if str_of(end, "type") != "result" {
-            return None;
+    // The review's result, when its exchange ended with one from `member` by `deadline`, for the subject; checked.
+    let review_result = |request: &Entry,
+                         member: &str,
+                         deadline: u64|
+     -> Result<Option<&Map<String, Value>>, TallyError> {
+        let rid = request.field("id");
+        let end = entries.iter().find(|e| {
+            e.field("correlation_id") == rid
+                && e.field("from") == member
+                && matches!(e.field("type"), "result" | "decline")
+        });
+        let Some(end) = end else { return Ok(None) };
+        if end.field("type") != "result" || end.at > deadline {
+            return Ok(None);
         }
-        let b = end["body"].as_object()?;
+        let b = end.body();
         let fits = b.get("for").and_then(Value::as_str) == Some("review_request")
             && b.get("head_sha").and_then(Value::as_str) == Some(head)
             && same_repo(b.get("repo"), repo);
         let outcome = b.get("outcome").and_then(Value::as_str);
-        (fits && matches!(outcome, Some("approved" | "changes_requested"))).then_some(b)
+        if !fits || !matches!(outcome, Some("approved" | "changes_requested")) {
+            return Ok(None);
+        }
+        let findings_ok = match b.get("findings") {
+            None => true,
+            Some(v) => v.as_array().is_some_and(|a| {
+                a.iter().all(|f| {
+                    id(f.get("id")).is_some() && f.get("severity").is_some_and(Value::is_string)
+                })
+            }),
+        };
+        let acceptance_ok = match b.get("acceptance") {
+            None => true,
+            Some(v) => v.as_array().is_some_and(|a| {
+                a.iter().all(|x| {
+                    x.is_object()
+                        && int(x.get("index")).is_some()
+                        && x.get("kind").is_some_and(Value::is_string)
+                        && x.get("met").is_some_and(Value::is_boolean)
+                })
+            }),
+        };
+        if !findings_ok || !acceptance_ok {
+            return Err(BadInput);
+        }
+        Ok(Some(b))
     };
 
     let mut ballots = Vec::new();
     let mut findings: Vec<(String, bool, &str)> = Vec::new();
     for seat in &seats {
-        let Some(result) = review_result(request_to(seat)?, seat) else {
+        let requests = requests_to(seat);
+        if requests.len() > 1 {
+            return Err(TwoRequests);
+        }
+        let Some(request) = requests.first() else {
+            continue;
+        };
+        let Some(result) = review_result(request, seat, reviews_by)? else {
             continue;
         };
         let vote = if result["outcome"] == "approved" {
@@ -184,53 +266,67 @@ pub fn tally(input: &Value) -> Result<Value, TallyError> {
             .map(Vec::as_slice)
             .unwrap_or_default()
         {
-            let fid = f.get("id").and_then(Value::as_str).unwrap_or_default();
-            let blocking = f.get("severity").and_then(Value::as_str) == Some("blocker");
+            let fid = f["id"].as_str().unwrap_or_default();
+            let blocking = f["severity"] == "blocker";
             findings.push((format!("{seat}/{fid}"), blocking, "none"));
         }
     }
 
     let blocking: Vec<usize> = (0..findings.len()).filter(|&i| findings[i].1).collect();
-    if let Some(verifier) = verifier.filter(|_| (1..=10).contains(&blocking.len())) {
-        let request = request_to(verifier)?;
-        let conditions = request
-            .and_then(|r| r["body"].get("acceptance"))
-            .and_then(Value::as_array)
-            .map(Vec::as_slice)
-            .unwrap_or_default();
-        let all_custom = conditions
+    if let Some(verifier) = verifier.filter(|_| !blocking.is_empty()) {
+        let requests = requests_to(verifier);
+        let conditions: Vec<Option<&Vec<Value>>> = requests
             .iter()
-            .all(|c| c.get("kind").and_then(Value::as_str) == Some("custom"));
-        if request.is_some() && conditions.len() == blocking.len() && all_custom {
-            if let Some(result) = review_result(request, verifier) {
-                let mut met = HashMap::new();
-                for a in result
-                    .get("acceptance")
-                    .and_then(Value::as_array)
-                    .map(Vec::as_slice)
-                    .unwrap_or_default()
-                {
-                    if a.get("kind").and_then(Value::as_str) == Some("custom") {
-                        if let (Some(i), Some(m)) = (
-                            a.get("index").and_then(Value::as_u64),
-                            a.get("met").and_then(Value::as_bool),
-                        ) {
-                            met.insert(i as usize, m);
+            .map(|r| match r.body().get("acceptance") {
+                None => None,
+                Some(v) => v.as_array(),
+            })
+            .collect();
+        let shaped = !requests.is_empty()
+            && conditions.iter().all(|c| {
+                c.is_some_and(|c| {
+                    (1..=MOST_CONDITIONS).contains(&c.len())
+                        && c.iter()
+                            .all(|x| x.get("kind").and_then(Value::as_str) == Some("custom"))
+                })
+            })
+            && conditions
+                .iter()
+                .map(|c| c.map_or(0, Vec::len))
+                .sum::<usize>()
+                == blocking.len();
+        if shaped {
+            let mut offset = 0;
+            for (request, c) in requests.iter().zip(&conditions) {
+                let size = c.map_or(0, Vec::len);
+                if let Some(result) = review_result(request, verifier, challenge_by)? {
+                    let mut met = HashMap::new();
+                    for a in result
+                        .get("acceptance")
+                        .and_then(Value::as_array)
+                        .map(Vec::as_slice)
+                        .unwrap_or_default()
+                    {
+                        if a["kind"] == "custom" {
+                            met.insert(a["index"].as_u64().unwrap_or(u64::MAX), a["met"] == true);
+                        }
+                    }
+                    for i in 0..size {
+                        if let Some(&m) = met.get(&(i as u64)) {
+                            findings[blocking[offset + i]].2 = if m { "stands" } else { "refuted" };
                         }
                     }
                 }
-                for (n, &i) in blocking.iter().enumerate() {
-                    if let Some(&m) = met.get(&n) {
-                        findings[i].2 = if m { "stands" } else { "refuted" };
-                    }
-                }
+                offset += size;
             }
         }
     }
 
     let findings: Vec<Value> = findings
         .into_iter()
-        .map(|(fid, blocking, challenge)| json!({"id": fid, "blocking": blocking, "evidence": true, "challenge": challenge}))
+        .map(|(fid, blocking, challenge)| {
+            json!({"id": fid, "blocking": blocking, "evidence": true, "challenge": challenge})
+        })
         .collect();
     Ok(json!({
         "rule": o["rule"],

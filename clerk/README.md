@@ -92,7 +92,7 @@ Errors are codes, as for the count: `bad_input`, `bad_version`, `bad_members` (`
 
 ## The review tally
 
-`reviewTally(input)` (TypeScript) and `review::tally` (Rust) turn a review panel's envelopes, as the chain holds them, into the count input ([spec/council/review.md](../spec/council/review.md) section 6): one ballot per seat whose `result` counts, every finding with `blocking` for severity `blocker`, and each blocking finding's challenge from the verifier's `custom` conditions. They read nothing sealed, so anyone holding the chain tallies again without a key. Errors: `bad_input`, `bad_panel`, `two_requests`.
+`reviewTally(input)` (TypeScript) and `review::tally` (Rust) turn the chain's entries into a review panel's count input ([spec/council/review.md](../spec/council/review.md) section 6): only requests recorded after round R's time, and only replies recorded by the motion's deadlines; one ballot per seat whose `result` counts, every finding with `blocking` for severity `blocker`, and each blocking finding's challenge from the verifier's `custom` conditions, ten to a request. They read nothing sealed, so anyone holding the chain tallies again without a key. Errors: `bad_input`, `bad_panel`, `two_requests`.
 
 ## Running
 
@@ -109,6 +109,6 @@ cd clerk/rust && cargo run -q --example draw < draws.jsonl
 
 ## The vectors
 
-[vectors/draw.json](vectors/draw.json) has the draw's vectors (draw.md section 9), and [vectors/review.json](vectors/review.json) the review tally's (review.md section 10). Their answers come from [vectors/draw.py](vectors/draw.py), a third implementation in Python's standard library written apart from both; the beacon's signature checks are drand's own answers.
+[vectors/draw.json](vectors/draw.json) has the draw's vectors (draw.md section 9), and [vectors/review.json](vectors/review.json) the review tally's (review.md section 10). Their answers come from [vectors/draw.py](vectors/draw.py) and [vectors/review.py](vectors/review.py), a third implementation in Python's standard library written apart from both; the beacon's signature checks are drand's own answers.
 
 [vectors/count.json](vectors/count.json) has `count` vectors (an input, and the exact output or the error code) and `verify` vectors (an input, a recorded verdict, and whether it matches). The expected answers were worked out by hand, not by either implementation; the Schulze and Borda cases include standard examples from the literature, where Borda and Schulze pick different winners from the same ballots.

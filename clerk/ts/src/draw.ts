@@ -129,6 +129,8 @@ export function unixSeconds(timestamp: string): number {
   const m = TIMESTAMP.exec(timestamp);
   if (m === null) return fail("bad_input");
   const [y, mo, d, h, mi, s] = m.slice(1).map(Number);
+  // Before 1970 is no time the protocol records (and Date.UTC would read years 0 to 99 as 1900 to 1999).
+  if (y < 1970) fail("bad_input");
   const t = Date.UTC(y, mo - 1, d, h, mi, s);
   const back = new Date(t);
   if (back.getUTCFullYear() !== y || back.getUTCMonth() !== mo - 1 || back.getUTCDate() !== d || h > 23 || mi > 59 || s > 59) fail("bad_input");

@@ -13,7 +13,7 @@ spec-generate:
 spec-conformance:
 	cd spec && pnpm install --frozen-lockfile && node conformance/run.mjs --impl "$(IMPL)"
 
-# The clerk's count and draw, in Rust and TypeScript, against clerk/vectors/. Rust (cargo) and Python 3 are needed too.
+# The clerk's count, draw and review tally, in Rust and TypeScript, against clerk/vectors/. Rust (cargo) and Python 3 are needed too.
 clerk-check:
 	python3 clerk/vectors/draw.py --check
 	python3 clerk/vectors/review.py --check
