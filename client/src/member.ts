@@ -217,6 +217,8 @@ export class Member {
 
   /** Trusts `obi` acting for another owner than the one first seen, after the people involved confirmed it out of band. */
   acceptMemberOwner(obi: string, owner: string, publicKey: string): void {
+    const kept = own(this.memory.owners, owner);
+    if (kept !== undefined && kept !== publicKey) throw new Error(`${owner} has another key kept already: compare its fingerprint and use acceptOwnerKey for that owner first`);
     this.memory.memberOwners[obi] = { owner, owner_key: publicKey };
     this.memory.owners[owner] = publicKey;
   }
@@ -277,9 +279,12 @@ export class Member {
     if (params.obi_id !== m.obi || params.owner !== m.owner || params.sphere !== this.sphere) return untrusted("its card names another member");
     if (m.status === "active" && !m.keys.some((k) => k.key_id === params.key_id && k.valid_until_seq === null)) return untrusted("its card's key is not its current key");
     const first = own(this.memory.memberOwners, m.obi);
-    if (first && (first.owner !== params.owner || first.owner_key !== params.owner_key)) return untrusted(`its owner changed since it was first seen (from ${first.owner}): confirm it with them before trusting it`);
+    // Another owner is acceptMemberOwner's to trust; the same owner with a new key, acceptOwnerKey's (below).
+    if (first && first.owner !== params.owner) return untrusted(`its owner changed since it was first seen (from ${first.owner}): confirm it with them before trusting it`);
     const pinned = own(this.memory.owners, m.owner);
-    if (pinned !== undefined && pinned !== params.owner_key) return untrusted(`its owner ${m.owner}'s key changed: compare fingerprints with them before trusting it`);
+    if ((pinned !== undefined && pinned !== params.owner_key) || (first && first.owner_key !== params.owner_key && pinned !== params.owner_key)) {
+      return untrusted(`its owner ${m.owner}'s key changed: compare fingerprints with them before trusting it`);
+    }
     const kept = own(this.memory.cardSeq, m.obi);
     if (kept !== undefined && params.card_seq < kept) return untrusted(`its card is older (card_seq ${params.card_seq}) than one trusted before (${kept})`);
     this.memory.owners[m.owner] = params.owner_key;

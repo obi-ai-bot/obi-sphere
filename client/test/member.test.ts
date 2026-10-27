@@ -126,7 +126,7 @@ test("an owner key that changed, or an older card, isn't trusted, and nothing is
   state.members = [entry(ada), entry(swapped)];
   const peer = (await m.directory()).find((p) => p.obi === "bea-agent")!;
   assert.equal(peer.trusted, false);
-  assert.match(peer.problem!, /owner changed|key changed/);
+  assert.match(peer.problem!, /key changed/);
   await assert.rejects(m.answer(r!.message!.id, { text: "Yes." }), /not trusted/);
   assert.equal(state.sent, undefined);
   const older = await party("bea", { owner: bea.owner, key: bea.key, cardSeq: 1 });
@@ -332,6 +332,7 @@ test("a member the Sphere hands to another owner isn't trusted until that's acce
   await assert.rejects(m.answer(r!.message!.id, { text: "Private." }), /not trusted/);
   m.acceptMemberOwner("bea-agent", "zed", zed.key.publicKey);
   assert.ok((await m.directory()).find((p) => p.obi === "bea-agent")!.trusted);
+  assert.throws(() => m.acceptMemberOwner("bea-agent", "ada", zed.key.publicKey), /another key kept/);
 });
 
 test("what the Sphere writes in a delivery's own fields never reaches the caller as text", async () => {
