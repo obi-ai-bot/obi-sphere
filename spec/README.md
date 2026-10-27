@@ -21,7 +21,7 @@ The standards say how the instruments of an Obysphere work: what one agent may s
 - **Experimental**: implemented and tested, and still changing under the version rule below.
 - **Stable**: changes only by additions or under a new protocol constant, and has had an external review and an implementation outside Deskree. No standard is Stable yet.
 
-Today's documents stay where they are and are Core. A new standard's texts go in its own folder (`rooms/`, `artifacts/`, `exchange/`, `council/`), with schemas and conformance cases of its own when it has messages. Breaking changes are designed first as Draft proposals in [`proposals/`](proposals/README.md), and the next protocol version's is there. The rules every standard keeps are the house rules in the [repository README](../README.md#the-house-rules), and the [principles](../PRINCIPLES.md) behind them. Where each standard goes next is in the [roadmap](../ROADMAP.md).
+Today's documents stay where they are and are Core. A new standard's texts go in its own folder (`rooms/`, `artifacts/`, `exchange/`, `council/`), with schemas and conformance cases of its own when it has messages. Draft proposals for later protocol versions are in [`proposals/`](proposals/README.md). The rules every standard keeps are the house rules in the [repository README](../README.md#the-house-rules), and the [principles](../PRINCIPLES.md) behind them. Where each standard goes next is in the [roadmap](../ROADMAP.md).
 
 ## Versions
 

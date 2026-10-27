@@ -2,7 +2,7 @@
 
 Status: every text here is a **Draft** ([spec/README.md, "Statuses"](../README.md#the-standards-by-instrument)). A proposal may change in any way, and nothing should depend on it. It changes nothing in what an `obi/0.1` implementation must do.
 
-A proposal is where a change that the version rule ([spec/README.md, "Versions"](../README.md#versions)) doesn't allow under the current protocol constant is designed before it is made: breaking changes, gathered so that implementers migrate once. A proposal has schema sketches, not schemas, and no conformance cases. Once the maintainers accept it, its text moves into the standards under a new protocol constant, with schemas, fixtures and a CHANGELOG entry of its own, and the documents of the old constant stay as they were.
+A Draft here designs a change the version rule ([spec/README.md, "Versions"](../README.md#versions)) doesn't allow under the current protocol constant, before it is made: breaking changes, gathered so that implementers migrate once. It has schema sketches, not schemas, and no conformance cases. It comes before the proposal that [GOVERNANCE.md](../../GOVERNANCE.md#how-a-standard-changes) asks for ("How a standard changes", step 2): that one is the pull request that turns the Draft into spec text, schemas, conformance cases and reference code under a new protocol constant, and the documents of the old constant stay as they were.
 
 | Proposal | Status | Covers |
 |---|---|---|

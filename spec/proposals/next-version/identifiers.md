@@ -6,7 +6,7 @@ Status: **Draft**, part of [the next protocol version](README.md). Issue: [#51](
 
 ## 1. Every product-named identifier
 
-Found by reading every schema in `schemas/v0.1/`, the three documents and the reference server. "Gone" means it goes with the compute and share actions ([D4](README.md#decisions-for-the-owner)); if they were kept as a profile instead, each would take the neutral form in brackets.
+Found by reading every schema in `schemas/v0.1/`, the three documents, the conformance contract and the reference server. protocol.md section 1.1, from #50, lists the ones on the wire for `obi/0.1`'s readers; this table adds the schemas' internal names, the fixtures' contract and the reserved ids. "Gone" means it goes with the compute and share actions ([D4](README.md#decisions-for-the-maintainers)); if they were kept as a profile instead, each would take the neutral form in brackets.
 
 | `obi/0.1` | Where | Next version |
 |---|---|---|
@@ -23,16 +23,19 @@ Found by reading every schema in `schemas/v0.1/`, the three documents and the re
 | `"obi"` | the value of `answer.by` for an answer the agent gave by itself | `"agent"` |
 | `x-obi-text` (`data`, `sealed`) | the annotation on every text field of every schema (protocol.md section 8) | `x-text` |
 | `urn:obi-sphere:ext:obi:0.1` | the card's one extension | `https://STANDARDS-HOST/ext/core/0.2` ([D2](#3-uris-d2)) |
+| `obi_extension` | the extension's `$defs` name in agent-card.schema.json | `extension` |
 | `obi-action` | the tag on each of the card's skills | `typed-action` |
 | `obi-sphere:<sphere id>` | the `aud` of the owner's and the agent's assertions (identity.md section 4.1) | the Sphere's URL, `<base URL>/v0.2/spheres/<sphere>`, the form the #60 addition brings to `obi/0.1`; the old form is dropped |
 | `obi-sphere://signin` | where a sign-in's callback sends the browser (sphere-api.md section 3.1) | the client's own redirect, as the OpenID Connect addition (#60) defines it |
 | `by Oby:` | the marker on every review an agent posts on a code host, and what a receiver looks for to tell an agent's review from a person's (protocol.md section 11) | `by agent:` ([D3](#4-the-code-host-marker-d3)), and both are recognised |
 | `obi-base` | the branch a `run_request`'s bundle starts from | gone (`base`) |
-| `https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/…` | every schema's `$id` | `https://STANDARDS-HOST/schemas/0.2/…` ([D2](#3-uris-d2)) |
+| `https://github.com/obi-ai-bot/obi-sphere/raw/main/spec/schemas/v0.1/…` | every schema's `$id` | `https://STANDARDS-HOST/schemas/v0.2/…` ([D2](#3-uris-d2)) |
+| `obi` in `context.keys{…}`, and `receiver` as an `obi_id` | the conformance fixtures' contract (conformance/README.md) | `agent` |
+| `oby` and two companies' names among the reserved Obysphere ids | sphere-api.md section 3: ids nobody may create | the spec says only that a server may reserve ids; which ones is its operator's setting |
 
 The run and share actions also carry `agent`, the coding agent's CLI that runs a job: a runtime, not a member. It is gone with them; if they were kept, it would become `runtime`, with an id from the registry ([runtimes.md](runtimes.md)), so that `agent` always means a member.
 
-**Kept on purpose.** `sphere` (the field, the `sphere_id` type, `/spheres/` in paths) is a plain word for the place, and the spec's plain-names text (#50) calls the place an Obysphere in prose. If the owner wants the place's word changed with the standards' published name, it is one more rename in this table, made the same way. `owner`, `owner_id`, `owner_key`, the key id prefixes `ed25519:` and `x25519:`, the seal suite's name, the scopes and the error codes name no product and stay.
+**Kept on purpose.** `sphere` (the field, the `sphere_id` type, `/spheres/` in paths) is a plain word for the place, and the spec's plain-names text (#50) calls the place an Obysphere in prose. If the maintainers want the place's word changed with the standards' published name, it is one more rename in this table, made the same way. `owner`, `owner_id`, `owner_key`, the key id prefixes `ed25519:` and `x25519:`, the seal suite's name, the scopes and the error codes name no product and stay.
 
 **Not on the wire.** These carry the name too but are no part of the protocol, so they need no version: renaming them is up to whoever owns them, at any time.
 
@@ -56,13 +59,13 @@ The constant is every envelope's `protocol`, it begins every signing and hash in
 
 **The number.** `0.2`, continuing from `0.1`. `1.0` would read as Stable, which needs an external review and an implementation outside the company that started the project ([spec/README.md, "Statuses"](../../README.md#the-standards-by-instrument)). A later version reaches `1.0` when Core meets that bar.
 
-The rest of this Draft writes `NAME/0.2` until the owner decides.
+The rest of this Draft writes `NAME/0.2` until the maintainers decide.
 
 ## 3. URIs (D2)
 
 The card's extension URI and the schemas' `$id`s identify the standards. Today they are a URN in an unregistered namespace (`urn:obi-sphere:`) and the repository's GitHub URL, which names an organisation and a product and changes when the standards move to a foundation ([GOVERNANCE.md, "Neutrality"](../../../GOVERNANCE.md#neutrality)).
 
-- **Recommended:** an `https` URL on a domain held for the standards, chosen with their published name and moved with them to a foundation: `https://STANDARDS-HOST/ext/core/0.2` for the extension, `https://STANDARDS-HOST/schemas/0.2/envelope.schema.json` for a schema. A2A identifies extensions by URI, and a resolvable one can serve the extension's description. The URL is an identifier: nothing fetches it to check a message.
+- **Recommended:** an `https` URL on a domain held for the standards, chosen with their published name and moved with them to a foundation: `https://STANDARDS-HOST/ext/core/0.2` for the extension, `https://STANDARDS-HOST/schemas/v0.2/envelope.schema.json` for a schema (its folder is `schemas/v0.2/`, as for `obi/0.1`). A2A identifies extensions by URI, and a resolvable one can serve the extension's description. The URL is an identifier: nothing fetches it to check a message.
 - The repository's GitHub URL: free and resolvable now, but it names an organisation and a product, and moves.
 - A `urn:` in a namespace of the project's own: needs no host, but an unregistered URN namespace is not a URN, and it still needs a name.
 
@@ -70,8 +73,13 @@ The card's extension URI and the schemas' `$id`s identify the standards. Today t
 
 When an agent posts a review on a code host, its body carries a marker, and a receiver deciding whether code owners approved a change counts no review that carries one (protocol.md section 11, "Who counts as a code owner"). That rule is part of the Code profile ([core-and-profiles.md, section 9](core-and-profiles.md#9-the-code-profile)).
 
-- **Recommended:** every review an agent posts carries `by agent:` followed by its own words on who wrote it. A receiver treats a review whose body contains `by agent:` or `by Oby:`, in any case, as an agent's. Recognising the old marker too keeps every review an agent posted under `obi/0.1` from counting as a person's.
-- The same rule holds as today: writing a marker into a person's review only makes it count for less.
+| Option | For | Against |
+|---|---|---|
+| **A. `by agent:`, and `by Oby:` still recognised** (recommended) | Plain words that name no product; a reader of the code host understands them. Recognising the old marker too keeps every review an agent posted under `obi/0.1` from counting as a person's. | Two strings to look for, for good. |
+| B. Keep `by Oby:` | Nothing changes. | Every implementation writes another product's name on every review it posts. |
+| C. A marker with the constant's name, such as `by sphere agent:` | Ties the marker to the standards. | Ties a visible text to a name that may change, which D1 avoids for the wire. |
+
+The same rule holds as today: writing a marker into a person's review only makes it count for less.
 
 ## 5. In the schemas
 
@@ -79,7 +87,7 @@ What the sketches in the other documents assume, as a fragment of the next versi
 
 ```json
 {
-  "$id": "https://STANDARDS-HOST/schemas/0.2/common.schema.json",
+  "$id": "https://STANDARDS-HOST/schemas/v0.2/common.schema.json",
   "$defs": {
     "protocol": { "const": "NAME/0.2" },
     "agent_id": {
@@ -101,8 +109,11 @@ What the sketches in the other documents assume, as a fragment of the next versi
 }
 ```
 
-An agent id's value doesn't change: `obi-wellington` is as valid an `agent_id` as it was an `obi_id`, so no member is renamed by the migration ([migration.md](migration.md)).
+An agent id's value doesn't change: `obi-lead` is as valid an `agent_id` as it was an `obi_id`, so no member is renamed by the migration ([migration.md](migration.md)).
 
 ## 6. Done when
 
-#51 is done when the next version's schemas, signing inputs, headers and fixtures contain no product name, and the CHANGELOG lists every rename with its old form. Section 1's table is that list, ahead of time.
+#51 is done when the next version's schemas, signing inputs, headers and fixtures contain no product name, and the CHANGELOG lists every rename with its old form. Section 1's table is that list, ahead of time. Two accepted exceptions:
+
+- The fixtures that pin D3 contain `by Oby:` on purpose, since a receiver must still recognise it.
+- Agent ids carried over from `obi/0.1` keep their values, such as `obi-…`. They are members' own names, not the protocol's. The next version's fixtures use neutral ids.
