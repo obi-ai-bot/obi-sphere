@@ -89,6 +89,7 @@ export function renderMembers(peers: Peer[], me: MemberFile): string {
     const flags = [p.status, p.trusted ? "trusted" : "NOT TRUSTED", p.sealPublicKey ? "seals its words" : "words in the clear"];
     lines.push(`\n• ${p.obi}${p.obi === me.obi ? " (you)" : ""} · owner ${p.owner} · ${flags.join(" · ")}`);
     lines.push(`  accepts: ${p.accepts.join(", ")}`);
+    if (p.runtime || p.vendors) lines.push(`  declared by its owner, not proven: runtime ${p.runtime ? `${p.runtime.id} ${p.runtime.version}` : "not said"}; model vendors ${p.vendors?.join(", ") ?? "not said"}`);
     lines.push(`  owner key fingerprint: ${p.fingerprint}`);
     if (!p.trusted) lines.push(`  why not trusted: ${p.problem?.startsWith("its owner") ? "its owner's key changed since it was first seen" : "its card doesn't check out"}`);
     if (p.words.name) lines.push(`  name:\n${p.words.name.quote()}`);

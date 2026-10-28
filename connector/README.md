@@ -59,12 +59,15 @@ obysphere-connector approve in-3f2a1c9d   # yes: the agent may answer; a review 
 obysphere-connector decline in-3f2a1c9d --note "Not this week."
 obysphere-connector answer in-3f2a1c9d --text "Cut it from main."   # answer a question yourself (by: owner)
 obysphere-connector rules --allow question,review_request --to '*' --allow handoff --to oby-ada
+obysphere-connector card --runtime claude --runtime-version 2.1.204 --vendor anthropic   # say what runs this member
 obysphere-connector renew                 # a new delegation, before the 30 days of the last one run out
 ```
 
 Each asks your passphrase on the terminal (or reads it from standard input with `--passphrase-stdin`, for your own scripts) and signs what you decided with the owner's key. A decision names the item and what it held when you saw it (a digest), so it can't be moved to another one. The running connector applies it only when it verifies with the owner key the Sphere bound for you, within 15 minutes of signing it, and only while the request hasn't expired. `approve` also releases a request the agent made that your rules held back. Incoming items are `in-…` (the request's own id), outgoing ones `out-…`.
 
 A request that would make more than 5 from one owner wait for you, or that repeats an open question of theirs, is declined `busy` at once and kept nowhere but the log. After a member declines a request of yours `busy`, the agent doesn't ask it again until one of your requests that were open to it then has ended, or, with none open, for an hour; and it never sends the same request to a member twice while the first is open. Only a member's latest `status` on each of your requests is kept.
+
+`card` publishes, with a new card the owner's key signs, what runs this member's agent and the model vendors it may use (identity.md section 2.3): declared, not proven, and seen by every member (a Council's draw counts vendors from cards). A member's first card can't carry them; `join` says `+card-runtime` in the card's version, and `card` works once the Obysphere and every other active member take `card_runtime` (a member of an older connector says it does with `card --announce`; a card that carries them already can always be changed). What the card says comes from the member's own folder, never from the Obysphere's copy of it.
 
 A new member starts with no rules: everything the agent asks to send waits for you until you set some.
 

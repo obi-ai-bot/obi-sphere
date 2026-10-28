@@ -16,7 +16,7 @@
 //
 // Nothing here acts on what a message says: the words are data, for the caller to show or quote.
 
-import { verifyCard, cardParams, type AgentCard } from "./card.ts";
+import { takesFeature, verifyCard, cardParams, type AgentCard } from "./card.ts";
 import { rollbackProblem, verifyChain, type AuditEntry, type ChainMemory } from "./chain.ts";
 import type { JsonObject as Json } from "./json.ts";
 import { keyIdOf, type SigningKey } from "./crypto.ts";
@@ -46,6 +46,11 @@ export interface Peer {
   cardSeq: number;
   /** Its card's issued_at. */
   issuedAt: string;
+  /** What its owner declares runs its agent and which model vendors it may use (identity.md 2.3): declared, not proven. */
+  runtime?: { id: string; version: string };
+  vendors?: string[];
+  /** The additions to obi/0.1 its agent takes, its version's `+card-runtime` included. */
+  features: string[];
   trusted: boolean;
   /** Why it isn't trusted. */
   problem?: string;
@@ -273,6 +278,7 @@ export class Member {
       obi: m.obi, owner: m.owner, status: m.status, fingerprint: params ? await keyIdOf(params.owner_key) : "", accepts: params?.accepts ?? [],
       keyId: params?.key_id ?? "", ...(params?.seal_public_key ? { sealPublicKey: params.seal_public_key } : {}), cardSeq: params?.card_seq ?? 0,
       issuedAt: params?.issued_at ?? "", trusted: false, words: cardWords(card, { from: m.obi, owner: m.owner }),
+      ...(verdict.ok ? declared(card) : { features: [] }),
     };
     const untrusted = (problem: string): Peer => ({ ...peer, problem });
     if (!verdict.ok || !params) return untrusted(`its card fails: ${verdict.ok ? "" : verdict.code}`);
@@ -293,6 +299,25 @@ export class Member {
     const named = own(this.memory.cardKeys, m.obi) ?? [];
     if (!named.includes(params.key_id)) this.memory.cardKeys[m.obi] = [...named, params.key_id];
     return { ...peer, trusted: true };
+  }
+
+  /**
+   * Publishes a new card for this member (`PUT …/members/{obi}/card`, identity.md section 3), which
+   * its owner signed: a higher card_seq, the same ids and owner key. Keeps it as trusted: its key,
+   * its card_seq, and when it first carried a seal key.
+   */
+  async updateCard(card: AgentCard): Promise<DirectoryMember> {
+    const params = cardParams(card);
+    if (params.obi_id !== this.id || params.owner !== this.owner || params.sphere !== this.sphere) throw new Error("that card is another member's");
+    const verdict = await verifyCard(card, { now: nowSeconds(), bound_owner_key: own(this.memory.owners, this.owner) ?? params.owner_key });
+    if (!verdict.ok) throw new Error(`that card fails: ${verdict.message}`);
+    if (params.key_id !== this.key.keyId) throw new Error("that card names another key than this member's: rotating a key is a new SigningKey and a new Member");
+    if ((params.seal_public_key ?? null) !== (this.sealKey?.publicKey ?? null)) throw new Error("that card's seal key isn't this member's own");
+    const member = await this.api.updateCard(await this.accessToken(), this.sphere, this.id, card);
+    this.memory.cardSeq[this.id] = params.card_seq;
+    if (params.seal_public_key && this.memory.sealedSince === undefined) this.memory.sealedSince = params.issued_at;
+    this.#peers = null;
+    return member;
   }
 
   async #peer(obi: string, refresh = false): Promise<Peer | undefined> {
@@ -525,6 +550,14 @@ export interface ChainEntry {
   to: string;
   key_id: string;
   sealed: boolean;
+}
+
+/** What a verified card declares (identity.md section 2.3): only patterns the schema closed, so plain values. */
+function declared(card: AgentCard): Pick<Peer, "runtime" | "vendors" | "features"> {
+  const p = cardParams(card) as ReturnType<typeof cardParams> & { features?: string[]; runtime?: { id: string; version: string }; vendors?: string[] };
+  const features = [...(p.features ?? [])];
+  if (!features.includes("card_runtime") && takesFeature(card, "card_runtime")) features.push("card_runtime");
+  return { features, ...(p.runtime ? { runtime: p.runtime } : {}), ...(p.vendors ? { vendors: p.vendors } : {}) };
 }
 
 export { SphereError };
