@@ -145,7 +145,7 @@ The convener counts once `deadlines.challenge` has passed, or sooner once every 
 |---|---|
 | `motion`, `motion_hash` | The motion and its hash. |
 | `pool`, `pool_hash` | The pool record and its hash (draw.md section 2). |
-| `cards` | The card of every member active at the pool's `at.seq`, as the convener trusted it (draw.md section 7, check 1). |
+| `cards` | The card of every member active at the pool's `at` (draw.md section 2: a key valid at `at.seq` + 1), as the convener trusted it (draw.md section 7, check 1). |
 | `calls` | `[{to, id}]`: each call in the chain. |
 | `anchored_at` | The earliest call's `recorded_at`. |
 | `beacon` | `{chain, round, signature, randomness}`: quicknet's round *R*. |

@@ -36,7 +36,7 @@ const PORT = Number(opt("--port", "8794"));
 const MODEL = opt("--model", "sonnet");
 const KEEP = args.includes("--keep");
 const BUNDLE = opt("--connector", join(ROOT, "connector", "dist", "obysphere-connector.mjs"));
-if (!existsSync(BUNDLE)) throw new Error(`build the connector first (cd connector && pnpm run build): no ${BUNDLE}`);
+if (!RECHECK && !existsSync(BUNDLE)) throw new Error(`build the connector first (cd connector && pnpm run build): no ${BUNDLE}`);
 
 const ref = await import(pathToFileURL(join(ROOT, "server", "e2e", "client.mjs")).href);
 const { spec } = ref;
@@ -57,7 +57,7 @@ const check = (cond, what) => {
 // ---------------------------------------------------------------------------------------------
 // The Obysphere, the team and the members
 
-const base = join(process.env.TMPDIR ?? tmpdir(), "obysphere-s4");
+const base = join(process.env.TMPDIR ?? tmpdir(), "obysphere-council");
 mkdirSync(base, { recursive: true });
 const run = mkdtempSync(join(base, "panel-"));
 const children = [];
@@ -69,6 +69,7 @@ const stopAll = () => {
   }
 };
 process.on("exit", stopAll);
+for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
 
 async function startSphere() {
   const operatorToken = randomBytes(32).toString("base64url");
@@ -131,14 +132,14 @@ function cardParams(card) {
   return card.capabilities.extensions[0].params;
 }
 async function members() {
-  const r = await team.client.call("GET", team.client.spherePath("/members"), { token: team.oby.accessToken });
+  const r = await team.client.call("GET", team.client.spherePath("/members"), { token: team.convener.accessToken });
   if (r.status !== 200) throw new Error(`members: ${r.status}`);
   return r.body.members;
 }
 async function chain() {
   const entries = [];
   for (let from = 1; ; ) {
-    const r = await team.client.call("GET", team.client.spherePath(`/audit?from_seq=${from}&limit=1000`), { token: team.oby.accessToken });
+    const r = await team.client.call("GET", team.client.spherePath(`/audit?from_seq=${from}&limit=1000`), { token: team.convener.accessToken });
     if (r.status !== 200) throw new Error(`audit: ${r.status}`);
     entries.push(...r.body.entries);
     if (!r.body.entries.length || entries.at(-1).seq >= r.body.head.seq) return { entries, head: r.body.head };
@@ -150,12 +151,12 @@ async function sendRequest(to, type, body, { id, expiresAt }) {
   const p = cardParams(card);
   const created = now();
   const unsigned = {
-    protocol: "obi/0.1", id, type, from: team.oby.id, to, sphere: team.id, correlation_id: id,
-    created_at: stamp(created), expires_at: expiresAt, key_id: team.oby.key.keyId, body,
+    protocol: "obi/0.1", id, type, from: team.convener.id, to, sphere: team.id, correlation_id: id,
+    created_at: stamp(created), expires_at: expiresAt, key_id: team.convener.key.keyId, body,
   };
   const sealed = p.seal_public_key ? spec.sealEnvelope(unsigned, spec.fromB64url(p.seal_public_key)) : unsigned;
-  const envelope = spec.signEnvelope(sealed, team.oby.key.privateKey);
-  const r = await team.oby.send(envelope);
+  const envelope = spec.signEnvelope(sealed, team.convener.key.privateKey);
+  const r = await team.convener.send(envelope);
   if (r.status !== 202) throw new Error(`sending ${type} to ${to}: ${r.status} ${JSON.stringify(r.body)}`);
   return { id, to, seq: r.body.seq, recorded_at: r.body.recorded_at, sealed: Boolean(p.seal_public_key) };
 }
@@ -163,7 +164,7 @@ async function waitForReplies(ids, seconds) {
   const got = new Map();
   const deadline = Date.now() + seconds * 1000;
   while (got.size < ids.length && Date.now() < deadline) {
-    const r = await team.oby.deliveries("?wait=5");
+    const r = await team.convener.deliveries("?wait=5");
     if (r.status !== 200) throw new Error(`deliveries: ${r.status}`);
     const done = [];
     for (const d of r.body.deliveries) {
@@ -171,7 +172,7 @@ async function waitForReplies(ids, seconds) {
       const e = d.envelope;
       if (ids.includes(e.in_reply_to) && ["result", "decline", "answer"].includes(e.type)) got.set(e.in_reply_to, opened(e));
     }
-    if (done.length) await team.oby.ack(done);
+    if (done.length) await team.convener.ack(done);
   }
   return got;
 }
@@ -228,62 +229,185 @@ function seatFolder(fixture, name) {
 // ---------------------------------------------------------------------------------------------
 // The re-check: from the record and the chain, trusting neither the convener's sums nor its words
 
+// Whether a version 8 UUID: what a call's id is (review.md section 4, "Recognising calls").
+const isV8 = (id) => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id);
+const secs = (t) => clerk.unixSeconds(t);
+// Whether an envelope's readable `about` names the motion's subject (review.md section 4).
+const aboutSubject = (body, subject) => (body?.about ?? []).some((r) => r.repo?.toLowerCase() === subject.repo.toLowerCase() &&
+  (subject.pr === undefined ? r.kind === "repo" : r.kind === "pr" && r.pr === subject.pr));
+// What every member reads of a seat's request: all but its words (protocol.md section 9.1).
+const readableRequest = (body) => clerk.canonicalize({
+  repo: body.repo, pr: body.pr ?? null, base_branch: body.base_branch ?? null, head_branch: body.head_branch ?? null, head_sha: body.head_sha,
+  acceptance: (body.acceptance ?? []).map(({ text, note, ...rest }) => rest), approve_on_host: body.approve_on_host ?? null,
+});
+
 async function recheck(record, saved) {
-  console.log("\n10. Re-check, from the record and the chain alone");
-  const { sphere, entries, keys } = saved;
+  console.log("\n10. Re-check, from the record and the chain alone, trusting nothing the convener computed");
+  const { sphere, entries, members: dir } = saved;
+  const keys = ref.directoryKeys(dir);
+  const m = record.motion;
+  const subject = m.subject;
+  const byId = new Map(entries.map((e) => [e.envelope.id, e]));
+  // A member is active at a seq when one of its keys is valid there (identity.md section 3).
+  const activeAt = (seq) => dir.filter((x) => x.keys.some((k) => spec.keyValidAt(k, seq))).map((x) => x.obi).sort();
+  const ownerOf = (obi) => dir.find((x) => x.obi === obi)?.owner;
+
+  // review.md section 8, check 1; draw.md section 7 needs the same chain.
   const verdict = spec.verifyChain({ sphere, entries }, { keys });
   check(verdict.ok, `verifyChain over the whole chain, ${entries.length} entries: ${JSON.stringify(verdict)}`);
+  check(sphere === m.sphere && record.pool.sphere === m.sphere, `the chain, the motion and the pool are all the Obysphere ${sphere}'s`);
+  const through = entries.find((e) => e.seq === record.through.seq);
+  check(through?.hash === record.through.hash, `through (seq ${record.through.seq}) is in the chain`);
+
+  // Check 2: the motion's hash and the record's signature, with the convener's key valid at through.seq.
+  check(sha256hex("council motion\n" + clerk.canonicalize(m)) === record.motion_hash, "the motion hashes to motion_hash");
   const { signature, ...unsigned } = record;
-  const convenerKey = Object.values(keys).find((k) => k.obi === record.motion.convener && spec.keyIdOf(k.public_key) === record.key_id);
-  check(Boolean(convenerKey) && spec.verifyBytes(convenerKey.public_key, Buffer.from("council record\n" + clerk.canonicalize(unsigned)), signature), "the record's signature verifies with the convener's key");
-  check(sha256hex("council motion\n" + clerk.canonicalize(record.motion)) === record.motion_hash, "the motion hashes to motion_hash");
-  check(record.cards.every((c) => spec.verifyCard(c, {}).ok), `every card in the record verifies (${record.cards.length})`);
+  const convenerKey = dir.find((x) => x.obi === m.convener)?.keys.find((k) => k.key_id === record.key_id && spec.keyValidAt(k, record.through.seq));
+  check(Boolean(convenerKey) && spec.verifyBytes(convenerKey.public_key, Buffer.from("council record\n" + clerk.canonicalize(unsigned)), signature),
+    "the record's signature verifies with the convener's key, valid at through.seq");
+
+  // Check 3, draw.md section 7, check 1: the pool, from the motion, the directory and the signed cards.
+  const p = record.pool;
+  check(p.draw === 1 && p.motion === record.motion_hash && clerk.poolHash(p) === record.pool_hash, "the pool record is version 1, names the motion's hash, and hashes to pool_hash");
+  check(p.request === "review_request" && clerk.sameJson(p.exclude, [...new Set([m.author, m.owner])].sort()) && p.seats === m.seats && p.verifiers === m.verifiers && clerk.sameJson(p.diversity, m.diversity),
+    `the pool's request, exclude, seats, verifiers and diversity are the motion's (exclude ${JSON.stringify(p.exclude)}: the author and the convener's owner)`);
+  const atHash = p.at.seq === 0 ? "0".repeat(64) : entries.find((e) => e.seq === p.at.seq)?.hash;
+  // Every anchor the pool could have, from its own entries: never the record's list.
+  const anchors = p.entries
+    .map((x) => ({ to: x.id, id: clerk.anchorId(record.pool_hash, x.id) }))
+    .map((a) => ({ ...a, e: byId.get(a.id) }))
+    .filter(({ to, e }) => e && e.envelope.type === "question" && e.envelope.from === m.convener && e.envelope.to === to && aboutSubject(e.envelope.body, subject));
+  const first = anchors.map((a) => a.e).sort((a, b) => a.seq - b.seq)[0];
+  if (!check(Boolean(first), `the chain holds the pool's anchors: ${anchors.length} of ${p.entries.length} entries called`)) return null;
+  check(atHash === p.at.hash && p.at.seq < first.seq, `the pool's chain point (seq ${p.at.seq}) is in the chain, or its empty head, before the first anchor`);
+  // A member that joined after the chain's last entry has its key valid from the next seq: so at.seq + 1.
+  const active = activeAt(p.at.seq + 1);
+  check(clerk.sameJson(active, activeAt(first.seq)), `the same members active at the pool's point and at the first anchor: ${active.join(", ")}`);
+  const cardsOk = record.cards.every((c) => {
+    const q = cardParams(c);
+    const member = dir.find((x) => x.obi === q.obi_id);
+    return member && member.owner === q.owner && spec.verifyCard(c, { bound_owner_key: member.owner_key }).ok &&
+      member.keys.some((k) => k.key_id === q.key_id && spec.keyValidAt(k, p.at.seq + 1));
+  });
+  const cardMembers = record.cards.map((c) => cardParams(c).obi_id).sort();
+  check(cardsOk && clerk.sameJson(cardMembers, active),
+    `the record's cards verify with each owner's bound key, name a key valid at the pool's point, and are exactly the active members' (${record.cards.length})`);
   const rebuilt = clerk.pool({
-    sphere: record.pool.sphere, motion: record.motion_hash, at: record.pool.at, request: "review_request", exclude: [record.motion.author, record.motion.owner],
-    seats: record.motion.seats, verifiers: record.motion.verifiers, diversity: record.motion.diversity,
+    sphere: m.sphere, motion: record.motion_hash, at: p.at, request: "review_request", exclude: [m.author, m.owner],
+    seats: m.seats, verifiers: m.verifiers, diversity: m.diversity,
     members: record.cards.map((c) => {
-      const p = cardParams(c);
-      return { obi_id: p.obi_id, owner: p.owner, accepts: p.accepts, ...(p.vendors ? { vendors: p.vendors } : {}) };
+      const q = cardParams(c);
+      return { obi_id: q.obi_id, owner: q.owner, accepts: q.accepts, ...(q.vendors ? { vendors: q.vendors } : {}) };
     }),
   });
-  check(clerk.sameJson(rebuilt, record.pool) && clerk.poolHash(rebuilt) === record.pool_hash, "the pool, rebuilt from the signed cards and the motion, is the record's, and so is its hash");
-  // seq 0 is the empty chain's head: its hash is 64 zeros (sphere-api.md section 7).
-  const atHash = record.pool.at.seq === 0 ? "0".repeat(64) : entries.find((e) => e.seq === record.pool.at.seq)?.hash;
-  check(atHash === record.pool.at.hash, `the pool's chain point is in the chain (seq ${record.pool.at.seq})`);
-  const calls = record.calls.map((c) => ({ c, e: entries.find((x) => x.envelope.id === c.id) }));
-  const about = [{ kind: "pr", repo: record.motion.subject.repo, pr: record.motion.subject.pr }];
-  const bad = calls.filter(({ c, e }) =>
-    !(c.id === clerk.anchorId(record.pool_hash, c.to) && e && e.envelope.type === "question" && e.envelope.from === record.motion.convener && e.envelope.to === c.to &&
-      clerk.sameJson(e.envelope.body.about, about)));
-  const anchoredAt = calls.map(({ e }) => e?.recorded_at).sort()[0];
-  check(bad.length === 0, `every call is in the chain with its anchor id, from the convener, about the subject${bad.length ? `: not ${JSON.stringify(bad.map(({ c, e }) => [c.to, e?.envelope.type, e?.envelope.body?.about]))}` : ""}`);
-  check(anchoredAt === record.anchored_at, `anchored_at, the first call's recorded_at, is the record's: ${anchoredAt} (record ${record.anchored_at})`);
+  check(clerk.sameJson(rebuilt, p), "the clerk's pool, run on those cards, is the record's pool");
+
+  // Check 2 of draw.md section 7: the anchors, found in the chain from the pool alone.
+  const anchoredAt = first.recorded_at;
   const R = clerk.beaconRound(anchoredAt, clerk.QUICKNET.genesis_time, clerk.QUICKNET.period);
   const roundTime = clerk.QUICKNET.genesis_time + (R - 1) * clerk.QUICKNET.period;
-  check(R === record.beacon.round && clerk.verifyBeacon(R, record.beacon.signature) && clerk.beaconRandomness(record.beacon.signature) === record.beacon.randomness,
-    `round ${R} follows the first call, its signature verifies with quicknet's key, and its randomness is the hash of it`);
-  check(calls.every(({ e }) => clerk.unixSeconds(e.recorded_at) < roundTime), "every call was recorded before the round's time");
-  const stoodAside = record.pool.entries.map((x) => x.id).filter((id) => {
-    const call = record.calls.find((c) => c.to === id);
-    const end = entries.find((e) => e.envelope.correlation_id === call?.id && e.envelope.from === id && ["decline", "answer"].includes(e.envelope.type));
-    return end && clerk.unixSeconds(end.recorded_at) < roundTime && (end.envelope.type === "decline" || end.envelope.body.choice === 1);
+  check(anchoredAt === record.anchored_at && clerk.sameJson(anchors.map(({ to, id }) => ({ to, id })).sort((a, b) => a.to.localeCompare(b.to)), [...record.calls].sort((a, b) => a.to.localeCompare(b.to))),
+    `the anchors found from the pool are the record's calls (${anchors.length}), and anchored_at is the first one's: ${anchoredAt}`);
+  check(anchors.every(({ e }) => secs(e.recorded_at) < roundTime), "every anchor was recorded before the round's time");
+  const convenerOwner = ownerOf(m.convener);
+  const windowFrom = secs(anchoredAt) - 300 - clerk.QUICKNET.period;
+  const others = entries.filter((e) => e.envelope.type === "question" && isV8(e.envelope.id) && ownerOf(e.envelope.from) === convenerOwner &&
+    aboutSubject(e.envelope.body, subject) && secs(e.recorded_at) >= windowFrom && secs(e.recorded_at) <= roundTime && !anchors.some((a) => a.id === e.envelope.id));
+  check(others.length === 0, `no other call about the subject from any member of the convener's owner (${convenerOwner}) while the round was unknown`);
+
+  // Check 3 of draw.md section 7: the round, from the first anchor; its signature with quicknet's key.
+  check(R === record.beacon.round && record.beacon.chain === clerk.QUICKNET.chain && clerk.verifyBeacon(R, record.beacon.signature) && clerk.beaconRandomness(record.beacon.signature) === record.beacon.randomness,
+    `round ${R} is the one after the first anchor; its signature verifies with quicknet's key, and its randomness is the hash of it`);
+
+  // Checks 4 and 5 of draw.md section 7, and review.md section 8, check 3: every draw run, its declines from the chain.
+  const replyTo = (req, from) => entries.find((e) => e.envelope.in_reply_to === req.envelope.id && e.envelope.from === from && ["decline", "answer", "result"].includes(e.envelope.type));
+  const stoodAside = anchors.filter(({ to, e }) => {
+    const end = replyTo(e, to);
+    return end && secs(end.recorded_at) < roundTime && (end.envelope.type === "decline" || end.envelope.body.choice === 1);
+  }).map((a) => a.to).sort();
+  const challengeBy = secs(m.deadlines.challenge) - 600;
+  const requests = entries.filter((e) => e.envelope.type === "review_request" && e.envelope.from === m.convener && e.envelope.body.repo?.toLowerCase() === subject.repo.toLowerCase() &&
+    e.envelope.body.head_sha === subject.head_sha && secs(e.recorded_at) > roundTime && secs(e.recorded_at) <= challengeBy);
+  // A seat's request as review.md section 5 has it: the motion's subject and acceptance, no approve_on_host, expiring at deadlines.reviews.
+  const seatShape = readableRequest({ ...subject, acceptance: m.acceptance });
+  const asSeat = (r) => readableRequest(r.envelope.body) === seatShape && r.envelope.expires_at === m.deadlines.reviews;
+  // The members of a run that declined in time: a seat a request in the seats' shape before deadlines.seats, the
+  // verifier any of its requests by deadlines.challenge less 1,200 seconds (draw.md section 6, review.md sections 5 and 6).
+  const declinedIn = (out, already) => [...out.seats, ...out.verifiers].filter((x) => !already.includes(x)).flatMap((x) => {
+    const seat = out.seats.includes(x);
+    const end = requests.filter((r) => r.envelope.to === x && (!seat || asSeat(r))).map((r) => replyTo(r, x))
+      .find((e) => e?.envelope.type === "decline" && (seat ? secs(e.recorded_at) < secs(m.deadlines.seats) : secs(e.recorded_at) <= secs(m.deadlines.challenge) - 1200));
+    return end ? [{ x, at: secs(end.recorded_at), verifier: !seat }] : [];
   });
-  check(JSON.stringify(stoodAside) === JSON.stringify(record.draws[0].declined), `the members that stood aside before the round, from the chain: ${JSON.stringify(stoodAside)}`);
-  const redrawn = clerk.draw({ pool: record.pool, randomness: record.beacon.randomness, declined: stoodAside });
-  check(clerk.sameJson(redrawn, record.draws.at(-1).output), `the draw, run again: seats ${redrawn.seats.join(", ")}, verifier ${redrawn.verifiers.join(", ")}`);
-  const requests = entries.filter((e) => e.envelope.type === "review_request" && e.envelope.from === record.motion.convener);
-  const seatRequests = redrawn.seats.map((s) => requests.filter((e) => e.envelope.to === s));
-  check(seatRequests.every((r) => r.length === 1 && clerk.unixSeconds(r[0].recorded_at) > roundTime && clerk.unixSeconds(r[0].recorded_at) <= roundTime + 600 && r[0].envelope.expires_at === record.motion.deadlines.reviews),
-    "every seat got one request, after the round and within 600 seconds of it, all expiring at deadlines.reviews");
-  check(!entries.some((e) => clerk.unixSeconds(e.recorded_at) > roundTime && [...redrawn.seats, ...redrawn.verifiers].includes(e.envelope.from) && [...redrawn.seats, ...redrawn.verifiers].includes(e.envelope.to)),
-    "no envelope passed between two members of the panel");
+  let declined = stoodAside;
+  let runsOk = record.draws.length > 0 && clerk.sameJson(record.draws[0].declined, declined);
+  // Each run, made again, with when its new members' window opened: the round, or the last decline that brought the run.
+  const runs = [];
+  let opened = { at: roundTime, verifier: false };
+  for (let k = 0; k < record.draws.length && runsOk; k++) {
+    const out = clerk.draw({ pool: p, randomness: record.beacon.randomness, declined });
+    runs.push({ out, ...opened });
+    runsOk = clerk.sameJson(out, record.draws[k].output);
+    const fresh = declinedIn(out, declined);
+    if (k + 1 === record.draws.length) {
+      runsOk = runsOk && fresh.length === 0;
+    } else {
+      declined = [...declined, ...fresh.map((d) => d.x)].sort();
+      opened = { at: Math.max(...fresh.map((d) => d.at)), verifier: fresh.some((d) => d.verifier) };
+      runsOk = runsOk && fresh.length > 0 && clerk.sameJson(record.draws[k + 1].declined, declined);
+    }
+  }
+  check(runsOk, `every draw run, made again with exactly the declines the chain shows before it, and none after the last (${record.draws.length} run${record.draws.length > 1 ? "s" : ""}; stood aside before the round: ${JSON.stringify(stoodAside)})`);
+  if (!runsOk) return null;
+  const last = runs.at(-1).out;
+  console.log(`   the draw, made again: seats ${last.seats.join(", ")}; verifier ${last.verifiers.join(", ")}`);
+
+  // review.md section 8, check 4: every request in the window went to someone drawn; each seat one, in time, in the same shape.
+  const drawn = new Set(runs.flatMap(({ out }) => [...out.seats, ...out.verifiers]));
+  const inLast = (x) => last.seats.includes(x) || last.verifiers.includes(x);
+  check(requests.every((r) => drawn.has(r.envelope.to)) && requests.every((r) => inLast(r.envelope.to) || declined.includes(r.envelope.to)),
+    `every review_request for the subject from the round to deadlines.challenge less 600 seconds (${requests.length}) went to a member of a draw run, and every recipient outside the last run is in its declined`);
+  // A seat's window opens at the round, or at the decline that brought the run where it first sat.
+  const seatOpened = (x) => runs.find(({ out }) => out.seats.includes(x)).at;
+  const seatReqs = last.seats.map((x) => requests.filter((r) => r.envelope.to === x));
+  check(seatReqs.every((rs) => rs.length === 1 && asSeat(rs[0])) && seatReqs.every(([r], i) => secs(r.recorded_at) <= seatOpened(last.seats[i]) + 600),
+    "every seat got one request, within 600 seconds of the round or of the decline that seated it, expiring at deadlines.reviews, with the motion's subject and acceptance and no approve_on_host: the same readable fields");
+
+  // Check 7 first, for the blocking findings; then check 5: the verifier's challenge.
   const tally = clerk.reviewTally({
-    convener: record.motion.convener, subject: { repo: record.motion.subject.repo, head_sha: record.motion.subject.head_sha },
-    rule: record.motion.rule, quorum: record.motion.quorum, veto: record.motion.veto, seats: redrawn.seats, verifier: redrawn.verifiers[0],
-    round_at: stamp(roundTime), deadlines: { reviews: record.motion.deadlines.reviews, challenge: record.motion.deadlines.challenge }, entries: tallied(entries),
+    convener: m.convener, subject: { repo: subject.repo, head_sha: subject.head_sha }, rule: m.rule, quorum: m.quorum, veto: m.veto,
+    seats: last.seats, ...(last.verifiers[0] ? { verifier: last.verifiers[0] } : {}),
+    round_at: stamp(roundTime), deadlines: { reviews: m.deadlines.reviews, challenge: m.deadlines.challenge }, entries: tallied(entries),
   });
+  const blocking = tally.findings.filter((f) => f.blocking).length;
+  const verifier = last.verifiers[0];
+  const vreqs = requests.filter((r) => r.envelope.to === verifier).sort((a, b) => a.seq - b.seq);
+  const conds = vreqs.flatMap((r) => r.envelope.body.acceptance ?? []);
+  // A verifier brought in by its predecessor's decline gets the challenge within 600 seconds of it (review.md section 6).
+  const vrun = runs.find(({ out }) => out.verifiers.includes(verifier));
+  const vby = vrun?.verifier ? vrun.at + 600 : challengeBy;
+  // The challenge goes out once every seat's exchange has ended or deadlines.reviews has passed.
+  const seatsDone = Math.min(secs(m.deadlines.reviews), Math.max(...seatReqs.map(([r]) => {
+    const end = replyTo(r, r.envelope.to);
+    return end && ["result", "decline"].includes(end.envelope.type) ? secs(end.recorded_at) : secs(m.deadlines.reviews);
+  })));
+  check(!verifier || blocking === 0 || (vreqs.length === Math.ceil(blocking / 10) && vreqs.every((r) => {
+    const n = r.envelope.body.acceptance?.length ?? 0;
+    return n >= 1 && n <= 10 && r.envelope.expires_at === m.deadlines.challenge && secs(r.recorded_at) >= seatsDone && secs(r.recorded_at) <= vby;
+  }) && conds.length === blocking && conds.every((c) => c.kind === "custom")),
+    `the verifier's challenge: one custom condition per blocking finding (${blocking}), ten at most to a request, expiring at deadlines.challenge, sent after the seats were done and by deadlines.challenge less 600 seconds (or within 600 seconds of the decline that seated the verifier)`);
+
+  // Check 6: the panel didn't confer.
+  const panel = new Set([...last.seats, ...last.verifiers]);
+  check(!entries.some((e) => secs(e.recorded_at) > roundTime && secs(e.recorded_at) <= secs(m.deadlines.challenge) && panel.has(e.envelope.from) && panel.has(e.envelope.to)),
+    "no envelope passed between two members of the panel from the round to deadlines.challenge");
+
+  // Check 7: the tally and the count.
   const count = clerk.count(tally);
   check(clerk.sameJson(tally, record.tally) && clerk.sameJson(count, record.count), `the tally and the count, made again from the chain: ${count.outcome}, the same verdict`);
+  console.log("   Not checked here, as no re-checker without the receivers' keys can: each seat's request's words against the motion's");
+  console.log("   `words`, each call's choices, and each challenge condition's text against its finding (review.md section 8, last paragraph).");
+  console.log("   Taken from the Obysphere's directory, not the chain: who was active and which owner each key is bound to (draw.md section 8).");
   return count;
 }
 
@@ -294,7 +418,7 @@ if (RECHECK) {
   const read = (f) => JSON.parse(readFileSync(join(RECHECK, f), "utf8"));
   const record = read("record.json");
   const again = await recheck(record, read("chain.json"));
-  check(again.outcome === record.count.outcome, `re-run verdict ${again.outcome} = recorded verdict ${record.count.outcome}`);
+  check(again?.outcome === record.count.outcome, `re-run verdict ${again?.outcome} = recorded verdict ${record.count.outcome}`);
   console.log(failures === 0 ? "All passed." : `${failures} failed.`);
   process.exit(failures === 0 ? 0 : 1);
 }
@@ -315,20 +439,20 @@ try {
   if (policy.status !== 200) throw new Error(`policy: ${policy.status}`);
   const inv = (await client.call("POST", client.spherePath("/invitations"), { token: adminToken, body: { expires_in: 3600, max_uses: 8 } })).body;
   const link = `${sphere.url}/join#sphere=${id}&name=${encodeURIComponent("Council panel")}&by=ada&id=${inv.invitation_id}&secret=${inv.secret}`;
-  const oby = new ref.Obi(client, "ada-convener", ada);
+  const convener = new ref.Obi(client, "ada-convener", ada);
   // The convener publishes a seal key (review.md section 5), so the seats' words are sealed for it alone.
   sealPrivate = randomBytes(32);
   const sealPublic = spec.x25519FromPrivate(sealPrivate).publicRaw;
-  const unsignedCard = ada.card(oby, { name: "Ada's convener", accepts: ["question", "review_request"] });
+  const unsignedCard = ada.card(convener, { name: "Ada's convener", accepts: ["question", "review_request"] });
   delete unsignedCard.signatures;
   Object.assign(cardParams(unsignedCard), { seal_public_key: spec.b64url(sealPublic), seal_key_id: spec.sealKeyIdOf(sealPublic) });
   const redeemed = await client.call("POST", client.spherePath(`/invitations/${inv.invitation_id}/redeem`), {
     body: { secret: inv.secret, owner_key: ada.key.publicKey, card: spec.signCard(unsignedCard, ada.key.privateKey, ada.key.keyId) },
   });
   if (redeemed.status !== 201) throw new Error(`the convener's redeem: ${redeemed.status} ${JSON.stringify(redeemed.body)}`);
-  oby.delegation = ada.assertion("send:review_request send:question reply receive directory:read audit:read", { lifetime: 7200, mayAct: oby.id });
-  await oby.exchange();
-  team = { id, client, ada, oby };
+  convener.delegation = ada.assertion("send:review_request send:question reply receive directory:read audit:read", { lifetime: 7200, mayAct: convener.id });
+  await convener.exchange();
+  team = { id, client, ada, convener };
   check(true, `the Obysphere ${id}, its admin ada, and ada's convener joined`);
 
   console.log("\n2. Five members join through the connector, each for an owner of its own");
@@ -344,7 +468,7 @@ try {
   const goal = "Review the average helper before it merges.";
   const t0 = now();
   const motion = {
-    profile: "review", sphere: id, convener: oby.id, owner: "ada", author: "ada",
+    profile: "review", sphere: id, convener: convener.id, owner: "ada", author: "ada",
     subject: { repo: FIXTURE.repo, pr: 1, base_branch: FIXTURE.baseBranch, head_branch: FIXTURE.headBranch, head_sha: fixture.headSha },
     acceptance: [{ kind: "no_blocker_findings" }], rule: { kind: "majority" }, quorum: 2, veto: true, seats: 3, verifiers: 1,
     diversity: { owners: 3, vendors: 0 },
@@ -354,7 +478,8 @@ try {
   const motionHash = sha256hex("council motion\n" + clerk.canonicalize(motion));
   const before = await chain();
   const listed = await members();
-  const cards = listed.filter((m) => m.status === "active").map((m) => m.card);
+  // The members active at the chain's head: a key valid for the next entry (draw.md section 2).
+  const cards = listed.filter((m) => m.keys.some((k) => spec.keyValidAt(k, before.head.seq + 1))).map((m) => m.card);
   const poolRecord = clerk.pool({
     sphere: id, motion: motionHash, at: before.head, request: "review_request", exclude: ["ada"], seats: 3, verifiers: 1, diversity: motion.diversity,
     members: cards.map((c) => {
@@ -402,7 +527,7 @@ try {
   const { entries: soFar } = await chain();
   const declined = poolRecord.entries.map((x) => x.id).filter((obi) => {
     const call = calls.find((c) => c.to === obi);
-    const end = soFar.find((e) => e.envelope.correlation_id === call.id && e.envelope.from === obi && ["decline", "answer"].includes(e.envelope.type));
+    const end = soFar.find((e) => e.envelope.in_reply_to === call.id && e.envelope.from === obi && ["decline", "answer"].includes(e.envelope.type));
     return end && clerk.unixSeconds(end.recorded_at) < roundTime && (end.envelope.type === "decline" || end.envelope.body.choice === 1);
   });
   const drawn = clerk.draw({ pool: poolRecord, randomness: beacon.randomness, declined });
@@ -472,7 +597,7 @@ try {
   console.log("\n9. The clerk tallies the chain and counts; the convener signs the record");
   const { entries, head } = await chain();
   const tally = clerk.reviewTally({
-    convener: oby.id, subject: { repo: FIXTURE.repo, head_sha: fixture.headSha }, rule: motion.rule, quorum: motion.quorum, veto: motion.veto,
+    convener: convener.id, subject: { repo: FIXTURE.repo, head_sha: fixture.headSha }, rule: motion.rule, quorum: motion.quorum, veto: motion.veto,
     seats: drawn.seats, verifier, round_at: stamp(roundTime), deadlines: { reviews: motion.deadlines.reviews, challenge: motion.deadlines.challenge }, entries: tallied(entries),
   });
   const count = clerk.count(tally);
@@ -482,17 +607,17 @@ try {
   const unsignedRecord = {
     motion, motion_hash: motionHash, pool: poolRecord, pool_hash: poolHash, cards, calls: calls.map(({ to, id }) => ({ to, id })), anchored_at: anchoredAt,
     beacon: { chain: clerk.QUICKNET.chain, round: R, signature: beacon.signature, randomness: beacon.randomness },
-    draws: [{ declined, output: drawn }], through: head, tally, count, key_id: oby.key.keyId,
+    draws: [{ declined, output: drawn }], through: head, tally, count, key_id: convener.key.keyId,
   };
-  const record = { ...unsignedRecord, signature: spec.signBytes(oby.key.privateKey, Buffer.from("council record\n" + clerk.canonicalize(unsignedRecord))) };
+  const record = { ...unsignedRecord, signature: spec.signBytes(convener.key.privateKey, Buffer.from("council record\n" + clerk.canonicalize(unsignedRecord))) };
   writeFileSync(join(run, "record.json"), JSON.stringify(record, null, 1) + "\n");
-  // The chain as any member reads it, and the directory's keys: all a re-check needs besides the record.
-  const saved = { sphere: id, entries: (await chain()).entries, keys: ref.directoryKeys(await members()) };
+  // The chain, and the directory as any member reads it: owners, bound owner keys, key histories and cards.
+  const saved = { sphere: id, entries: (await chain()).entries, members: await members() };
   writeFileSync(join(run, "chain.json"), JSON.stringify(saved, null, 1) + "\n");
   console.log(`   the record: ${join(run, "record.json")}; the chain: ${join(run, "chain.json")}`);
 
   const again = await recheck(JSON.parse(JSON.stringify(record)), JSON.parse(JSON.stringify(saved)));
-  check(again.outcome === count.outcome, `re-run verdict ${again.outcome} = recorded verdict ${count.outcome}`);
+  check(again?.outcome === count.outcome, `re-run verdict ${again?.outcome} = recorded verdict ${count.outcome}`);
   for (const e of entries) console.log(`     seq ${String(e.seq).padStart(2)}  ${e.recorded_at}  ${e.envelope.type.padEnd(14)} ${e.envelope.from} -> ${e.envelope.to}${e.envelope.seal ? "  (sealed)" : ""}`);
 } catch (e) {
   failures++;
