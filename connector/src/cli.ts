@@ -121,7 +121,16 @@ async function join(home: Home, p: Parsed) {
   const rules: Rules = { kind: "rules", sphere: link.sphere, obi, version: 1, at: timestamp(nowSeconds()), send: defaultSend() };
   home.writeJson("rules.json", await signStatement(rules, ownerSigning));
   home.remove("joining.json");
-  say(`\nJoined. The owner's key fingerprint (compare it with the other members' owners out of band): ${ownerSigning.keyId}`);
+  // A first exchange shows the member works. A failure keeps everything: the Sphere holds this member now.
+  const failed = await member.accessToken().then(() => null, (e: unknown) => e);
+  if (failed !== null) {
+    say(`\nJoined, but the first token exchange failed: ${failed instanceof Error ? failed.message : String(failed)}`);
+    const refused = failed instanceof SphereError && (failed.code === "invalid_request" || failed.code === "invalid_dpop_proof");
+    say(refused
+      ? `The member's files are kept. A server refuses tokens bound to another address than the one it knows itself by: if that isn't ${new URL(link.base).host}, ask its operator which it is.`
+      : "The member's files are kept: the next call tries again.");
+  }
+  say(`\n${failed === null ? "Joined. " : ""}The owner's key fingerprint (compare it with the other members' owners out of band): ${ownerSigning.keyId}`);
   say(`The member's folder: ${home.dir} (keep it this user's only, and out of the host agent's reach).`);
   say("Until you set rules, everything the host's agent asks to send waits for your approval. To let it ask questions and request reviews without asking you: obysphere-connector rules --allow question,review_request --to '*'");
   say(`Add it to an MCP host: obysphere-connector mcp-config --home ${home.dir}`);
@@ -250,17 +259,11 @@ async function renew(home: Home, p: Parsed) {
   const key = await ownerKey(home, p);
   const owner = new Owner(file.owner, key);
   const lifetime = Math.floor(days * 86400);
-  let delegation = await owner.delegation(file.sphere, file.obi, { lifetime });
-  // Bound to the server too when it takes that (identity.md section 4.1), and only once an exchange
-  // shows the server takes it at this address; offline, or reached by another name, it names the Sphere alone.
+  // Bound to the server too when it takes that (identity.md section 4.1); offline, it names the Sphere alone.
   const features = await new SphereApi(file.base).features().catch(() => null);
   if (features === null) say(`${new URL(file.base).host} didn't answer: the new delegation names the Sphere alone, not the server.`);
-  else if (features.includes("sphere_url_aud")) {
-    const bound = await owner.delegation(file.sphere, file.obi, { lifetime, aud: serverAudience(file.base, file.sphere) });
-    const probe = new Member({ api: new SphereApi(file.base), sphere: file.sphere, obi: file.obi, owner: file.owner, key: await SigningKey.fromSeed(fromB64url(file.key_seed)), delegation: bound });
-    const ok = await probe.accessToken().then(() => true, (e) => (e instanceof SphereError && e.code === "invalid_request" ? false : Promise.reject(e)));
-    if (ok) delegation = bound;
-  }
+  const aud = features?.includes("sphere_url_aud") ? serverAudience(file.base, file.sphere) : undefined;
+  const delegation = await owner.delegation(file.sphere, file.obi, { lifetime, ...(aud ? { aud } : {}) });
   const exp = parseJwt(delegation)!.claims.exp as number;
   home.writeJson("member.json", { ...file, delegation, delegation_expires_at: timestamp(exp) });
   say(`A new delegation, good until ${timestamp(exp)}.`);

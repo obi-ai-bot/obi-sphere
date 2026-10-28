@@ -253,18 +253,8 @@ export class Member {
     // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
     const aud = (await api.features().catch(() => [] as string[])).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
     const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
-    const member = new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
-    if (aud) {
-      // A server knows its own address; reached by another name (localhost for 127.0.0.1), it refuses
-      // an assertion bound to that name. Then the delegation names the Sphere alone, as before.
-      try {
-        await member.accessToken();
-      } catch (e) {
-        if (!(e instanceof SphereError && e.code === "invalid_request")) throw e;
-        member.delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
-      }
-    }
-    return member;
+    // Nothing after the redeem throws: the Sphere has bound this member to these keys, so the caller must get them.
+    return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
   }
 
   /** The Obysphere's features, read once (`GET /v0.1/features`; none from an older one). A read that fails is tried again next time. */

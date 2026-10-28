@@ -79,7 +79,7 @@ With an Obysphere that lists them in `GET /v0.1/features`, `Member` binds what i
 - `sphere_url_aud`: its delegation (made at `join`) and every actor assertion name the server's URL, `<origin>/v0.1/spheres/<sphere>`, so no other server takes them. `serverAudience(base, sphere)` gives it; `Owner.delegation` and `Owner.token` take it as `aud`.
 - `dpop`: its access tokens are bound to a key it makes for the process (`DpopKey`); every call sends `Authorization: DPoP` and a proof for that call. A token copied out of a log opens nothing alone.
 
-Without them it sends what it always did. `SphereApi.signinProviders()` and `signinStart(provider, ownerKey, returnTo?)` start a sign-in (sphere-api.md section 3.1); send `returnTo` only to a server that lists `signin_providers`.
+Without them it sends what it always did. A server checks both against the address it knows itself by: reached at another one (`localhost` for its `127.0.0.1`), it refuses them, so a member reaches it at its own. `Member.join` returns once the Sphere has bound the member's keys, without an exchange; the first call shows whether the server takes it. `SphereApi.signinProviders()` and `signinStart(provider, ownerKey, returnTo?)` start a sign-in (sphere-api.md section 3.1); send `returnTo` only to a server that lists `signin_providers`.
 
 ## Following up, calling off, introducing
 

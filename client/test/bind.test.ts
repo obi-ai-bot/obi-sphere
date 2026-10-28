@@ -97,13 +97,17 @@ test("calls that overlap at the start share one DPoP key, and every proof is sig
   assert.deepEqual(await m.api.authHeaders("GET", `${BASE}/x`, "another-token"), { Authorization: "Bearer another-token" });
 });
 
-test("join binds to the server, and falls back to the Sphere alone when the server knows itself by another name", async () => {
-  for (const sameName of [true, false]) {
-    const tokens: string[] = [];
+test("join binds the delegation to the server it lists sphere_url_aud on, and nothing after the redeem throws", async () => {
+  // features: listed, not listed, or the call dropped. The token endpoint fails throughout: join never reaches it.
+  for (const features of [["sphere_url_aud"], [], null] as const) {
+    let exchanges = 0;
     const fetch = async (url: string, init: RequestInit) => {
       const p = new URL(url).pathname;
       const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
-      if (p === "/v0.1/features") return json(200, { features: ["sphere_url_aud"] });
+      if (p === "/v0.1/features") {
+        if (features === null) throw new TypeError("fetch failed");
+        return json(200, { features });
+      }
       if (p.endsWith("/redeem")) {
         const body = JSON.parse(String(init.body));
         const params = body.card.capabilities.extensions[0].params;
@@ -113,19 +117,15 @@ test("join binds to the server, and falls back to the Sphere alone when the serv
         });
       }
       if (p === "/v0.1/oauth/token") {
-        const actor = new URLSearchParams(String(init.body)).get("actor_token")!;
-        const aud = String(parseJwt(actor)!.claims.aud);
-        tokens.push(aud);
-        if (!sameName && aud.startsWith("http")) return json(400, { error: "invalid_request", error_description: "aud names an Obysphere on another server" });
-        return json(200, { access_token: "t".repeat(40), issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 3600, scope: "receive" });
+        exchanges++;
+        throw new TypeError("fetch failed");
       }
       return json(404, { error: { code: "not_found", message: "no" } });
     };
     const owner = await Owner.generate("ada");
     const link = `${BASE}/join#sphere=${SPHERE}&id=9187a87a-3126-424c-8861-8811bba1a5ec&secret=${"A".repeat(43)}`;
-    const m = await Member.join({ link, owner, obi: "ada-agent", key: await SigningKey.generate(), accepts: ["question"], name: "A", description: "a", version: "0.1.0", fetch }).catch((e) => e);
-    if (!(m instanceof Member)) throw m;
-    const aud = parseJwt(m.delegation)!.claims.aud;
-    assert.equal(aud, sameName ? serverAudience(BASE, SPHERE) : `obi-sphere:${SPHERE}`, `same name: ${sameName}`);
+    const m = await Member.join({ link, owner, obi: "ada-agent", key: await SigningKey.generate(), accepts: ["question"], name: "A", description: "a", version: "0.1.0", fetch });
+    assert.equal(parseJwt(m.delegation)!.claims.aud, features?.length ? serverAudience(BASE, SPHERE) : `obi-sphere:${SPHERE}`, `features: ${JSON.stringify(features)}`);
+    assert.equal(exchanges, 0);
   }
 });
