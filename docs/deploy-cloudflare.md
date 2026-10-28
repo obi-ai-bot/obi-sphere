@@ -72,6 +72,8 @@ pnpm run deploy -- --env deskree    # new migrations first, then the Worker
 
 Apply a migration immediately before the deploy that needs it, as the script does: between the two, the running Worker meets a table it doesn't know. Then check the routes, old and new (a call without a token answers `401` on every route that needs one).
 
+The phone relay is an optional extension ([spec/sphere-api.md](../spec/sphere-api.md), section 9), on unless `PHONE_RELAY` is `off`: `env.deskree` doesn't set it, so its members' phones keep their relay. `GET /v0.1/features` lists it; health is unchanged.
+
 The first deploy with the Doorbell adds a Durable Object class (`v2-doorbells` in `wrangler.jsonc`). Cloudflare then refuses `wrangler rollback` to any version before it ([Rollbacks, "Bindings"](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/#bindings)): from there on, undo by deploying the older code with the `Doorbell` class still exported. The first deploy with the phone relay does the same with `PhoneRelay` (`v3-relays`), and adds migration `0005_relays.sql`.
 
 To rotate the operator token, run `wrangler secret put SPHERE_OPERATOR_TOKEN --env deskree` and update the Keychain item (account `obysphere.deskree.com`) to match. Until 2026-10-23 the script kept it under account `deskree`; Oby no longer looks there, so move that item to the host's account once.

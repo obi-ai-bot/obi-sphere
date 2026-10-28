@@ -18,6 +18,8 @@ export interface Env {
   CREATOR_WORKSPACES?: string;
   /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */
   SPHERE_CREATE_LIMIT?: string;
+  /** `off`: no phone relay (spec/sphere-api.md section 9, the optional extension `phone_relay`); its paths answer 404 and /v0.1/features doesn't list it. Unset or `on`: the relay is offered; any other value turns it off. */
+  PHONE_RELAY?: string;
 }
 
 /** What the handlers take besides the request and the bindings; tests pass their own clock. */

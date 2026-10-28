@@ -21,6 +21,7 @@ services:
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       CREATOR_WORKSPACES: ${CREATOR_WORKSPACES:-}
       SPHERE_CREATE_LIMIT: ${SPHERE_CREATE_LIMIT:-}
+      PHONE_RELAY: ${PHONE_RELAY:-}
     volumes:
       - sphere:/data
 

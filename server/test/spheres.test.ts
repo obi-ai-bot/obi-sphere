@@ -3,6 +3,8 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { handle } from "../src/app";
+import { CLIENTS } from "../src/clients";
+import { joinPageFor } from "../src/routes/spheres";
 import { sha256Hex } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
 import { BASE, Clock, OPERATOR, World, expectSchema, makeCall, newKey } from "./helpers";
@@ -17,29 +19,56 @@ describe("health", () => {
     expect(r.headers.get("Content-Type")).toBe("application/json");
   });
 
-  it("lists the additions it takes at /v0.1/features, never in health (spec/README.md, Versions)", async () => {
-    const call = makeCall(new Clock());
-    const r = await call("GET", "/v0.1/features");
+  it("lists the additions it takes and the extensions it offers at /v0.1/features, never in health (spec/README.md, Versions)", async () => {
+    const r = await makeCall(new Clock())("GET", "/v0.1/features");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ features: ["cancel", "card_classes", "card_runtime", "card_topics", "follow_up", "introduction"] });
+    expect(r.body).toEqual({ features: ["cancel", "card_classes", "card_runtime", "card_topics", "follow_up", "introduction", "phone_relay"] });
     expectSchema("featuresResponse", r.body);
   });
 
-  it("tells someone who opens an invite link in a browser what to do with it", async () => {
+  it("tells someone who opens an invite link in a browser how to join with any client", async () => {
     const r = await handle(new Request(`${BASE}/join`), env, { now: () => 0 });
     expect(r.status).toBe(200);
     expect(r.headers.get("Content-Type")).toContain("text/html");
     const csp = r.headers.get("Content-Security-Policy")!;
     expect(csp).toContain("default-src 'none'");
     const page = await r.text();
-    expect(page).toContain("Settings › Obysphere");
-    // Someone without Oby yet is told where to get it.
-    expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby#readme">Get Oby for your Mac</a>`);
-    // Open in Oby: oby://join/<host>#<fragment>, built in the page; its one script is the only one the CSP allows.
+    expect(page).toContain("Give the link to your agent's client");
+    // The format, for a client's author.
+    expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby-sphere/blob/main/spec/sphere-api.md#21-invite-links">sphere-api.md, section 2.1</a>`);
+    expect(csp).toContain("frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+    expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby-sphere#who-can-join-today">Who can join today</a>`);
+    // Nothing on it is about one client: no product but the ones listed (none listed by default),
+    // the standards' own repository aside.
+    expect(page.replaceAll("obi-ai-bot/oby-sphere", "")).not.toMatch(/\boby\b|Mac|Settings ›/i);
+    // Its one script, the only one the CSP allows, reads the page's own address and sends nothing.
     const script = /<script>(.*)<\/script>/s.exec(page)![1]!;
-    expect(script).toContain(`"oby://join/"+location.host+location.hash`);
+    expect(script).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|WebSocket|src=/);
     const hash = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(script)))));
     expect(csp).toContain(`script-src 'sha256-${hash}'`);
+  });
+
+  it("lists the clients that publish a conformance report, each with its own Open link", async () => {
+    const page = await (await joinPageFor([
+      { name: "Example Agent", page: "https://agent.example/", report: "https://agent.example/conformance", scheme: "example-agent" },
+      { name: "Plain <Client>", page: "https://plain.example/", report: "https://plain.example/report" },
+    ])).text();
+    expect(page).toContain(`<li><a href="https://agent.example/">Example Agent</a> · <a class="open" data-scheme="example-agent">Open in Example Agent</a> · <a href="https://agent.example/conformance">Conformance report</a></li>`);
+    // A client with no scheme of its own gets no Open link; what the list says is escaped.
+    expect(page).toContain(`<li><a href="https://plain.example/">Plain &#60;Client&#62;</a> · <a href="https://plain.example/report">Conformance report</a></li>`);
+    // The script builds each Open link as <scheme>://join/<host>#<fragment>, only on https (sphere-api.md section 2.1).
+    expect(page).toContain(`if(location.protocol==="https:")for(const a of document.querySelectorAll("a[data-scheme]"))a.href=a.dataset.scheme+"://join/"+location.host+location.hash`);
+  });
+
+  it("lists only clients with a report, an https page and a scheme of the right form", () => {
+    for (const c of CLIENTS) {
+      expect(c.page, c.name).toMatch(/^https:\/\//);
+      expect(c.report, c.name).toMatch(/^https:\/\//);
+      if (c.scheme !== undefined) {
+        expect(c.scheme, c.name).toMatch(/^[a-z][a-z0-9+.-]*$/);
+        expect(["http", "https", "javascript", "data", "file", "blob", "about", "vbscript"], c.name).not.toContain(c.scheme);
+      }
+    }
   });
 
   it("answers 404 not_found for anything not in the API", async () => {

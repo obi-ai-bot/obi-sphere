@@ -783,6 +783,8 @@ export function buildFixtures() {
   wireCase("invalid-relay-seventeen-devices", "17 devices: a relay has at most 16.", RELAY, { relay: relayId, devices: deviceIds(17) }, "reject");
   wireCase("invalid-relay-upper-case-device", "A token hash in upper-case hex: hashes are lower case.", RELAY, { relay: relayId, devices: [deviceIds(1)[0].toUpperCase()] }, "reject");
   wireCase("invalid-relay-short-id", "A relay id of 21 characters: fewer than 128 random bits.", RELAY, { relay: relayId.slice(0, 21), devices: [] }, "reject");
+  // An Obysphere that offers the phone relay lists it (sphere-api.md section 9).
+  wireCase("valid-features-phone-relay", "An Obysphere that takes card_runtime and offers the phone relay.", "wire/features.response", { features: ["card_runtime", "phone_relay"] }, "accept");
 
   // ---- Public key material ------------------------------------------------------------------
   const publicKeys = Object.fromEntries(Object.entries(keys).map(([label, k]) => [label, { seed_string: k.seed, public_key: k.publicKey, key_id: k.keyId }]));
