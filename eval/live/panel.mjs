@@ -131,6 +131,11 @@ const opened = (e) => (e.seal ? { ...e, body: spec.openBody(e, sealPrivate) } : 
 function cardParams(card) {
   return card.capabilities.extensions[0].params;
 }
+// A card as the clerk's pool takes it: its vendors count only behind the feature card_runtime (draw.md section 2).
+function poolMember(card) {
+  const q = cardParams(card);
+  return { obi_id: q.obi_id, owner: q.owner, accepts: q.accepts, ...(q.features?.includes("card_runtime") && q.vendors ? { vendors: q.vendors } : {}) };
+}
 async function members() {
   const r = await team.client.call("GET", team.client.spherePath("/members"), { token: team.convener.accessToken });
   if (r.status !== 200) throw new Error(`members: ${r.status}`);
@@ -191,7 +196,9 @@ function claude(o, prompt, cwd) {
   ];
   const env = { HOME: process.env.HOME, PATH: process.env.PATH, USER: process.env.USER };
   return new Promise((done, failed) => {
-    const child = spawn("claude", argv, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
+    // In a process group of its own, which stopAll ends with the rest when the script stops.
+    const child = spawn("claude", argv, { cwd, env, stdio: ["ignore", "pipe", "pipe"], detached: true });
+    children.push(child);
     let out = "";
     let err = "";
     const timer = setTimeout(() => child.kill("SIGTERM"), 900000);
@@ -295,10 +302,7 @@ async function recheck(record, saved) {
   const rebuilt = clerk.pool({
     sphere: m.sphere, motion: record.motion_hash, at: p.at, request: "review_request", exclude: [m.author, m.owner],
     seats: m.seats, verifiers: m.verifiers, diversity: m.diversity,
-    members: record.cards.map((c) => {
-      const q = cardParams(c);
-      return { obi_id: q.obi_id, owner: q.owner, accepts: q.accepts, ...(q.vendors ? { vendors: q.vendors } : {}) };
-    }),
+    members: record.cards.map(poolMember),
   });
   check(clerk.sameJson(rebuilt, p), "the clerk's pool, run on those cards, is the record's pool");
 
@@ -445,6 +449,8 @@ try {
   const sealPublic = spec.x25519FromPrivate(sealPrivate).publicRaw;
   const unsignedCard = ada.card(convener, { name: "Ada's convener", accepts: ["question", "review_request"] });
   delete unsignedCard.signatures;
+  // It takes card_runtime, as every active member must before the members can say what runs them (identity.md section 2.3).
+  unsignedCard.version = "0.1.0+card-runtime";
   Object.assign(cardParams(unsignedCard), { seal_public_key: spec.b64url(sealPublic), seal_key_id: spec.sealKeyIdOf(sealPublic) });
   const redeemed = await client.call("POST", client.spherePath(`/invitations/${inv.invitation_id}/redeem`), {
     body: { secret: inv.secret, owner_key: ada.key.publicKey, card: spec.signCard(unsignedCard, ada.key.privateKey, ada.key.keyId) },
@@ -460,6 +466,12 @@ try {
     mkdirSync(userHome(o), { recursive: true });
     const r = cli(o, ["join", link, "--owner", o, "--obi", `${o}-agent`, "--accepts", "question,review_request", "--name", `${o}'s Claude Code`, "--description", "Claude Code, through the connector.", "--passphrase-stdin"]);
     check(r.code === 0, `${o}-agent joins${r.code ? `: ${r.err.slice(0, 300)}` : ""}`);
+  }
+  // Each card then says what runs its agent: claude, on Anthropic's models (identity.md section 2.3). Declared, not proven.
+  const claudeVersion = execFileSync("claude", ["--version"], { encoding: "utf8", env: { HOME: process.env.HOME, PATH: process.env.PATH, USER: process.env.USER } }).trim().split(/\s+/)[0];
+  for (const o of OWNERS) {
+    const r = cli(o, ["card", "--runtime", "claude", "--runtime-version", claudeVersion, "--vendor", "anthropic", "--passphrase-stdin"]);
+    check(r.code === 0, `${o}-agent's card says: runtime claude ${claudeVersion}, vendors anthropic${r.code ? `: ${r.err.slice(0, 300)}` : ""}`);
     receive(o);
   }
 
@@ -471,7 +483,7 @@ try {
     profile: "review", sphere: id, convener: convener.id, owner: "ada", author: "ada",
     subject: { repo: FIXTURE.repo, pr: 1, base_branch: FIXTURE.baseBranch, head_branch: FIXTURE.headBranch, head_sha: fixture.headSha },
     acceptance: [{ kind: "no_blocker_findings" }], rule: { kind: "majority" }, quorum: 2, veto: true, seats: 3, verifiers: 1,
-    diversity: { owners: 3, vendors: 0 },
+    diversity: { owners: 3, vendors: 1 },
     deadlines: { seats: stamp(t0 + 1800), reviews: stamp(t0 + 3000), challenge: stamp(t0 + 4200) },
     words: { goal: sha256hex(goal), summary: null }, created_at: stamp(t0),
   };
@@ -482,14 +494,11 @@ try {
   const cards = listed.filter((m) => m.keys.some((k) => spec.keyValidAt(k, before.head.seq + 1))).map((m) => m.card);
   const poolRecord = clerk.pool({
     sphere: id, motion: motionHash, at: before.head, request: "review_request", exclude: ["ada"], seats: 3, verifiers: 1, diversity: motion.diversity,
-    members: cards.map((c) => {
-      const p = cardParams(c);
-      return { obi_id: p.obi_id, owner: p.owner, accepts: p.accepts, ...(p.vendors ? { vendors: p.vendors } : {}) };
-    }),
+    members: cards.map(poolMember),
   });
   const poolHash = clerk.poolHash(poolRecord);
   check(poolRecord.entries.length === 5, `the pool: ${poolRecord.entries.map((e) => `${e.id} (${e.owner}, vendors ${JSON.stringify(e.vendors)})`).join(", ")}; ada's convener out (the author's owner)`);
-  console.log(`   The cards declare no vendor yet (#54), so the panel asks for 0 vendors: every seat runs Anthropic's models, one vendor. The two-vendor panel waits for a second vendor's runs.`);
+  console.log("   Every card declares one vendor, anthropic, so the panel asks for 1: a second vendor's seats wait for that vendor's runs.");
 
   console.log("\n4. Calls: one question to each pool member, its id the pool's anchor id");
   const calls = [];
