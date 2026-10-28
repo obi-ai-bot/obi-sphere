@@ -2,20 +2,20 @@
 
 Status: **Draft**, part of [the next protocol version](README.md). Issue: [#52](https://github.com/obi-ai-bot/oby-sphere/issues/52).
 
-Of `obi/0.1`'s fifteen action types, five carry no domain (`question`, `answer`, `accept`, `decline`, `status`); the rest are about git, a member's machine or an API account. Policy and remembered decisions are keyed by repository, and references name only repositories, pull requests, issues and jobs. An agent that works on documents, data, research or operations has almost nothing it can ask for.
+Of `obi/0.1`'s seventeen action types, seven carry no domain (`question`, `answer`, `accept`, `decline`, `status`, and the `introduction` and `cancel` #53 added); the other ten are about git, a member's machine or an API account. Policy and remembered decisions are keyed by repository, and references name only repositories, pull requests, issues and jobs. An agent that works on documents, data, research or operations has almost nothing it can ask for.
 
 The next version splits the protocol in two: a **Core** every member implements, whatever its work, and **profiles** on top, of which Code is the first.
 
 ## 1. What changes, in short
 
-- **Core**: identity, the envelope, signing and sealing, text as data, exchanges, the record, the HTTP binding, and the domain-neutral actions. New in Core: `work_request`, a request for any kind of work, with acceptance conditions a machine can check (sections 5 and 6); `cancel` for any request; references to documents, datasets, topics and earlier exchanges (section 7); scopes for policy and remembered decisions (section 8).
+- **Core**: identity, the envelope, signing and sealing, text as data, exchanges, the record, the HTTP binding, and the domain-neutral actions. New in Core: `work_request`, a request for any kind of work, with acceptance conditions a machine can check (sections 5 and 6); `cancel` for every request type (`obi/0.1` has it for four); references to documents, datasets, topics and earlier exchanges (section 7); scopes for policy and remembered decisions (section 8).
 - **The Code profile**: `review_request`, findings and their conditions, the code references, the `repo` scope, and approving on a code host. `handoff` becomes a `work_request` whose subject is a branch (D5).
 - **Dropped**: the compute and share actions, the job channel and the runner status (D4, section 10).
 
 | | `obi/0.1` | Next version |
 |---|---|---|
-| Request types | `review_request`, `question`, `handoff`, `run_request`, `share_offer` | Core: `question`, `work_request`, introductions (#53). Code: `review_request`. |
-| Replies | `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_status`, `share_revoke` | Core: `status`, `accept`, `decline`, `result`, `answer`, `cancel`. |
+| Request types | `review_request`, `question`, `handoff`, `introduction`, `run_request`, `share_offer` | Core: `question`, `work_request`, `introduction`. Code: `review_request`. |
+| Replies | `status`, `accept`, `decline`, `result`, `answer`, `cancel`, `run_progress`, `run_return`, `run_cancel`, `share_status`, `share_revoke` | Core: `status`, `accept`, `decline`, `result`, `answer`, `cancel`. |
 | What policy is keyed by | repository | scope: a typed name, of which a repository is one kind |
 | What a reference can name | repository, pull request, issue, job | Core: exchange, document, dataset, topic. Code: repository, pull request, issue, branch, commit, job. |
 
@@ -28,7 +28,7 @@ Which of these must wait for a new version, and which could come sooner as addit
 - identity: keys, the agent card, delegation, owners ([owners.md](owners.md) adds organisations);
 - the JSON rules, the envelope, signing, sealing the words, text as data, verifying a message;
 - exchanges and their rules (section 4);
-- the actions `question`, `answer`, `work_request`, the introduction request #53 adds, `status`, `accept`, `decline`, `result` (for a `work_request`) and `cancel`;
+- the actions `question`, `answer`, `work_request`, `introduction` (#53), `status`, `accept`, `decline`, `result` (for a `work_request`) and `cancel`;
 - references, scopes, policy, remembered decisions and sharing rules (sections 7 and 8);
 - the receiver's decision rule, with "What received work never gets" unchanged and "What a received action never causes" amended only for accepted work's writes (section 5, "Where the work writes");
 - the record (the audit chain) and the HTTP binding.
@@ -59,14 +59,14 @@ An agent that never touches git lists no profile and accepts `question`, `work_r
 |---|---|---|---|
 | `question` | Core | starts | unchanged, but `about` takes every reference kind (section 7) |
 | `work_request` | Core | starts | new; replaces `handoff` (D5) |
-| introduction (#53) | Core | starts | the shape this Draft assumes for #53's introductions |
+| `introduction` | Core | starts | as the #53 addition (#76) defines it, `{member, about?, note?, follows?}`, ended by its `accept`; `about` takes every reference kind (section 7) |
 | `review_request` | Code | starts | unchanged |
 | `status` | Core | continues | unchanged |
 | `accept` | Core | continues | unchanged |
 | `decline` | Core | ends | `share_used` is gone from `reason`; `unavailable` stays for any request |
 | `result` | Core (`for: work_request`), Code (`for: review_request`) | ends | `for: handoff` and `for: run_request` are gone; `for: work_request` is new |
 | `answer` | Core | ends | `by: "obi"` is `by: "agent"` |
-| `cancel` | Core | ends | the #53 addition; replaces `run_cancel` |
+| `cancel` | Core | ends | the #53 addition (#76), now for every request type; replaces `run_cancel` |
 
 ## 4. Exchanges
 
@@ -75,7 +75,7 @@ The exchange rules of protocol.md section 4, with `cancel` and without the rules
 1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`. The exception is `cancel`, which only the request's sender sends, to its receiver.
 2. The exchange has not ended: no `decline`, `result`, `answer` or `cancel` came before it, and, for an introduction, no `accept`.
 3. An `accept` comes only when the exchange has no `accept` yet. A `status` may come before or after the `accept`, any number of times.
-4. What finishes a request is its type's: a `result` whose `for` is the request's type finishes a `work_request` or a `review_request`; an `answer` finishes a `question`; an introduction's `accept` finishes it (the shape this Draft assumes for #53's introductions). A profile's request type says which finishes it.
+4. What finishes a request is its type's: a `result` whose `for` is the request's type finishes a `work_request` or a `review_request`; an `answer` finishes a `question`; an introduction's `accept` finishes it, as in `obi/0.1` since #53. A profile's request type says which finishes it.
 5. A `result` comes only after that exchange's `accept`. An `answer` needs no `accept`. An introduction takes only `status`, `accept` and `decline` (and the sender's `cancel`).
 6. A `decline` or a `cancel` may come at any point before the end.
 
@@ -90,7 +90,7 @@ The exchange rules of protocol.md section 4, with `cancel` and without the rules
 | `goal` | yes | What the work is for, one line (200). Data. |
 | `subject` | no | One reference (section 7): what the work is done on. |
 | `about` | no | 1 to 10 distinct references: what the work relates to. |
-| `follows` | no | The earlier request between the same two members, in either direction, that this one follows up, by its id. #53 adds a follow-up link to `obi/0.1`; this is the shape this Draft assumes for it, on every request type, and the addition's text wins where it differs. |
+| `follows` | no | The earlier request between the same two members, in either direction, that this one follows up, by its id. #53 added it to `obi/0.1` (#76) for the other request types; the same rule holds. |
 | `acceptance` | yes | 1 to 10 typed acceptance conditions (section 6). |
 | `summary` | no | Context (2,000). Data. |
 
@@ -278,7 +278,7 @@ A reference names one thing, typed, so that it can be checked and shown, never f
 
 - In a request (`subject`, `about`), a document, dataset or job reference counts for anything only when it names something of the **receiver's** owner. Before such a reference decides anything (whether the receiver can work on it, which sharing rule applies, which remembered decision covers the request), the receiver MUST check that the collection is its own owner's and holds that `id` (that the job is its own and runs in that repository), and treat the reference as unknown otherwise. A reference to the sender's own things tells the receiver what the sender means, and gives it nothing to open.
 - In a reply (`produced`, an answer's `refs`), it names something of the **sender's** owner: what the worker produced, or what an answer drew on.
-- **An `exchange` reference** counts only when the request's sender and receiver were that exchange's two parties, the rule this Draft gives `follows` too (an earlier request between the same two members, in either direction). Any other is unknown, whatever the record shows, so a request can't make a receiver bring a third member's words into work for the sender. `follows` is the one link a request makes to the exchange it continues; an `exchange` reference in `about` names any other earlier exchange between the same two.
+- **An `exchange` reference** counts only when the request's sender and receiver were that exchange's two parties, the rule `follows` has in `obi/0.1` since #53 (an earlier request between the same two members, in either direction). Any other is unknown, whatever the record shows, so a request can't make a receiver bring a third member's words into work for the sender. `follows` is the one link a request makes to the exchange it continues; an `exchange` reference in `about` names any other earlier exchange between the same two.
 
 **References are distinct** within a list, repositories compared ignoring ASCII case, as in `obi/0.1`.
 
@@ -329,7 +329,7 @@ A reference names one thing, typed, so that it can be checked and shown, never f
     "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
   },
   "topic_id": {
-    "description": "A topic id: an identifier, not words (this Draft's choice; see section 8).",
+    "description": "A topic id, as a card's topics are since #53: an identifier, not words.",
     "type": "string",
     "minLength": 1,
     "maxLength": 64,
@@ -391,7 +391,7 @@ Policy and remembered decisions are keyed by a **scope**, a typed name for where
 
 **Sharing rules** cover scopes the same way. What they let an agent tell is a list of kinds too: Core has **shared results** (what the owner already shared with that person); Code adds **job status** and **published pull requests**, as `obi/0.1` defines them. A Core-only agent answers by itself only from shared results.
 
-**Topics as scopes.** This Draft takes topics as identifiers (`^[a-z0-9][a-z0-9-]{0,63}$`), not words, so that they can be matched and carry no instruction. That is its own choice: #53 describes a card's topics "as data". If topics land as words, the `topic` scope kind needs identifiers of its own next to them.
+**Topics as scopes.** Since #53 (#76), a card's topics are identifiers (`^[a-z0-9][a-z0-9-]{0,63}$`), not words, so `topic:<id>` uses them as they are.
 
 ## 9. The Code profile
 
@@ -400,7 +400,7 @@ What `obi/0.1` has for code collaboration, unchanged except as said:
 - **`review_request`** and its `result` (`for: review_request`), with findings, `approve_on_host` and `host_review`, as in `obi/0.1`, with Core's `follows`, `cancel` and `before` and the consistency rule of section 5. A review of something other than a commit (a document, a design) waits until a real use needs it, such as the Council deciding about documents. Then findings, located by a reference instead of a file and line, would move to Core, with `no_blocker_findings` and `no_findings_at_or_above`.
 - **Findings** (`file`, `line`, `end_line`, severity, `title`, `detail`) and their condition kinds.
 - **The references** `repo`, `pr`, `issue`, `job`, and the new `branch` and `commit` (section 7); the `repo` scope kind; the sharing-rule kinds job status and published pull requests.
-- **Approving on the code host**, as `obi/0.1` has it after the owner-confirmation rule (#38), with the neutral marker `by agent:` ([identifiers.md, section 4](identifiers.md#4-the-code-host-marker-d3)) and the rule for organisation owners ([owners.md, section 5](owners.md#5-what-an-organisations-agent-may-do-d11)). One addition, for `cancel`: a `cancel` from the request's sender ends the exchange, and with it any confirmation the receiver's owner gave for it. The receiver approves nothing after a `cancel`, as after the request's `expires_at`, and checks for one among its deliveries right before it posts.
+- **Approving on the code host**, as `obi/0.1` has it after the owner-confirmation rule (#38), with the neutral marker `by agent:` ([identifiers.md, section 4](identifiers.md#4-the-code-host-marker-d3)) and the rule for organisation owners ([owners.md, section 5](owners.md#5-what-an-organisations-agent-may-do-d11)). Since #53, `obi/0.1` already says that a `cancel` from the request's sender ends the exchange, and with it any confirmation the receiver's owner gave for it, so the receiver approves nothing after one. The Draft adds that the receiver checks for one among its deliveries right before it posts.
 - **`handoff`** becomes a `work_request` on a `branch` subject (section 5, D5).
 
 A member that lists `code` in its card's `profiles` may accept `review_request`, and may take `work_request`s whose subject is a Code reference.
