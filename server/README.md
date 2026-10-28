@@ -32,6 +32,7 @@ SPHERE_OPERATOR_TOKEN=<at least 32 random characters> \
 | `pnpm run test:client` | The scripted client's own tests (what it signs passes the reference verifier) and the fixture check's tests. |
 | `pnpm run check:fixtures` | [e2e/fixtures/](e2e/fixtures/) still equal obi's `e2e/fixtures/messages/brief.json` and the `body` of `result.example.json` ([e2e/fixtures.mjs](e2e/fixtures.mjs)). It needs an obi checkout (`OBI_DIR`, or `../obi` beside obi-sphere) and fails without one. The scenario makes the same comparison whenever it finds a checkout, and stops on a difference. |
 | `pnpm run check:validators` | [src/protocol/validators.generated.js](src/protocol/validators.generated.js) is up to date with `../spec/schemas/v0.1` (`pnpm run gen:validators` rewrites it). |
+| `pnpm run check:client` | [src/protocol/lib/](src/protocol/lib/) is the client library's protocol code ([`../client/src`](../client/src)), copied as it is: edit the rules there and run `pnpm run sync:client`. |
 
 CI runs all of them but `test:node` ([.github/workflows/server.yml](../.github/workflows/server.yml)), `check:fixtures` against a checkout of oby's `dev` (obi-ai-bot/oby, public, so no token is needed).
 

@@ -147,7 +147,8 @@ export class SigningKey {
     der.set(PKCS8_ED25519_PREFIX);
     der.set(seed, PKCS8_ED25519_PREFIX.length);
     const extractable = await crypto.subtle.importKey("pkcs8", der, { name: "Ed25519" }, true, ["sign"]);
-    const jwk = await crypto.subtle.exportKey("jwk", extractable);
+    // A JWK, whatever union the runtime's typings give exportKey.
+    const jwk = (await crypto.subtle.exportKey("jwk", extractable)) as { x?: unknown };
     if (typeof jwk.x !== "string") throw new Error("the key has no public part");
     const key = await crypto.subtle.importKey("pkcs8", der, { name: "Ed25519" }, false, ["sign"]);
     return new SigningKey(key, Uint8Array.from(seed), jwk.x, await keyIdOf(jwk.x));

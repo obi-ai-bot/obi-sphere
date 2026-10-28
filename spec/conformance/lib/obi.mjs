@@ -1,35 +1,39 @@
 // Reference implementation of the Obi-to-Obi protocol v0.1 checks: canonical JSON (RFC 8785),
 // Ed25519 keys and signatures, envelope, agent card and audit chain verification.
 // It is what the conformance runner judges fixtures with, and it is meant to be read next to
-// spec/protocol.md, spec/identity.md and spec/sphere-api.md. Node >= 22, node:crypto only, plus ajv.
+// spec/protocol.md, spec/identity.md and spec/sphere-api.md. Node >= 22.18, node:crypto only, plus
+// ajv. The rules over a parsed message (the action types, the exchange and follow-up rules, the
+// rules no schema can say, which key is valid at a seq) are the client library's, client/src/rules.ts:
+// the same code the server runs, so each rule has one implementation.
 
 import { createCipheriv, createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, hkdfSync, randomBytes, sign, verify } from "node:crypto";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
+import * as rules from "../../../client/src/rules.ts";
 
-export const PROTOCOL = "obi/0.1";
-export const ENVELOPE_SIGNING_PREFIX = "obi/0.1 envelope\n";
+export const PROTOCOL = rules.PROTOCOL;
+export const ENVELOPE_SIGNING_PREFIX = rules.ENVELOPE_SIGNING_PREFIX;
 export const AUDIT_HASH_PREFIX = "obi/0.1 audit\n";
 export const CARD_EXTENSION_URI = "urn:obi-sphere:ext:obi:0.1";
-export const MAX_ENVELOPE_BYTES = 65536;
-export const MAX_LIFETIME_SECONDS = 2592000;
-export const CLOCK_SKEW_SECONDS = 300;
+export const MAX_ENVELOPE_BYTES = rules.MAX_ENVELOPE_BYTES;
+export const MAX_LIFETIME_SECONDS = rules.MAX_LIFETIME_SECONDS;
+export const CLOCK_SKEW_SECONDS = rules.CLOCK_SKEW_SECONDS;
 export const ZERO_HASH = "0".repeat(64);
-export const REQUEST_TYPES = ["review_request", "question", "handoff", "run_request", "share_offer", "introduction"];
-export const REPLY_TYPES = ["status", "accept", "decline", "result", "answer", "run_progress", "run_return", "run_cancel", "share_status", "share_revoke", "cancel"];
+export const REQUEST_TYPES = [...rules.REQUEST_TYPES];
+export const REPLY_TYPES = [...rules.REPLY_TYPES];
 export const ACTION_TYPES = [...REQUEST_TYPES, ...REPLY_TYPES];
-export const TERMINAL_TYPES = ["decline", "result", "answer", "run_return", "run_cancel", "share_revoke", "cancel"];
+export const TERMINAL_TYPES = [...rules.TERMINAL_TYPES];
 // The replies that belong only to a run_request's exchange (spec/protocol.md section 4, rule 7).
-export const RUN_REPLY_TYPES = ["run_progress", "run_return", "run_cancel"];
+export const RUN_REPLY_TYPES = [...rules.RUN_REPLY_TYPES];
 // What a share_offer's exchange takes, and nothing else (spec/protocol.md section 4, rule 8).
-export const SHARE_REPLY_TYPES = ["share_status", "share_revoke", "decline"];
+export const SHARE_REPLY_TYPES = [...rules.SHARE_REPLY_TYPES];
 // The replies a request's own sender sends, to its receiver (spec/protocol.md section 4, rule 1).
-export const SENDER_REPLY_TYPES = ["run_cancel", "share_status", "share_revoke", "cancel"];
+export const SENDER_REPLY_TYPES = [...rules.SENDER_REPLY_TYPES];
 // The requests a cancel calls off (spec/protocol.md section 4, rule 10).
-export const CANCELLABLE_TYPES = ["review_request", "question", "handoff", "introduction"];
-export const SEVERITY_RANK = { nit: 1, minor: 2, major: 3, blocker: 4 };
+export const CANCELLABLE_TYPES = [...rules.CANCELLABLE_TYPES];
+export const SEVERITY_RANK = { ...rules.SEVERITY_RANK };
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const SPEC_DIR = join(here, "..", "..");
@@ -399,83 +403,16 @@ const seconds = (timestamp) => Date.parse(timestamp) / 1000;
 const fail = (code, message) => ({ ok: false, code, message });
 const OK = { ok: true };
 
-// Checks that need more than one field. The schema has run already.
-export function semanticProblems(env) {
-  const problems = [];
-  const t = env.type;
-  if (Number.isNaN(seconds(env.created_at)) || Number.isNaN(seconds(env.expires_at))) problems.push("a timestamp is not a real date");
-  if (new Date(seconds(env.created_at) * 1000).toISOString().replace(".000Z", "Z") !== env.created_at) problems.push("created_at is not a real date");
-  if (new Date(seconds(env.expires_at) * 1000).toISOString().replace(".000Z", "Z") !== env.expires_at) problems.push("expires_at is not a real date");
-  if (!(seconds(env.expires_at) > seconds(env.created_at))) problems.push("expires_at must be after created_at");
-  if (seconds(env.expires_at) - seconds(env.created_at) > MAX_LIFETIME_SECONDS) problems.push(`a message may live at most ${MAX_LIFETIME_SECONDS} seconds`);
-  if (env.from === env.to) problems.push("from and to must differ");
-  if (REQUEST_TYPES.includes(t) && env.correlation_id !== env.id) problems.push("a request's correlation_id must equal its id");
-  if (REPLY_TYPES.includes(t) && env.in_reply_to !== env.correlation_id) problems.push("a reply's in_reply_to must equal its correlation_id");
-  const body = env.body;
-  // An introduction introduces a third member: neither its sender nor its receiver (section 5.18).
-  if (t === "introduction" && (body.member === env.from || body.member === env.to)) problems.push("an introduction's member is neither its sender nor its receiver");
-  // A follow-up follows an earlier exchange, not its own (section 5.19).
-  if (body.follows !== undefined && body.follows === env.id) problems.push("a request doesn't follow itself up");
-  if (t === "result") problems.push(...resultProblems(body));
-  problems.push(...refProblems(body));
-  for (const finding of body.findings ?? []) {
-    if (finding.end_line !== undefined && finding.end_line < finding.line) problems.push(`finding ${finding.id}: end_line before line`);
-  }
-  return problems;
-}
+// The rules no schema can say (protocol.md section 10, check 3), the references' and a result's
+// own rules, which key is valid at a seq, and the exchange and follow-up rules (section 4): the
+// client library's (client/src/rules.ts), the same code the server runs.
+export const semanticProblems = (env) => rules.semanticProblems(env);
 
-// The references in one list are distinct, repositories compared ignoring ASCII case
-// (spec/protocol.md section 5.9): `Acme/App` and `acme/app` name the same repository.
-const asciiLower = (s) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
-export function refProblems(body) {
-  const problems = [];
-  for (const list of ["about", "refs"]) {
-    const seen = new Set();
-    for (const ref of body[list] ?? []) {
-      const key = canonicalize({ ...ref, repo: asciiLower(ref.repo) });
-      if (seen.has(key)) problems.push(`${list}: the same reference twice`);
-      seen.add(key);
-    }
-  }
-  return problems;
-}
+export const refProblems = (body) => rules.refProblems(body);
 
-export function resultProblems(body) {
-  const problems = [];
-  const findings = body.findings ?? [];
-  const ids = new Set();
-  for (const f of findings) {
-    if (ids.has(f.id)) problems.push(`finding id ${f.id} appears twice`);
-    ids.add(f.id);
-  }
-  const acceptance = body.acceptance ?? [];
-  const indexes = new Set();
-  for (const a of acceptance) {
-    if (indexes.has(a.index)) problems.push(`acceptance index ${a.index} appears twice`);
-    indexes.add(a.index);
-    if (body.for === "review_request") {
-      if (a.kind === "no_blocker_findings" && a.met !== !findings.some((f) => f.severity === "blocker")) problems.push("no_blocker_findings: met disagrees with the findings");
-      if (a.kind === "no_findings_at_or_above" && a.met !== !findings.some((f) => SEVERITY_RANK[f.severity] >= SEVERITY_RANK[a.severity])) problems.push("no_findings_at_or_above: met disagrees with the findings");
-    }
-  }
-  const allMet = acceptance.length > 0 && acceptance.every((a) => a.met);
-  if (body.outcome === "approved" && !allMet) problems.push("approved needs every acceptance condition met");
-  if (body.outcome === "changes_requested" && allMet) problems.push("changes_requested needs an acceptance condition not met");
-  if (body.for === "handoff" && body.outcome === "done" && !allMet) problems.push("done needs every acceptance condition met");
-  return problems;
-}
+export const resultProblems = (body) => rules.resultProblems(body);
 
-// ctx: { now, sphere, receiver, keys: { [key_id]: { obi, public_key, valid_from_seq?, valid_until_seq? } },
-//        seq?, seen_ids?: [], seal_keys?: { [seal_key_id]: <base64url X25519 private key> }, sender_seals? }
-// receiver is the obi_id of the Obi judging the message: a message addressed to another Obi is
-// rejected, however well it is signed (a Sphere that misroutes, or relays a captured message).
-// seq is the message's audit seq (a delivery's `seq`). A key with a validity range must be valid at
-// seq; without seq (a message not yet recorded, as the Sphere sees one at send) it must be current.
-export function keyValidAt(key, seq) {
-  if (key.valid_from_seq === undefined && key.valid_until_seq === undefined) return true;
-  if (seq === undefined || seq === null) return key.valid_until_seq === null || key.valid_until_seq === undefined;
-  return seq >= (key.valid_from_seq ?? 1) && (key.valid_until_seq === null || key.valid_until_seq === undefined || seq <= key.valid_until_seq);
-}
+export const keyValidAt = (key, seq) => rules.keyValidAt(key, seq);
 
 export function verifyEnvelope(env, ctx) {
   let size;
@@ -573,59 +510,13 @@ export function appendEntry(entries, sphere, envelope, recordedAt) {
   return [...entries, { ...entry, hash: entryHash(entry) }];
 }
 
-// The exchange rules (spec/protocol.md section 4), as the Sphere applies them at send
-// (sphere-api.md section 6.1, check 12) and a chain's verifier at each reply (section 7.1, check 7).
-// reply: the reply envelope; request: the envelope its in_reply_to names, or undefined;
-// earlier: the replies to that request that came before it, in order. Answers why the reply
-// breaks the rules, or null when it doesn't.
-export function exchangeProblem(reply, request, earlier) {
-  if (!request || !REQUEST_TYPES.includes(request.type)) return "replies to no earlier request";
-  // run_cancel, share_status and share_revoke are the replies the request's own sender sends, to its receiver.
-  if (SENDER_REPLY_TYPES.includes(reply.type)) {
-    if (request.from !== reply.from || request.to !== reply.to) return `only the request's sender sends a ${reply.type}, to its receiver`;
-  } else if (request.from !== reply.to || request.to !== reply.from) return "only the request's receiver replies, to its sender";
-  if (RUN_REPLY_TYPES.includes(reply.type) && request.type !== "run_request") return `a ${reply.type} belongs to a run_request, not a ${request.type}`;
-  // A share_offer's exchange takes share_status, share_revoke and decline, and they belong to it alone (decline to any request).
-  if (request.type === "share_offer" ? !SHARE_REPLY_TYPES.includes(reply.type) : SHARE_REPLY_TYPES.includes(reply.type) && reply.type !== "decline")
-    return request.type === "share_offer" ? `a share_offer takes no ${reply.type}` : `a ${reply.type} belongs to a share_offer, not a ${request.type}`;
-  // A cancel calls off a review_request, a question, a handoff or an introduction (rule 10).
-  if (reply.type === "cancel" && !CANCELLABLE_TYPES.includes(request.type)) return `a cancel calls off a review_request, question, handoff or introduction, not a ${request.type}`;
-  if (earlier.some((e) => TERMINAL_TYPES.includes(e.type))) return "the exchange already ended";
-  const accepted = earlier.some((e) => e.type === "accept");
-  // An introduction's accept ends its exchange: nothing follows it (rule 10).
-  if (request.type === "introduction" && accepted) return "the exchange already ended";
-  // At most one accept per exchange; a status may come before it or after it.
-  if (reply.type === "accept" && accepted) return "accepted twice";
-  if (reply.type === "result") {
-    if (reply.body.for !== request.type) return `a result for ${reply.body.for} answers a ${request.type}`;
-    // A result (for a review_request or a handoff) comes only after the accept.
-    if (!accepted) return `a ${request.type} is answered by a result only after an accept`;
-  }
-  // A run_return comes back only from a job that was accepted.
-  if (reply.type === "run_return" && !accepted) return "a run_request is answered by a run_return only after an accept";
-  // An answer answers a question, and nothing else; an accept before it is allowed, not needed.
-  if (reply.type === "answer" && request.type !== "question") return `an answer answers a question, not a ${request.type}`;
-  // No words in a guest job's or a share's exchange: a decline there has no note, and a guest job's takes no status.
-  if (reply.type === "status" && request.type === "run_request") return "a run_request takes no status";
-  if (reply.type === "decline" && ["run_request", "share_offer"].includes(request.type) && reply.body?.note !== undefined) return `a decline of a ${request.type} has no note`;
-  // Nor why its host declined, which would say when its owner is at the Mac or what its rules are.
-  const runDeclineReasons = ["unavailable", "expired", "out_of_scope", "share_used"];
-  if (reply.type === "decline" && request.type === "run_request" && !runDeclineReasons.includes(reply.body?.reason))
-    return `a decline of a run_request says only ${runDeclineReasons.join(", ")}`;
-  // Nor whether a rule or its owner in person answered.
-  if (request.type === "run_request" && reply.body?.by_rule !== undefined) return "no reply to a run_request names a rule (by_rule)";
-  return null;
-}
+// reply: the reply envelope; request: the envelope its in_reply_to names, or undefined; earlier: the
+// replies to that request that came before it, in order. Why the reply breaks the rules, or null.
+const withBody = (e) => ({ ...e, body: e.body ?? {} });
+export const exchangeProblem = (reply, request, earlier) =>
+  rules.exchangeProblem(rules.exchangeMessage(withBody(reply)), request && rules.exchangeMessage(withBody(request)), earlier.map((e) => rules.exchangeMessage(withBody(e))));
 
-// What's wrong with a request's `follows` (spec/protocol.md section 5.19), given the earlier
-// request it names (undefined when there is none): it must be a request between the same two
-// members, in either direction.
-export function followUpProblem(request, earlier) {
-  if (request.body?.follows === undefined) return null;
-  if (!earlier || !REQUEST_TYPES.includes(earlier.type)) return "follows no earlier request";
-  const same = (earlier.from === request.from && earlier.to === request.to) || (earlier.from === request.to && earlier.to === request.from);
-  return same ? null : "follows an exchange between other members";
-}
+export const followUpProblem = (request, earlier) => rules.followUpProblem(withBody(request), earlier);
 
 // chain: { sphere, entries }, ctx: { keys: { [key_id]: { obi, public_key, valid_from_seq, valid_until_seq } } }
 export function verifyChain(chain, ctx) {
