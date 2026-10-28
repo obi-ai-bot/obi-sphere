@@ -14,6 +14,7 @@ import { parseStrict } from "./json.ts";
 import { matches, type SchemaName } from "./schemas.ts";
 import { sphereBase } from "./invite.ts";
 import { DataText } from "./text.ts";
+import type { DpopKey } from "./dpop.ts";
 
 export const TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange";
 export const JWT_TYPE = "urn:ietf:params:oauth:token-type:jwt";
@@ -45,7 +46,7 @@ const ERROR_CODES = new Set([
   "bad_request", "invalid_envelope", "wrong_sphere", "unknown_key", "bad_signature", "expired", "clock_skew", "card_invalid", "unauthorized",
   "insufficient_scope", "forbidden", "policy_denied", "recipient_revoked", "not_sealed", "invitation_invalid", "not_found", "unknown_recipient",
   "duplicate", "bad_reply", "conflict", "payload_too_large", "rate_limited", "internal",
-  "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client", "unsupported_grant_type", "invalid_scope",
+  "invalid_request", "invalid_client", "invalid_grant", "unauthorized_client", "unsupported_grant_type", "invalid_scope", "invalid_dpop_proof", "invalid_token",
 ]);
 const errorCode = (c: unknown): string | undefined => (typeof c === "string" && ERROR_CODES.has(c) ? c : undefined);
 
@@ -58,7 +59,7 @@ export interface Health {
 export interface TokenResponse {
   access_token: string;
   issued_token_type: string;
-  token_type: "Bearer";
+  token_type: "Bearer" | "DPoP";
   expires_in: number;
   scope: string;
 }
@@ -150,10 +151,20 @@ export interface SphereApiOptions {
   fetch?: Fetch;
 }
 
+/** A started sign-in (sphere-api.md section 3.1): the provider's page to open, and its `state`. */
+export interface SigninStarted {
+  url: string;
+  state: string;
+}
+
 /** The API of the Sphere server at `base` (its origin: `https://sphere.example.com`). */
 export class SphereApi {
   readonly base: string;
   readonly #fetch: Fetch;
+  /** A DPoP key (identity.md section 4.6): set it, and the token exchange sends a proof; the tokens it binds are sent as `DPoP` with a proof each time. */
+  dpop: DpopKey | null = null;
+  /** Each token the server bound, with the key it was bound to and when it expires. */
+  readonly #bound = new Map<string, { key: DpopKey; until: number }>();
 
   constructor(base: string, opts: SphereApiOptions = {}) {
     this.base = sphereBase(base);
@@ -164,11 +175,13 @@ export class SphereApi {
   async call<T>(
     method: string,
     path: string,
-    o: { token?: string; json?: unknown; form?: Record<string, string>; schema?: SchemaName; ok?: number[] } = {},
+    o: { token?: string; json?: unknown; form?: Record<string, string>; schema?: SchemaName; ok?: number[]; dpopKey?: DpopKey } = {},
   ): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" };
     let body: string | undefined;
-    if (o.token) headers.Authorization = `Bearer ${o.token}`;
+    const proofKey = path === "/v0.1/oauth/token" && !o.token ? (o.dpopKey ?? null) : null;
+    if (o.token) Object.assign(headers, await this.authHeaders(method, this.base + path, o.token));
+    else if (proofKey) headers.DPoP = await proofKey.proof(method, this.base + path);
     if (o.form) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = new URLSearchParams(o.form).toString();
@@ -216,13 +229,13 @@ export class SphereApi {
     return this.call("GET", "/v0.1/health", { schema: "wire/health.response" });
   }
 
-  /** The additions to obi/0.1 the Obysphere takes (`GET /v0.1/features`); none when it answers anything but a valid 200, as an older one does. */
+  /** The additions to obi/0.1 the Obysphere takes (`GET /v0.1/features`); none when it answers a 4xx or a 200 that isn't the list, as an older one does. */
   async features(): Promise<string[]> {
     try {
       return (await this.call<{ features: string[] }>("GET", "/v0.1/features", { schema: "wire/features.response" })).features;
     } catch (e) {
-      // An Obysphere that answers, but not with a valid list, takes none; one that doesn't answer says nothing.
-      if (e instanceof SphereError && e.code !== "unreachable") return [];
+      // An Obysphere that answers, but not with a valid list, takes none; one that doesn't answer, or fails (a 5xx), says nothing.
+      if (e instanceof SphereError && e.status !== 0 && e.status < 500) return [];
       throw e;
     }
   }
@@ -233,11 +246,45 @@ export class SphereApi {
   }
 
   /** The token exchange (identity.md section 4.3): an owner's own token without `actor`, an Obi's with it. */
-  token(form: { subject: string; actor?: string; scope?: string }): Promise<TokenResponse> {
+  async token(form: { subject: string; actor?: string; scope?: string }): Promise<TokenResponse> {
     const f: Record<string, string> = { grant_type: TOKEN_EXCHANGE, subject_token: form.subject, subject_token_type: JWT_TYPE };
     if (form.actor) Object.assign(f, { actor_token: form.actor, actor_token_type: JWT_TYPE });
     if (form.scope) f.scope = form.scope;
-    return this.call("POST", "/v0.1/oauth/token", { form: f, schema: "wire/token.response" });
+    // The key the proof is signed with, taken once: the token is bound to that key, whatever `dpop` is set to later.
+    const key = this.dpop;
+    const t = await this.call<TokenResponse>("POST", "/v0.1/oauth/token", { form: f, schema: "wire/token.response", ...(key ? { dpopKey: key } : {}) });
+    // Bound to the DPoP key only when the Obysphere says so: one that doesn't take DPoP issues a bearer token.
+    const now = Math.floor(Date.now() / 1000);
+    for (const [token, b] of this.#bound) if (b.until <= now) this.#bound.delete(token);
+    if (t.token_type === "DPoP" && key) this.#bound.set(t.access_token, { key, until: now + t.expires_in });
+    return t;
+  }
+
+  /**
+   * The headers that carry `token` on a call to `url` (any call, the library's or one it doesn't
+   * make, such as a WebSocket upgrade, whose method is `GET`): `Authorization: DPoP` and a new proof
+   * signed with the key the token was bound to, or `Authorization: Bearer` for a token that isn't bound.
+   */
+  async authHeaders(method: string, url: string, token: string): Promise<Record<string, string>> {
+    const bound = this.#bound.get(token);
+    if (!bound) return { Authorization: `Bearer ${token}` };
+    return { Authorization: `DPoP ${token}`, DPoP: await bound.key.proof(method, url, token) };
+  }
+
+  /** The sign-in providers this server offers (`GET /v0.1/signin`): their `name`s are data. An older server answers 404 (a SphereError `not_found`): it signs in with `google` alone, if at all. */
+  async signinProviders(): Promise<{ id: string; name: string }[]> {
+    return (await this.call<{ providers: { id: string; name: string }[] }>("GET", "/v0.1/signin", { schema: "wire/signin-providers.response" })).providers;
+  }
+
+  /**
+   * Starts a sign-in with `provider` for `ownerKey` (sphere-api.md section 3.1): the page to open in
+   * a browser, and the `state` to match the code that comes back. `returnTo` is where the browser
+   * comes back, a place on this machine the server knows; send it only to a server that lists
+   * `signin_providers` in its features.
+   */
+  async signinStart(provider: string, ownerKey: string, returnTo?: string): Promise<SigninStarted> {
+    if (!/^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/.test(provider)) throw new Error(`${provider} is not a provider id`);
+    return this.call("POST", `/v0.1/signin/${provider}`, { json: { owner_key: ownerKey, ...(returnTo !== undefined ? { return_to: returnTo } : {}) }, schema: "wire/signin.response", ok: [201] });
   }
 
   sphere(token: string, sphere: string): Promise<SphereInfo> {

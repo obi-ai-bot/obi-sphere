@@ -21,6 +21,8 @@ const step = (n: number, what: string) => console.log(`\n${n}. ${what}`);
 const api = new SphereApi(base);
 const health = await api.health();
 const sphere = `lib-${randomBytes(3).toString("hex")}`;
+const features = await api.features();
+console.log(`The Obysphere at ${base} takes: ${features.join(", ") || "no additions"}${features.includes("dpop") ? " (so tokens are bound to a key of this process)" : ""}${features.includes("sphere_url_aud") ? " (and assertions name the server)" : ""}`);
 
 step(1, `An admin makes the Sphere ${sphere}, a policy that lets members ask each other, and an invite link for two`);
 const ada = await Owner.generate("ada");
@@ -77,7 +79,8 @@ console.log(`   ok: ${verdict.entries.length} entries, head seq ${verdict.head.s
 for (const e of verdict.entries) console.log(`   seq ${e.seq}  ${e.type.padEnd(8)} ${e.from} -> ${e.to}  ${e.sealed ? "sealed" : "in the clear"}  ${e.hash.slice(0, 16)}…`);
 
 if (chainOut) {
-  const members = await api.members(await asker.accessToken(), sphere);
+  // The member's own API: its token may be bound to a key of its own (DPoP), which only it sends proofs for.
+  const members = await asker.api.members(await asker.accessToken(), sphere);
   const keys: Record<string, unknown> = {};
   for (const m of members) for (const k of m.keys) keys[k.key_id] = { obi: m.obi, public_key: k.public_key, valid_from_seq: k.valid_from_seq, valid_until_seq: k.valid_until_seq };
   writeFileSync(chainOut, JSON.stringify({ chain: { sphere, entries: verdict.raw() }, keys }, null, 2));

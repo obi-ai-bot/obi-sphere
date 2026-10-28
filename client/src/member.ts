@@ -26,7 +26,8 @@ import {
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
 import type { JsonObject } from "./json.ts";
-import { actorAssertion } from "./jws.ts";
+import { actorAssertion, parseJwt, serverAudience } from "./jws.ts";
+import { DpopKey } from "./dpop.ts";
 import type { Owner } from "./owner.ts";
 import { SealKey, sealEnvelope, verifyAndOpen } from "./seal.ts";
 import { SphereApi, SphereError, type Delivery, type Fetch, type Member as DirectoryMember, type SendReceipt, type Signin } from "./sphere.ts";
@@ -179,6 +180,8 @@ export class Member {
   #delegation: string;
   memory: MemberMemory;
   #token: { value: string; until: number } | null = null;
+  #features: Promise<string[]> | null = null;
+  #dpopKey: Promise<DpopKey> | null = null;
   #peers: Map<string, Peer> | null = null;
   #directory: DirectoryMember[] = [];
 
@@ -235,6 +238,10 @@ export class Member {
       throw new Error(`this invitation is for ${link.obi} of ${link.owner}`);
     }
     const api = new SphereApi(link.base, o.fetch ? { fetch: o.fetch } : {});
+    // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
+    // Read and signed before the redeem, so nothing after it can fail.
+    const aud = (await api.features()).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
+    const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
     const card = await o.owner.card({
       base: api.base, sphere: link.sphere, obi_id: o.obi, public_key: o.key.publicKey, key_id: o.key.keyId,
       ...(o.sealKey ? { seal_public_key: o.sealKey.publicKey, seal_key_id: o.sealKey.keyId } : {}),
@@ -247,14 +254,33 @@ export class Member {
     memory.memberOwners[o.obi] = { owner: o.owner.id, owner_key: o.owner.key.publicKey };
     memory.cardSeq[o.obi] = 1;
     memory.cardKeys[o.obi] = [o.key.keyId];
-    const delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
+    // Nothing after the redeem throws: the Sphere has bound this member to these keys, so the caller must get them.
     return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
   }
 
-  /** An access token: the one it has while it has more than a minute left, else a new exchange. */
+  /** The Obysphere's features, read once (`GET /v0.1/features`; none from an older one). A read that fails is tried again next time. */
+  async features(): Promise<string[]> {
+    this.#features ??= this.api.features().catch((e) => {
+      this.#features = null;
+      throw e;
+    });
+    return this.#features;
+  }
+
+  /**
+   * An access token: the one it has while it has more than a minute left, else a new exchange. Its
+   * actor assertion names the server too when the Obysphere lists `sphere_url_aud`, and the token is
+   * bound to a key of this process (DPoP, identity.md section 4.6) when it lists `dpop`.
+   */
   async accessToken(): Promise<string> {
     if (this.#token && this.#token.until - 60 > nowSeconds()) return this.#token.value;
-    const t = await this.api.token({ subject: this.#delegation, actor: await actorAssertion(this.key, { obi: this.id, sphere: this.sphere }) });
+    const features = await this.features().catch(() => [] as string[]);
+    // One key for the process, made once even when calls overlap.
+    if (features.includes("dpop") && !this.api.dpop) this.api.dpop = await (this.#dpopKey ??= DpopKey.generate());
+    // The actor assertion names the Sphere as the delegation does: both bound to the server, or neither.
+    const delegated = parseJwt(this.#delegation)?.claims.aud;
+    const aud = typeof delegated === "string" && delegated.includes("/v0.1/spheres/") ? delegated : undefined;
+    const t = await this.api.token({ subject: this.#delegation, actor: await actorAssertion(this.key, { obi: this.id, sphere: this.sphere, ...(aud ? { aud } : {}) }) });
     this.#token = { value: t.access_token, until: nowSeconds() + t.expires_in };
     return t.access_token;
   }

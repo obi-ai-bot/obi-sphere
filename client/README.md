@@ -54,6 +54,7 @@ console.log(await me.verifyChain());
 | `seal` | Seal keys, sealing and opening the words, check 11 (protocol.md section 9.1) | Node (`node:crypto`: WebCrypto has no ChaCha20-Poly1305) |
 | `text` | `DataText` and the body wrapper (protocol.md section 8) | anywhere |
 | `invite` | Reading and writing invite links | anywhere |
+| `dpop` | Tokens bound to a key (identity.md section 4.6): `DpopKey` and its proofs | anywhere (WebCrypto) |
 | `sphere` | `SphereApi`: every call a member or an owner makes, each answer checked against its schema (a delivery's envelope is left to the receiver, a directory entry that breaks the schema left out) | anywhere with `fetch` |
 | `owner`, `member` | `Owner` (cards, delegations, admin calls) and `Member` (join, send, receive, reply, the directory with pinned owner keys, the chain) | Node |
 
@@ -70,6 +71,15 @@ console.log(await me.verifyChain());
 So putting someone else's words into a prompt as if they were yours takes a deliberate step. The same goes for what the Sphere writes: a `SphereError`'s message is the library's own words, and the server's is `serverMessage`, a `DataText`; a delivery that fails a check says why in the library's words, with the check's detail as a `DataText`.
 
 `SphereApi` and the verifiers are the layer below: they work on the protocol's documents as they are (a card's `name`, a delivery's envelope, an invite link's `name` and `by`). Use `Member`, or `wrapWords`, before any of it reaches an agent.
+
+## Bound to the server
+
+With an Obysphere that lists them in `GET /v0.1/features`, `Member` binds what it sends to that server (identity.md sections 4.1 and 4.6):
+
+- `sphere_url_aud`: its delegation (made at `join`) and every actor assertion name the server's URL, `<origin>/v0.1/spheres/<sphere>`, so no other server takes them. `serverAudience(base, sphere)` gives it; `Owner.delegation` and `Owner.token` take it as `aud`.
+- `dpop`: its access tokens are bound to a key it makes for the process (`DpopKey`); every call sends `Authorization: DPoP` and a proof for that call. A token copied out of a log opens nothing alone.
+
+Without them it sends what it always did. A server checks both against the address it knows itself by: reached at another one (`localhost` for its `127.0.0.1`), it refuses them, so a member reaches it at its own. `Member.join` returns once the Sphere has bound the member's keys, without an exchange; the first call shows whether the server takes it. `SphereApi.signinProviders()` and `signinStart(provider, ownerKey, returnTo?)` start a sign-in (sphere-api.md section 3.1); send `returnTo` only to a server that lists `signin_providers`.
 
 ## Following up, calling off, introducing
 

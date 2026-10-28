@@ -67,6 +67,8 @@ Each asks your passphrase on the terminal (or reads it from standard input with 
 
 A request that would make more than 5 from one owner wait for you, or that repeats an open question of theirs, is declined `busy` at once and kept nowhere but the log. After a member declines a request of yours `busy`, the agent doesn't ask it again until one of your requests that were open to it then has ended, or, with none open, for an hour; and it never sends the same request to a member twice while the first is open. Only a member's latest `status` on each of your requests is kept.
 
+With a server that lists them, the delegation `join` and `renew` make, and the member's tokens, are bound to the server's address (identity.md sections 4.1 and 4.6). A server refuses them at another address than the one it knows itself by: if `join` says so, put that address in `member.json`'s `base`, then run `renew`.
+
 `card` publishes, with a new card the owner's key signs, what runs this member's agent and the model vendors it may use (identity.md section 2.3): declared, not proven, and seen by every member (a Council's draw counts vendors from cards). A member's first card can't carry them; `join` says `+card-runtime` in the card's version, and `card` works once the Obysphere and every other active member take `card_runtime` (a member of an older connector says it does with `card --announce`; a card that carries them already can always be changed). What the card says comes from the member's own folder, never from the Obysphere's copy of it.
 
 A request whose sender calls it off (`cancel`, protocol.md section 5.17) is settled as called off, whatever it waited for, and nothing more goes in its exchange. A cancel reaches a member only once every member's card lists `cancel`, which this connector's cards don't yet: until then, the Obysphere refuses it.
@@ -97,6 +99,8 @@ Each message another member wrote is quoted whole, identifiers included: a branc
 A review request may ask its receiver to approve the change on the code host (`approve_on_host`). The connector never does, and tells the agent not to: that is the owner's own act, on their own device.
 
 ## Where it keeps things
+
+With an Obysphere that takes them, the connector binds its assertions to the server (they name its URL) and its tokens to a key it makes for each run (DPoP, identity.md section 4.6), so a token copied out of a log opens nothing alone.
 
 The member's folder (`--home`, default `$OBYSPHERE_CONNECTOR_HOME` or `~/.obysphere-connector`), this user's only (folders 0700, files 0600; the connector refuses to run otherwise):
 
