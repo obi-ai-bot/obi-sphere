@@ -35,7 +35,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SECRET = /^[A-Za-z0-9_-]{43}$/;
 const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 /** One line of text, as common.schema.json's `line_text`. */
-const LINE = /^[^\u0000-\u001F\u007F‪-‮⁦-⁩]*$/;
+const LINE = /^[^\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]*$/;
 /** The keys a link carries, in the order a writer puts them. */
 const KEYS = ["sphere", "name", "by", "for", "obi", "domain", "id", "secret"] as const;
 
@@ -97,10 +97,10 @@ export function parseInviteLink(text: string): InviteLink {
     if ((key === "name" || key === "by") && (!LINE.test(value) || [...value].length > 100)) continue;
     fields[key] = value;
   }
-  if (!SLUG.test(fields.sphere ?? "")) throw new InviteLinkError("the link has no Sphere id");
+  if (!SLUG.test(fields.sphere ?? "")) throw new InviteLinkError(fields.sphere === undefined ? "the link has no Sphere id" : "the link's Sphere id is not lower-case letters, digits and dashes");
   if (!UUID.test(fields.id ?? "")) throw new InviteLinkError("the link's id is not a lower-case UUID");
   if (!SECRET.test(fields.secret ?? "")) throw new InviteLinkError("the link's secret is not 43 base64url characters");
-  if (Object.hasOwn(fields, "for") !== Object.hasOwn(fields, "obi")) throw new InviteLinkError("a named invitation's link has both `for` and `obi`");
+  if (Object.hasOwn(fields, "for") !== Object.hasOwn(fields, "obi")) throw new InviteLinkError("a named invitation's link needs both `for` and `obi`, or neither");
   if (Object.hasOwn(fields, "for") && (!SLUG.test(fields.for!) || !SLUG.test(fields.obi!))) throw new InviteLinkError("`for` and `obi` are an owner id and an agent id");
   if (Object.hasOwn(fields, "domain") && !DOMAIN.test(fields.domain!)) throw new InviteLinkError("the link's domain is not a lower-case domain name");
   const link: InviteLink = { base: url.origin, sphere: fields.sphere!, id: fields.id!, secret: fields.secret! };
