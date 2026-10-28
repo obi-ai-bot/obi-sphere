@@ -38,10 +38,10 @@
         "description": "Paste your operator token, the one secret that creates Obyspheres on your server: 32 random bytes you made (`openssl rand -base64 32 | tr '+/' '-_' | tr -d '='`), or the token your client made for you ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md))."
       },
       "GOOGLE_CLIENT_ID": {
-        "description": "Optional: leave it empty. To add Google sign-in later, so your team can create Obyspheres without the token, set it in your repository's `wrangler.jsonc` ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md#optional-let-your-team-create-obyspheres))."
+        "description": "Optional: leave it empty. To add sign-in later, with Google or any OpenID Connect provider (`SIGNIN_PROVIDERS`), so your team can create Obyspheres without the token, set it in your repository's `wrangler.jsonc` ([how](https://github.com/obi-ai-bot/obi-sphere/blob/main/docs/run-your-own.md#optional-let-your-team-create-obyspheres))."
       },
       "CREATOR_WORKSPACES": {
-        "description": "Optional: leave it empty. With Google sign-in, the Google Workspace domains whose people may create Obyspheres, comma-separated, like `acme.com`; set it in your repository's `wrangler.jsonc` with `GOOGLE_CLIENT_ID`."
+        "description": "Optional: leave it empty. With sign-in, the domains whose people may create Obyspheres, comma-separated, like `acme.com`; set it in your repository's `wrangler.jsonc` with the provider."
       }
     }
   },

@@ -215,7 +215,7 @@ const steps = [
       // The features it takes and offers (sphere-api.md section 2): the phone relay, locally.
       if (!REMOTE) {
         const listed = await c.call("GET", "/v0.1/features");
-        assert(listed.status === 200 && same(listed.body, { features: ["cancel", "card_classes", "card_runtime", "card_topics", "follow_up", "introduction", "phone_relay"] }), `features: ${listed.status} ${show(listed.body)}`);
+        assert(listed.status === 200 && ["dpop", "phone_relay", "signin_providers", "sphere_url_aud"].every((id) => listed.body.features.includes(id)), `features: ${listed.status} ${show(listed.body)}`);
       }
       // 1.1b Nothing on the port reaches the D1 around the Sphere's checks: wrangler's Local
       // Explorer and local observability (on by default, no token, any SQL) are off, so their

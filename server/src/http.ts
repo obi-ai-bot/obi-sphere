@@ -34,11 +34,14 @@ export class ApiError extends Error {
   readonly details: string[];
   /** Seconds, for the `Retry-After` header of a `429 rate_limited`. */
   readonly retryAfter: number | undefined;
-  constructor(code: ErrorCode, message: string, details: string[] = [], retryAfter?: number) {
+  /** More headers for the answer (a 401's `WWW-Authenticate`). */
+  readonly headers: Record<string, string>;
+  constructor(code: ErrorCode, message: string, details: string[] = [], retryAfter?: number, headers: Record<string, string> = {}) {
     super(message);
     this.code = code;
     this.details = details;
     this.retryAfter = retryAfter;
+    this.headers = headers;
   }
 }
 
@@ -58,7 +61,7 @@ export function json(status: number, body: unknown, headers: Record<string, stri
 
 export function errorResponse(e: ApiError): Response {
   const details = e.details.slice(0, 20).map((d) => oneLine(d, 300));
-  const headers: Record<string, string> = e.retryAfter !== undefined ? { "Retry-After": String(e.retryAfter) } : {};
+  const headers: Record<string, string> = { ...e.headers, ...(e.retryAfter !== undefined ? { "Retry-After": String(e.retryAfter) } : {}) };
   return json(STATUS[e.code], { error: { code: e.code, message: oneLine(e.message, 500), ...(details.length ? { details } : {}) } }, headers);
 }
 

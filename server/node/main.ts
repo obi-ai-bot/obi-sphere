@@ -4,8 +4,9 @@
 // it keeps is under SPHERE_DATA: the database and, once claimed, the operator token's hash.
 //
 // Environment: PORT (8787), SPHERE_DATA (./data; /data in the image), SPHERE_URL (its public
-// address, only for the claim link it prints), and the Worker's own settings: SPHERE_OPERATOR_TOKEN,
-// GOOGLE_CLIENT_ID, CREATOR_WORKSPACES, SPHERE_CREATE_LIMIT, PHONE_RELAY (src/env.ts).
+// address: the claim link it prints, and its own origin, which sign-in, DPoP and an assertion's
+// URL aud need; never read from a request), and the Worker's own settings: SPHERE_OPERATOR_TOKEN,
+// GOOGLE_CLIENT_ID, SIGNIN_PROVIDERS, CREATOR_WORKSPACES, SPHERE_CREATE_LIMIT, PHONE_RELAY (src/env.ts).
 //
 // Claiming: with no SPHERE_OPERATOR_TOKEN and no claim yet, it prints a one-time claim link to its
 // log and refuses everything but health, its features and the claim itself. Whoever claims it makes the operator
@@ -40,6 +41,7 @@ const { handle } = await import("../src/app.ts");
 const { Doorbell } = await import("../src/doorbell.ts");
 const { PhoneRelay } = await import("../src/relay.ts");
 const { CLIENTS } = await import("../src/clients.ts");
+const { configuredOrigin } = await import("../src/auth.ts");
 const { ApiError, apiError, errorResponse, json, readJson } = await import("../src/http.ts");
 
 const DATA = process.env.SPHERE_DATA || "data";
@@ -48,6 +50,7 @@ const sqlite = open(join(DATA, "sphere.db"));
 for (const name of migrate(sqlite, fileURLToPath(new URL("../migrations", import.meta.url)))) console.log(`sphere: applied migration ${name}`);
 
 const setting = (name: string) => process.env[name] || undefined;
+if (!configuredOrigin(setting("SPHERE_URL") ?? "")) console.log("sphere: SPHERE_URL isn't an http or https address, so it signs nobody in and takes no DPoP proof or URL aud");
 const env: Record<string, unknown> = {
   DB: d1(sqlite),
   CHANNELS: {
@@ -58,9 +61,14 @@ const env: Record<string, unknown> = {
   },
   SPHERE_OPERATOR_TOKEN: setting("SPHERE_OPERATOR_TOKEN"),
   GOOGLE_CLIENT_ID: setting("GOOGLE_CLIENT_ID"),
+  SIGNIN_PROVIDERS: setting("SIGNIN_PROVIDERS"),
   CREATOR_WORKSPACES: setting("CREATOR_WORKSPACES"),
   SPHERE_CREATE_LIMIT: setting("SPHERE_CREATE_LIMIT"),
   PHONE_RELAY: setting("PHONE_RELAY"),
+  SIGNIN_RETURN_SCHEMES: setting("SIGNIN_RETURN_SCHEMES"),
+  // Its own address, never read from a request's Host, which a client may set here. Without
+  // SPHERE_URL it signs nobody in and takes no DPoP proof or URL aud, only `obi-sphere:<id>`.
+  SPHERE_URL: setting("SPHERE_URL") ?? "",
 };
 env.DOORBELLS = namespace(Doorbell, env);
 env.RELAYS = namespace(PhoneRelay, env);
@@ -72,7 +80,7 @@ const digest = (s: string) => createHash("sha256").update(s).digest();
 if (!env.SPHERE_OPERATOR_TOKEN && existsSync(CLAIMED)) env.SPHERE_OPERATOR_TOKEN_SHA256 = readFileSync(CLAIMED, "utf8").trim();
 let claimCode = env.SPHERE_OPERATOR_TOKEN || env.SPHERE_OPERATOR_TOKEN_SHA256 ? null : randomBytes(24).toString("base64url");
 if (claimCode) {
-  const origin = setting("SPHERE_URL")?.replace(/\/+$/, "") ?? "https://<this Sphere's address>";
+  const origin = configuredOrigin(setting("SPHERE_URL") ?? "") ?? "https://<this Sphere's address>";
   console.log(`sphere: not claimed yet. To claim it, open this link (it works once):\nsphere:   ${origin}/claim#${claimCode}`);
 }
 

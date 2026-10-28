@@ -19,6 +19,7 @@ export declare const auditEntry: Validator;
 export declare const createSphereRequest: Validator;
 export declare const signinRequest: Validator;
 export declare const signinResponse: Validator;
+export declare const signinProvidersResponse: Validator;
 export declare const invitationRequest: Validator;
 export declare const sphereUpdateRequest: Validator;
 export declare const invitationPreviewRequest: Validator;

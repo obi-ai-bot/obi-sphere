@@ -49,6 +49,7 @@ const EXPORTS = {
   invitationResponse: "wire/invitation.response.schema.json",
   invitationsResponse: "wire/invitations.response.schema.json",
   signinResponse: "wire/signin.response.schema.json",
+  signinProvidersResponse: "wire/signin-providers.response.schema.json",
   invitationPreviewResponse: "wire/invitation-preview.response.schema.json",
   member: "wire/member.schema.json",
   membersResponse: "wire/members.response.schema.json",

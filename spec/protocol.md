@@ -30,7 +30,7 @@ The documents were first written when that implementation was called Obi, and so
 - `obi`, the value of an `answer`'s `by` when the receiving agent answered by itself (section 5.8).
 - `x-obi-text`, the schemas' annotation for text that is data (section 8).
 - The card's extension, `urn:obi-sphere:ext:obi:0.1`, and the skill tag `obi-action` ([identity.md](identity.md) section 2).
-- `obi-sphere:<sphere>`, the `aud` of every assertion ([identity.md](identity.md) section 4.1), and `obi-sphere://signin`, where a sign-in returns ([sphere-api.md](sphere-api.md) section 3.1).
+- `obi-sphere:<sphere>`, the `aud` of an assertion that doesn't name its server ([identity.md](identity.md) section 4.1; the Obysphere's own URL is the other form), and `obi-sphere://signin`, where a sign-in returns when the client names nowhere ([sphere-api.md](sphere-api.md) section 3.1).
 - `obi-base`, the branch a `run_request`'s bundle starts from (section 5.10).
 - `by Oby:`, the marker every review an agent posts on the code host carries (section 11, "An agent's marker").
 - `oby`, one of the Obysphere ids a server reserves ([sphere-api.md](sphere-api.md) section 3).

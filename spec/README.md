@@ -45,6 +45,9 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 | `cancel` | The `cancel` reply: a request's sender calls it off | [protocol.md](protocol.md) section 5.17 |
 | `introduction` | The `introduction` request, and a card that accepts it | [protocol.md](protocol.md) section 5.18 |
 | `phone_relay` | An optional extension of the HTTP binding, not of the messages: a member's phones reach its agent through the Obysphere, which offers it or answers its paths `404` | [sphere-api.md](sphere-api.md) section 9 |
+| `dpop` | Tokens bound to a key (DPoP): `token_type` `DPoP`, then `Authorization: DPoP` and a proof on every call | [identity.md](identity.md) section 4.6 |
+| `signin_providers` | Sign-in with any OpenID Connect provider: `GET /v0.1/signin`, `POST /v0.1/signin/{provider}`, and `return_to` | [sphere-api.md](sphere-api.md) section 3.1 |
+| `sphere_url_aud` | An assertion's `aud` may be the Obysphere's own URL, naming its server too | [identity.md](identity.md) section 4.1 |
 
 **The baseline.** `obi/0.1`'s baseline is the spec at commit `41d5a272` (#29, sealed words), the last commit that changed `spec/` before this rule, tagged `oby/0.1`. Every earlier amendment is in [CHANGELOG.md](../CHANGELOG.md).
 

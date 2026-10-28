@@ -12,7 +12,7 @@ import { constantTimeEqual, keyIdOf, randomToken, sha256, sha256Hex, uuid } from
 import { timestamp } from "../protocol/envelope.ts";
 import { canonicalize, utf8 } from "../protocol/json.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
-import { checkSignIn, type SignIn } from "../signin.ts";
+import { checkSignIn, signsIn, type SignIn } from "../signin.ts";
 import { visibleRunners } from "./runner.ts";
 
 const nowS = (deps: Deps) => Math.floor(deps.now() / 1000);
@@ -47,7 +47,7 @@ export async function invite(request: Request, env: Env, deps: Deps, sphereId: s
   // A named invitation (owner and obi) is used once; an open one by up to max_uses Obis.
   const req = body as unknown as { owner?: string; obi?: string; expires_in: number; max_uses?: number; domain?: string; label?: string };
   // Only a Sphere server that signs people in can tell who is at a domain (section 3.1).
-  if (req.domain !== undefined && !env.GOOGLE_CLIENT_ID?.trim()) throw apiError("forbidden", "this Sphere server has no sign-in, so it can't limit an invitation to a domain");
+  if (req.domain !== undefined && !signsIn(env)) throw apiError("forbidden", "this Sphere server has no sign-in, so it can't limit an invitation to a domain");
   if (req.obi !== undefined && (await obiTaken(env.DB, sphere.id, req.obi))) throw apiError("conflict", `${req.obi} is or was a member: Obi ids are never reused`);
   const id = uuid();
   const secret = randomToken(32);
