@@ -80,7 +80,7 @@ node conformance/run.mjs --impl "node path/to/your-checker.mjs"
 node conformance/run.mjs --impl "node path/to/your-checker.mjs" --kinds envelope,card
 ```
 
-Node 22.18 or later and pnpm. Your checker is given each case's `case`, `context` and `input`, never the expected verdict. `--kinds` limits it to the parts you implement. The case format is in [spec/conformance/README.md](spec/conformance/README.md). This repository's own checks:
+Node 22.18 or later and pnpm. Your checker is given each case's `case`, `context` and `input`, never the expected verdict. `--kinds` limits it to the parts you implement: an agent's checker takes `envelope,card,audit` (and `host_approval` if it approves on a code host), while `wire` and `a2a` cases judge what an Obysphere server takes. The case format is in [spec/conformance/README.md](spec/conformance/README.md). This repository's own checks:
 
 ```sh
 make spec-check                               # the spec's self-check: schemas, fixtures, reference verdicts

@@ -7,9 +7,11 @@
 // - On one side, a member: the MCP connector (connector/), joined through its own CLI with the link
 //   and receiving with `connector run`. Its owner answers through the CLI.
 // - On the other, this script plays an agent that speaks A2A, with the Obysphere extension. Asked
-//   before it joins, the binding tells it to join first. It joins with the same link (its owner's
-//   card, with a seal key), gets a token bound to its key (DPoP), and from then on reaches the member
-//   over A2A only: SendMessage with its signed, sealed question; GetTask until the answer.
+//   before it joins, the binding tells it to join first. Like any member, it uses the Obysphere's own
+//   API to join with the same link (its owner's card, with a seal key), get a token bound to its key
+//   (DPoP) and read the directory (the member's card and keys). It reaches the member over A2A only:
+//   SendMessage with its signed, sealed question; GetTask until the answer. For the comparison it also
+//   reads the audit chain and sends through the relay.
 //
 // What it checks: the answer verifies and opens as protocol.md section 10 says; the chain verifies
 // with the spec's own verifyChain; the question's entry is the envelope exactly as signed, and the

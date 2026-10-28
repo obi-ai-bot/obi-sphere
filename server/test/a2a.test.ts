@@ -148,10 +148,20 @@ describe("the A2A binding", () => {
     expect(why(none)).toEqual({ status: 401, grpc: "UNAUTHENTICATED", reason: "UNAUTHORIZED", domain: EXT });
     expect(none.headers.get("WWW-Authenticate")).toContain("Bearer");
     expect(none.body.error.details[1]).toMatchObject({ "@type": "type.googleapis.com/google.rpc.Help", links: [{ url: expect.stringContaining("#21-invite-links") }] });
-    // The same for a member that doesn't exist: nothing says whether it does.
+    // The same for a member, or an Obysphere, that doesn't exist: nothing says whether it does.
     expect(why(await send(w, "obi-nobody", sendBody(q), ""))).toMatchObject({ status: 401 });
-    // An owner's own token sends nothing (sphere-api.md section 6.1, check 1).
-    expect(why(await send(w, "obi-wellington", sendBody(q), await w.ownerToken("ernesto", "directory:read")))).toMatchObject({ status: 401, reason: "UNAUTHORIZED" });
+    expect(why(await w.call("POST", "/v0.1/spheres/no-such-sphere/members/obi-wellington/message:send", { body: sendBody(q), headers: A2A }))).toMatchObject({ status: 401 });
+    // A token for this Obysphere at another one's url is 401 too, before that one is looked up.
+    const elsewhere = await w.call("POST", "/v0.1/spheres/no-such-sphere/members/obi-wellington/message:send", { token: await w.obiToken("obi-ernesto"), body: sendBody(q), headers: A2A });
+    expect(why(elsewhere)).toMatchObject({ status: 401, reason: "UNAUTHORIZED" });
+    // An owner's own token sends nothing (sphere-api.md section 6.1, check 1), and is told how to authenticate, not how to join.
+    const owner = await send(w, "obi-wellington", sendBody(q), await w.ownerToken("ernesto", "directory:read"));
+    expect(why(owner)).toMatchObject({ status: 401, reason: "UNAUTHORIZED" });
+    expect(owner.headers.get("WWW-Authenticate")).toContain("Bearer");
+    expect(owner.body.error.details).toHaveLength(1);
+    const unknown = await send(w, "obi-wellington", sendBody(q), "not-a-token-this-sphere-issued");
+    expect(why(unknown)).toMatchObject({ status: 401 });
+    expect(unknown.body.error.details).toHaveLength(1);
     const token = await w.obiToken("obi-ernesto");
     const { "A2A-Version": _v, ...noVersion } = A2A;
     expect(why(await send(w, "obi-wellington", sendBody(q), token, noVersion))).toEqual({ status: 400, grpc: "FAILED_PRECONDITION", reason: "VERSION_NOT_SUPPORTED", domain: "a2a-protocol.org" });
@@ -199,14 +209,47 @@ describe("the A2A binding", () => {
     expect((await w.call("GET", "/v0.1/spheres/e2e/audit", { token })).body.entries).toEqual([]);
   });
 
-  it("needs the scope the relay needs, and an oversize body is 413", async () => {
+  it("needs the scope the relay needs, and one to read the exchange its answer shows; an oversize body is 413", async () => {
     const w = await world();
     const q = await w.envelope("obi-ernesto", "obi-wellington", "question", QUESTION);
+    // A token that may send but not read gets no exchange from the answer (a2a.md section 4, check 1).
+    expect(why(await send(w, "obi-wellington", sendBody(q), await w.obiToken("obi-ernesto", "send:question")))).toMatchObject({ status: 403, reason: "INSUFFICIENT_SCOPE" });
+    expect(why(await send(w, "obi-wellington", sendBody(q), await w.obiToken("obi-ernesto", "send:question reply directory:read")))).toMatchObject({ status: 403, reason: "INSUFFICIENT_SCOPE" });
+    expect((await send(w, "obi-wellington", sendBody(q), await w.obiToken("obi-ernesto", "send:question audit:read"))).status).toBe(200);
     const replyOnly = await w.obiToken("obi-ernesto", "reply receive");
     expect(why(await send(w, "obi-wellington", sendBody(q), replyOnly))).toMatchObject({ status: 403, reason: "INSUFFICIENT_SCOPE" });
     const token = await w.obiToken("obi-ernesto");
     const big = await w.call("POST", url("obi-wellington", "/message:send"), { token, raw: JSON.stringify({ pad: "x".repeat(131072) }), headers: A2A });
     expect(why(big)).toMatchObject({ status: 413, reason: "PAYLOAD_TOO_LARGE" });
+  });
+
+  it("holds the latest 50 messages of a long exchange, whatever historyLength asks", async () => {
+    const w = await world();
+    const asker = await w.obiToken("obi-ernesto");
+    const answerer = await w.obiToken("obi-wellington");
+    const q = await w.envelope("obi-ernesto", "obi-wellington", "question", QUESTION);
+    expect((await w.send(q, asker)).status).toBe(202);
+    const statuses: Record<string, unknown>[] = [];
+    for (let i = 0; i < 55; i++) {
+      const s = await w.reply(q, "status", { state: "working", note: `Step ${i + 1}.` });
+      expect((await w.send(s, answerer)).status).toBe(202);
+      statuses.push(s);
+    }
+    const ids = (r: Answer) => r.body.history.map((m: { messageId: string }) => m.messageId);
+    const latest = statuses.slice(-50).map((s) => s.id);
+    const all = await getTask(w, "obi-wellington", q.id as string, asker);
+    expectSchema("a2aTask", all.body);
+    expect(ids(all)).toEqual(latest);
+    expect(all.body.status.state).toBe("TASK_STATE_WORKING");
+    expect(ids(await getTask(w, "obi-wellington", q.id as string, asker, "?historyLength=5000"))).toEqual(latest);
+    expect(ids(await getTask(w, "obi-wellington", q.id as string, asker, "?historyLength=2"))).toEqual(latest.slice(-2));
+    expect(why(await getTask(w, "obi-wellington", q.id as string, asker, "?historyLength=1&historyLength=2"))).toMatchObject({ status: 400, reason: "BAD_REQUEST" });
+    // SendMessage's answer too: one more status, sent over A2A, with a historyLength past the limit.
+    const more = await w.reply(q, "status", { state: "working", note: "Step 56." });
+    const r = await send(w, "obi-ernesto", sendBody(more, { message: { taskId: q.id }, configuration: { historyLength: 5000 } }), answerer);
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expectSchema("a2aSendResponse", r.body);
+    expect(r.body.task.history.map((m: { messageId: string }) => m.messageId)).toEqual([...latest.slice(-49), more.id]);
   });
 
   it("shows a task only to its two members, to an agent's token with receive or audit:read", async () => {

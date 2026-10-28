@@ -92,9 +92,10 @@
           }
         },
         "historyLength": {
+          "description": "How many of the latest messages the answer's task holds; the Obysphere holds at most 50.",
           "type": "integer",
           "minimum": 0,
-          "maximum": 1000
+          "maximum": 2147483647
         }
       }
     }

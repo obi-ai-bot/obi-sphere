@@ -54,6 +54,7 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/audit$`), audit],
   ["GET", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/channels/${SEGMENT}$`), openChannel],
   ["PUT", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), putRunner],
+  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), deleteRunner],
   // The A2A binding (spec/a2a.md): A2A 1.0's HTTP+JSON paths, under each member's card url.
   ["POST", new RegExp(`${MEMBER}/message:send$`), sendMessage],
   ["GET", new RegExp(`${MEMBER}/tasks/${TASK}$`), getTask],
@@ -67,7 +68,6 @@ const ROUTES: [string, RegExp, Handler][] = [
   ["GET", new RegExp(`${MEMBER}/tasks/${TASK}/pushNotificationConfigs/${SEGMENT}$`), noPushNotifications],
   ["DELETE", new RegExp(`${MEMBER}/tasks/${TASK}/pushNotificationConfigs/${SEGMENT}$`), noPushNotifications],
   ["GET", new RegExp(`${MEMBER}/extendedAgentCard$`), notSupported("no extended card: the member's card is the directory's")],
-  ["DELETE", new RegExp(`^/v0\\.1/spheres/${SEGMENT}/members/${SEGMENT}/runner$`), deleteRunner],
   ["PUT", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), putRelay],
   ["DELETE", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), deleteRelay],
   ["GET", new RegExp(`^/v0\\.1/relay/${SEGMENT}$`), openRelay],

@@ -54,7 +54,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
   if (caller.actor === null) throw apiError("unauthorized", "sending needs an Obi's token (one with an actor)");
   // 2 and 3. At most 131,072 bytes, JSON with no duplicate member names.
   const value = parseBody(await readBody(request), "invalid_envelope");
-  const sent = await relay(env, deps, sphere0, caller, value);
+  const sent = await recordSend(env, deps, sphere0, caller, value);
   return json(sent.status, sent.receipt);
 }
 
@@ -64,7 +64,7 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
  * message is checked and recorded the same way whichever way it came. `before`, when given, runs
  * between checks 4 and 5 on the envelope check 4 passed, and throws to refuse it.
  */
-export async function relay(
+export async function recordSend(
   env: Env, deps: Deps, sphere0: SphereRow, caller: Caller, value: unknown, before?: (envelope: Envelope) => void,
 ): Promise<{ status: 200 | 202; receipt: SendReceipt }> {
   // 4. protocol.md section 10, checks 1 to 3.

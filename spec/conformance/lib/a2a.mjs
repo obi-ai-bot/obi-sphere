@@ -9,6 +9,8 @@ import { MAX_ENVELOPE_BYTES, REPLY_TYPES, canonicalBytes, schemaErrors, semantic
 /** The A2A version the binding speaks (A2A-Version), and the extension a client activates (A2A-Extensions). */
 export const A2A_VERSION = "1.0";
 export const A2A_EXTENSION = "urn:obi-sphere:ext:obi:0.1";
+/** The most messages a task's history holds: the latest ones. */
+export const HISTORY_LIMIT = 50;
 
 const fail = (code, message) => ({ ok: false, code, message });
 const isObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -42,7 +44,7 @@ export function unwrapSend(body, member) {
   if (!isObject(config) || config.returnImmediately !== true) return fail("unsupported_operation", "send with configuration.returnImmediately: true; read the task for its replies");
   // 6. A2A's request, as the binding takes it.
   const errors = schemaErrors("wire/a2a-send.request", body);
-  if (errors.length) return fail("bad_request", errors.slice(0, 5).join("; "));
+  if (errors.length) return fail("bad_request", `the body doesn't match a2a-send.request: ${errors.slice(0, 5).join("; ")}`);
   const message = body.message;
   const env = message.parts[0].data;
   // 7. The data part is an envelope.
@@ -76,19 +78,21 @@ export function verifyA2aSend(body, context) {
 const SUBMITTED = "TASK_STATE_SUBMITTED", WORKING = "TASK_STATE_WORKING", COMPLETED = "TASK_STATE_COMPLETED";
 const FAILED = "TASK_STATE_FAILED", REJECTED = "TASK_STATE_REJECTED", CANCELED = "TASK_STATE_CANCELED";
 
-/** The state a reply leaves its exchange in, the request being of `requestType`. */
-function stateAfter(requestType, reply) {
-  switch (reply.type) {
-    case "status":
-    case "run_progress":
-    case "share_status":
-      return WORKING;
+/**
+ * The state an exchange is in after its latest reply, its request being of `requestType`; with none
+ * yet, submitted. The exchange rules end an exchange at its first terminal reply, so the latest reply
+ * alone says the state. A reply type a later addition brings shows as working until this view knows it.
+ */
+export function taskState(requestType, latest) {
+  switch (latest?.type) {
+    case undefined:
+      return SUBMITTED;
     case "accept":
       return requestType === "introduction" ? COMPLETED : WORKING;
     case "answer":
       return COMPLETED;
     case "result":
-      return reply.body.outcome === "failed" ? FAILED : COMPLETED;
+      return latest.body.outcome === "failed" ? FAILED : COMPLETED;
     case "run_return":
       return FAILED;
     case "decline":
@@ -98,7 +102,7 @@ function stateAfter(requestType, reply) {
     case "share_revoke":
       return CANCELED;
     default:
-      throw new Error(`no state for a ${reply.type}`);
+      return WORKING;
   }
 }
 
@@ -119,7 +123,8 @@ export const taskMessage = (entry, correlationId, caller) => ({
 /**
  * The exchange whose request has the id `id`, among a chain's `entries` (in seq order), as GetTask
  * shows it to `caller` at the URL of `member`; null when there is no such request between them, in
- * either direction (TASK_NOT_FOUND). `historyLength` keeps the latest n messages; 0 keeps none.
+ * either direction (TASK_NOT_FOUND). The history holds the latest HISTORY_LIMIT messages at most, and
+ * the latest `historyLength` when it is given; 0 holds none.
  */
 export function exchangeTask(entries, id, caller, member, { historyLength } = {}) {
   const request = entries.find((e) => e.envelope.id === id && !REPLY_TYPES.includes(e.envelope.type));
@@ -127,8 +132,9 @@ export function exchangeTask(entries, id, caller, member, { historyLength } = {}
   const { from, to, type } = request.envelope;
   if (!((from === caller && to === member) || (from === member && to === caller))) return null;
   const exchange = [request, ...entries.filter((e) => e.seq > request.seq && REPLY_TYPES.includes(e.envelope.type) && e.envelope.in_reply_to === id)];
-  const state = exchange.slice(1).reduce((s, e) => stateAfter(type, e.envelope), SUBMITTED);
-  const kept = historyLength === undefined ? exchange : historyLength === 0 ? [] : exchange.slice(-historyLength);
+  const state = taskState(type, exchange.length > 1 ? exchange.at(-1).envelope : undefined);
+  const n = Math.min(historyLength ?? HISTORY_LIMIT, HISTORY_LIMIT);
+  const kept = n === 0 ? [] : exchange.slice(-n);
   return {
     id,
     contextId: id,

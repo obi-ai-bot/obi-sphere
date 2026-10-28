@@ -8,6 +8,8 @@ import { schemaErrors } from "./schemas.ts";
 /** The A2A version the interface speaks (A2A-Version), and the extension a client activates (A2A-Extensions). */
 export const A2A_VERSION = "1.0";
 export const EXTENSION = "urn:obi-sphere:ext:obi:0.1";
+/** The most messages a task's history holds: the latest ones (A2A lets a server set a lower limit than a client asks). */
+export const HISTORY_LIMIT = 50;
 
 /** Why the binding refuses a send: `bad_request` and `wrong_recipient` are the Obysphere's, the others A2A's. */
 export type BindingProblem = { code: "bad_request" | "wrong_recipient" | "unsupported_operation" | "push_notification_not_supported"; message: string; details?: string[] };
@@ -27,7 +29,7 @@ export function sendRequestProblem(value: unknown): BindingProblem | null {
   if (isObject(config) && config.taskPushNotificationConfig !== undefined) return { code: "push_notification_not_supported", message: "this interface sends no push notifications: read the task" };
   if (!isObject(config) || config.returnImmediately !== true) return { code: "unsupported_operation", message: "send with configuration.returnImmediately: true; the receiver's owner decides, and the task shows the replies" };
   const errors = schemaErrors("a2aSendRequest", value);
-  return errors.length ? { code: "bad_request", message: "the body doesn't match a2a-send.request", details: errors } : null;
+  return errors.length ? { code: "bad_request", message: `the body doesn't match a2a-send.request: ${errors[0]}`, details: errors } : null;
 }
 
 /** Checks 8 and 9, once the envelope passed protocol.md section 10's checks 1 to 3: the message agrees with it, and it is for the URL's `member`. */
@@ -51,43 +53,52 @@ export interface ExchangeEntry {
   envelope: Envelope;
 }
 
-/** The state a reply leaves its exchange in, its request being of `requestType`. */
-function stateAfter(requestType: string, reply: Envelope): string {
-  switch (reply.type) {
-    case "status":
-    case "run_progress":
-    case "share_status":
-      return "TASK_STATE_WORKING";
+/**
+ * The state an exchange is in after its latest reply, its request being of `requestType`; with no
+ * reply yet, submitted. The exchange rules end an exchange at its first terminal reply, so the latest
+ * reply alone says the state.
+ */
+export function taskState(requestType: string, latest?: Envelope): string {
+  switch (latest?.type) {
+    case undefined:
+      return "TASK_STATE_SUBMITTED";
     case "accept":
       return requestType === "introduction" ? "TASK_STATE_COMPLETED" : "TASK_STATE_WORKING";
     case "answer":
       return "TASK_STATE_COMPLETED";
     case "result":
-      return reply.body.outcome === "failed" ? "TASK_STATE_FAILED" : "TASK_STATE_COMPLETED";
+      return latest.body.outcome === "failed" ? "TASK_STATE_FAILED" : "TASK_STATE_COMPLETED";
     case "run_return":
       return "TASK_STATE_FAILED";
     case "decline":
       return "TASK_STATE_REJECTED";
-    default:
-      // cancel, run_cancel, share_revoke: the exchange rules allow no other reply.
+    case "cancel":
+    case "run_cancel":
+    case "share_revoke":
       return "TASK_STATE_CANCELED";
+    default:
+      // status, run_progress, share_status; and a reply a later addition brings, until this view knows it.
+      return "TASK_STATE_WORKING";
   }
 }
 
+/** The latest `historyLength` messages a task holds, at most HISTORY_LIMIT; all of them, up to it, when it isn't given. */
+export const historyKept = (historyLength?: number): number => Math.min(historyLength ?? HISTORY_LIMIT, HISTORY_LIMIT);
+
 /**
- * An exchange, its request first and its replies in the chain's order, as the A2A Task GetTask
- * shows `caller`: each envelope one message, `ROLE_USER` when the caller sent it. `historyLength`
- * keeps the latest n messages; 0 keeps none.
+ * An exchange as the A2A Task GetTask shows `caller`: `request`, and `replies`, the latest of its
+ * replies in the chain's order, all of them or at least the latest `historyKept(historyLength)` (and
+ * the latest one). Each envelope is one message, `ROLE_USER` when the caller sent it.
  */
-export function exchangeTask(exchange: ExchangeEntry[], caller: string, historyLength?: number): Record<string, unknown> {
-  const id = exchange[0]!.envelope.id;
-  const requestType = exchange[0]!.envelope.type;
-  const state = exchange.slice(1).reduce((s, e) => stateAfter(requestType, e.envelope), "TASK_STATE_SUBMITTED");
-  const kept = historyLength === undefined ? exchange : historyLength === 0 ? [] : exchange.slice(-historyLength);
+export function exchangeTask(request: ExchangeEntry, replies: ExchangeEntry[], caller: string, historyLength?: number): Record<string, unknown> {
+  const id = request.envelope.id;
+  const n = historyKept(historyLength);
+  const kept = n === 0 ? [] : replies.length < n ? [request, ...replies] : replies.slice(-n);
+  const last = replies.at(-1) ?? request;
   return {
     id,
     contextId: id,
-    status: { state, timestamp: exchange.at(-1)!.recorded_at },
+    status: { state: taskState(request.envelope.type, replies.at(-1)?.envelope), timestamp: last.recorded_at },
     ...(kept.length
       ? {
           history: kept.map((e) => ({
