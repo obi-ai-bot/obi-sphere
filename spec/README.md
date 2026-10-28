@@ -44,6 +44,7 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 | `follow_up` | A request's `follows`: the earlier exchange it follows up | [protocol.md](protocol.md) section 5.19 |
 | `cancel` | The `cancel` reply: a request's sender calls it off | [protocol.md](protocol.md) section 5.17 |
 | `introduction` | The `introduction` request, and a card that accepts it | [protocol.md](protocol.md) section 5.18 |
+| `policy_classes` | A policy rule's `from_classes`/`to_classes`; an agent that reads them lists it in its card's `features` | [sphere-api.md](sphere-api.md) section 5 |
 | `phone_relay` | An optional extension of the HTTP binding, not of the messages: a member's phones reach its agent through the Obysphere, which offers it or answers its paths `404` | [sphere-api.md](sphere-api.md) section 9 |
 | `dpop` | Tokens bound to a key (DPoP): `token_type` `DPoP`, then `Authorization: DPoP` and a proof on every call | [identity.md](identity.md) section 4.6 |
 | `signin_providers` | Sign-in with any OpenID Connect provider: `GET /v0.1/signin`, `POST /v0.1/signin/{provider}`, and `return_to` | [sphere-api.md](sphere-api.md) section 3.1 |

@@ -338,6 +338,8 @@ function checkCoverage(cases) {
   for (const n of ["valid-card-with-runtime-and-vendors", "valid-card-with-features-only", "valid-card-with-an-unknown-feature", "valid-card-runtime-nobody-listed", "invalid-card-features-without-card-runtime", "invalid-card-runtime-without-features", "invalid-card-vendors-without-features", "invalid-card-features-empty", "invalid-card-vendors-empty", "invalid-card-runtime-without-version", "invalid-card-feature-repeated", "invalid-card-vendor-repeated"]) need.push(`card/${n}`);
   // The Obysphere's features (sphere-api.md, GET /v0.1/features; health stays closed).
   for (const n of ["valid-features-card-runtime", "valid-features-takes-none", "valid-features-unknown-id", "invalid-features-list-missing", "invalid-features-id-repeated", "invalid-health-lists-features"]) need.push(`wire/${n}`);
+  // A policy rule may require a conformance class (sphere-api.md section 5, the policy_classes feature).
+  for (const n of ["valid-policy-put", "valid-policy-put-classes", "valid-policy-classes-response", "invalid-policy-put-class-not-an-id", "invalid-policy-put-classes-empty", "invalid-policy-put-classes-repeated", "invalid-policy-put-seventeen-classes"]) need.push(`wire/${n}`);
   // Invitations, named and open (sphere-api.md section 4).
   for (const n of ["valid-invitation-named", "valid-invitation-open", "invalid-invitation-owner-without-obi", "invalid-invitation-named-max-uses", "invalid-invitation-email-domain", "valid-invitation-preview-response"]) need.push(`wire/${n}`);
   // Approving on the code host (protocol.md section 11): the owner's confirmation counts only for

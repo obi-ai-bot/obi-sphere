@@ -67,7 +67,7 @@ There are four. The ids are stable, lower-case, and defined here (identity.md li
 
 ## The report and the badge
 
-`node conformance/run.mjs … --report <file.json>` writes a **report** an implementation can publish: the suite version, the implementation's label, when it ran, and, per class, how many of that class's cases ran and passed and whether the class is `pass`, `fail` or `not_run` (none of its cases ran in this mode). A run in `--impl` mode fills the message cases; a `--receiver` run fills the behaviour cases; a project that claims a class with both runs both and publishes the merged report (`--report` merges into an existing file, so two runs into the same path combine).
+`node conformance/run.mjs … --report <file.json>` writes a **report** an implementation can publish: the suite version, the implementation's label, when it ran, and, per class, how many of that class's cases ran and passed and whether the class is `pass`, `fail`, `incomplete` (a required part didn't run) or `not_run` (none of its cases ran in this mode). A run in `--impl` mode fills the message cases; a `--receiver` run fills the behaviour cases; a project that claims a class with both runs both and publishes the merged report (`--report` merges into an existing file, so two runs into the same path combine).
 
 ```sh
 node conformance/run.mjs --impl "<command>" --report report.json --label "my-impl"

@@ -63,6 +63,11 @@ export interface PolicyRule {
   to_owner: string;
   actions: string[];
   repos: string[];
+  // Optional, behind the policy_classes feature (spec/sphere-api.md section 5): the conformance
+  // classes the sending (from) and receiving (to) member's current card must claim for the rule to
+  // match. A card without `classes` claims none, so such a rule never matches it.
+  from_classes?: string[];
+  to_classes?: string[];
 }
 
 /** A Sphere's row but its picture, which only `GET …/image` reads: what every other read selects. */
