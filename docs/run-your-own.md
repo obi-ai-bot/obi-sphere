@@ -25,7 +25,7 @@ You need a Cloudflare account (a free one holds a small team: [The plan](#the-pl
    curl https://<your address>/v0.1/features
    ```
 
-   They answer `{"ok":true,"protocol":"obi/0.1","seal":true}` (the protocol it speaks, and that it takes sealed messages) and `{"features":[…]}`, the additions it takes and the optional extensions it offers, `phone_relay` and `dpop` among them ( [spec/sphere-api.md](../spec/sphere-api.md), section 2).
+   They answer `{"ok":true,"protocol":"obi/0.1","seal":true}` (the protocol it speaks, and that it takes sealed messages) and `{"features":[…]}`, the additions it takes and the optional extensions it offers, `phone_relay` and `dpop` among them ([spec/sphere-api.md](../spec/sphere-api.md), section 2).
 
 4. **Create an Obysphere** for its first admin, with the admin's owner id and owner key: the Ed25519 public key, base64url, that their client keeps for them ([spec/identity.md](../spec/identity.md), section 1). `printf` is built into the shell, so the token never shows in a process list or your history:
 
