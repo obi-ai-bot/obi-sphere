@@ -4,6 +4,7 @@ import { bearer, requireOwnerToken, requireScope } from "../auth.ts";
 import { guardedWrite, requireBound, requireSphere, withRetries, type PolicyRule, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readJson } from "../http.ts";
+import { notTakenProblem, policyFeatures, type AgentCard } from "../protocol/card.ts";
 import { timestamp } from "../protocol/envelope.ts";
 import { schemaErrors } from "../protocol/schemas.ts";
 
@@ -61,6 +62,15 @@ export async function putPolicy(request: Request, env: Env, deps: Deps, sphereId
   return withRetries(async () => {
     const sphere = await requireSphere(env.DB, sphere0.id);
     if (req.expected_version !== sphere.policy_version) throw apiError("conflict", `the policy is at version ${sphere.policy_version}`);
+    // Members read the policy against its schema: a rule that uses an addition waits until every
+    // active member takes it, unless the current policy uses it already (sphere-api.md section 5).
+    const carried = new Set(policyFeatures(JSON.parse(sphere.policy_rules) as PolicyRule[]));
+    const uses = policyFeatures(req.rules).filter((f) => !carried.has(f));
+    if (uses.length > 0) {
+      const active = await env.DB.prepare("SELECT obi, card FROM members WHERE sphere = ?1 AND status = 'active'").bind(sphere.id).all<{ obi: string; card: string }>();
+      const problem = notTakenProblem(uses, active.results.map((m) => ({ obi: m.obi, card: JSON.parse(m.card) as AgentCard })));
+      if (problem) throw apiError("feature_not_taken", problem);
+    }
     const version = sphere.policy_version + 1;
     const updatedAt = timestamp(nowS(deps));
     const rules = req.rules.map((r) => ({ id: r.id, from_owner: r.from_owner, to_owner: r.to_owner, actions: r.actions, repos: r.repos }));

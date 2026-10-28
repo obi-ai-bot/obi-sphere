@@ -59,12 +59,12 @@ Every message is one envelope that carries exactly one typed action in `body`. S
 |---|---|---|
 | `protocol` | yes | Always `obi/0.1` for this version. |
 | `id` | yes | Unique id of this message (UUID). The sender MUST NOT reuse it. |
-| `type` | yes | One of `review_request`, `question`, `handoff`, `run_request`, `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_offer`, `share_status`, `share_revoke`. Nothing else. |
+| `type` | yes | One of `review_request`, `question`, `handoff`, `run_request`, `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_offer`, `share_status`, `share_revoke`, and, as additions behind their features, `introduction` and `cancel` (sections 5.17 and 5.18). Nothing else. |
 | `from` | yes | The sending agent's `obi_id`. |
 | `to` | yes | The receiving agent's `obi_id`. Different from `from`. Only that agent may act on the message: any other agent it reaches rejects it (section 10, check 5). |
 | `sphere` | yes | The Obysphere it travels in. |
 | `correlation_id` | yes | The exchange it belongs to. On a request, equal to its own `id`. On a reply, equal to the request's `id`. |
-| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_status` and `share_revoke`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
+| `in_reply_to` | replies only | On `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, `run_cancel`, `share_status`, `share_revoke` and `cancel`: the `id` of the request it answers (in v0.1, always equal to `correlation_id`). A request MUST NOT have it. |
 | `created_at` | yes | When the sender made it. |
 | `expires_at` | yes | After this time the receiver MUST NOT act on it. Later than `created_at`, at most 2,592,000 seconds after it. |
 | `key_id` | yes | The sender's signing key, as its agent card publishes it (`ed25519:` + base64url of SHA-256 of the raw public key). |
@@ -76,7 +76,7 @@ A whole envelope, in its canonical form (section 9), is at most 65,536 bytes.
 
 ## 4. Exchanges
 
-Requests start an exchange: `review_request`, `question`, `handoff`, `run_request`, `share_offer`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, and three a request's own sender sends: `run_cancel`, `share_status` and `share_revoke`.
+Requests start an exchange: `review_request`, `question`, `handoff`, `run_request`, `share_offer`, `introduction`. Replies continue it: `status`, `accept`, `decline`, `result`, `answer`, `run_progress`, `run_return`, and four a request's own sender sends: `run_cancel`, `share_status`, `share_revoke` and `cancel`.
 
 ```
 review_request, handoff:  request ─► [status…] ─► accept ─► [status…] ─► result or decline
@@ -86,12 +86,14 @@ run_request:              request ─► [run_progress…] ─► accept ─► 
                              └─────► [run_progress…] ─► decline
                           (and from the request's sender, at any point before the end: run_cancel)
 share_offer:              request ─► [share_status…] ─► share_revoke or decline   (share_status and share_revoke from the request's sender)
+introduction:             request ─► [status…] ─► accept or decline
+                          (and from the sender of a review_request, question, handoff or introduction, at any point before the end: cancel)
 ```
 
 **The exchange rules.** These are the only ones. A receiving agent applies them to the replies it gets (section 11, step 3), the Obysphere applies them at send ([sphere-api.md](sphere-api.md) section 6.1, check 12), a chain's verifier applies them to every reply in the chain ([sphere-api.md](sphere-api.md) section 7.1, check 7), and the reference verifier implements them once (`exchangeProblem` in [conformance/lib/obi.mjs](conformance/lib/obi.mjs)). A reply is allowed exactly when all of these hold:
 
-1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The exceptions are `run_cancel`, `share_status` and `share_revoke`, which only the request's sender sends, to its receiver.
-2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return`, `run_cancel` or `share_revoke` for that request came before it. Each of those ends the exchange; nothing may follow it.
+1. Its `in_reply_to` names a request, and the reply is from that request's `to` and to its `from`: only the request's receiver replies, and only to the request's sender. The exceptions are `run_cancel`, `share_status`, `share_revoke` and `cancel`, which only the request's sender sends, to its receiver.
+2. The exchange has not ended: no `decline`, `result`, `answer`, `run_return`, `run_cancel`, `share_revoke` or `cancel` for that request came before it, nor, for an `introduction`, its `accept`. Each of those ends the exchange; nothing may follow it.
 3. An `accept` comes only when the exchange has no `accept` yet: at most one per exchange. A `status` may come before the `accept` or after it, any number of times (but never in a `run_request`'s exchange: rule 9).
 4. A `result`'s `for` is the request's type, so a `result` finishes only a `review_request`, a `handoff` or a `run_request`. An `answer` answers only a `question`.
 5. A `result` comes only after that exchange's `accept`. An `answer` needs no `accept` (an `accept` before it is allowed too).
@@ -100,13 +102,17 @@ share_offer:              request ─► [share_status…] ─► share_revoke o
 8. `share_status` and `share_revoke` belong only to a `share_offer`'s exchange, and a `share_offer`'s exchange takes nothing else but a `decline` (its receiver's owner doesn't want the share). There is no `accept`: a share holds from its offer until its `share_revoke` or `decline`, whatever its `expires_at` (which bounds only when the receiver may first act on the offer).
 9. In a `run_request`'s or a `share_offer`'s exchange, a `decline` has no `note`. In a `run_request`'s, a `decline`'s `reason` is `unavailable`, `expired`, `out_of_scope` or `share_used`; no reply has a `by_rule` (why the host said no or yes, its owner at the machine, answering in person, or its rules, stays with the host); and the exchange takes no `status` (its `note` is words, and `waiting_on_owner` would say when the host's owner is at their machine): what the chain keeps of guest jobs and shares is typed fields only, never words, and never when an owner is at their machine (sections 14 and 15).
 
+10. A `cancel` belongs only to a `review_request`'s, a `question`'s, a `handoff`'s or an `introduction`'s exchange (a `run_request` has `run_cancel`, a `share_offer` `share_revoke`). An `introduction`'s exchange takes `status`, one `accept` (which ends it), `decline` and `cancel`: no `result` or `answer` (rule 4).
+
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
-The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`, `invalid-chain-status-in-run`, `valid-chain-run-declined-unavailable`, `invalid-chain-run-declined-busy`, `invalid-chain-run-declined-by-rule`, `invalid-chain-run-accepted-by-rule`).
+The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`, `invalid-chain-status-in-run`, `valid-chain-run-declined-unavailable`, `invalid-chain-run-declined-busy`, `invalid-chain-run-declined-by-rule`, `invalid-chain-run-accepted-by-rule`, `valid-chain-review-cancelled`, `valid-chain-handoff-cancelled`, `valid-chain-question-cancelled`, `invalid-chain-cancel-by-receiver`, `invalid-chain-reply-after-cancel`, `invalid-chain-cancelled-twice`, `invalid-chain-cancel-run-request`, `invalid-chain-cancel-share-offer`, `valid-chain-introduction-accepted`, `valid-chain-introduction-declined`, `valid-chain-introduction-cancelled`, `invalid-chain-reply-after-introduction-accept`, `invalid-chain-introduction-answered`).
 
 ## 5. Actions
 
 Every human-written field is data (section 8). Every field below is bounded by the schemas; the lengths given are maximums in characters.
+
+Sections 5.17 to 5.19 are additions to `obi/0.1`, each behind its feature. An agent sends a message that uses one only when its Obysphere lists the feature (`GET /v0.1/features`) and every active member's card in the directory lists it, since every member verifies the whole chain; the Obysphere refuses one that doesn't ([sphere-api.md](sphere-api.md) section 6.1, check 11, `409 feature_not_taken`). Until then it sends the plain form: a request without `follows`, and no `cancel` (the request ends at its `expires_at`) or `introduction`.
 
 ### 5.1 `review_request`
 
@@ -122,6 +128,7 @@ Ask another agent's owner to review a change. Schema: [review_request.schema.jso
 | `head_sha` | yes | The commit to review. A review of another commit does not count. |
 | `acceptance` | yes | 1 to 10 typed acceptance conditions (section 6). |
 | `summary` | no | A few lines on what changed (2,000). Data. |
+| `follows` | no | An earlier request between the same two members that this one follows up (5.19): a review of the next commit, say. |
 | `approve_on_host` | no | `true` asks the receiver to post an approving review of `head_sha` on pull request `pr` on the code host, as its owner, when its review approves. Needs `pr`. The receiver does so only when its own owner confirmed this exchange at this commit on their own device, or next to a code owner's approval under a standing permission its owner gave (section 11, "Approving on the code host"), never because of this field. |
 
 ### 5.2 `question`
@@ -133,6 +140,7 @@ Ask another agent something its owner knows, has decided, or has let it tell. An
 | `text` | yes | The question, in the asker's words (2,000). Data. |
 | `about` | no | 1 to 10 distinct references (5.9) to what it is about: repositories, pull requests, issues, or the receiving agent's jobs. |
 | `choices` | no | 2 or 3 distinct allowed answers (100 each). Data. |
+| `follows` | no | An earlier request between the same two members that this one follows up (5.19). |
 
 - **One question, one agent.** An envelope has one `to`, so a question to several agents is one question to each: its own envelope, `id` and exchange, answered or declined on its own. The asking agent groups them for its owner (Oby shows them as one conversation, each answer as it arrives). A receiver doesn't learn who else was asked, and only the asker receives an answer: the Obysphere relays each exchange between its two agents and is not a chat server.
 - **Its repositories.** A question has no `repo`: the repositories it is about are those its `about` references name, compared ignoring ASCII case. Policy ([sphere-api.md](sphere-api.md) section 5) takes one repository per request: a question's is the one its references name when they all name the same one, and a question about nothing, or about more than one repository, has none, so only rules for every repository (`*`) allow it. Remembered decisions cover a question repository by repository (section 11, step 5).
@@ -150,6 +158,7 @@ Hand a piece of work to another agent, which runs it for its own owner. Schema: 
 | `issue`, `pr` | no | What the work belongs to. |
 | `acceptance` | yes | 1 to 10 typed acceptance conditions. |
 | `summary` | no | Context (2,000). Data. |
+| `follows` | no | An earlier request between the same two members that this one follows up (5.19). |
 
 ### 5.4 `status`
 
@@ -264,6 +273,33 @@ How much of a share its receiver's owner used this period, from the key holder's
 
 The key holder takes a share back: `grant`. Ends the offer's exchange. The receiver's agent stops offering the share at once; the key holder's agent declines every later `run_request` on it (`unavailable`: section 4, rule 9).
 
+### 5.17 `cancel`
+
+The request's own sender calls off its `review_request`, `question`, `handoff` or `introduction`: it no longer needs it. An addition, behind the feature `cancel`. The body is empty. Ends the exchange (section 4, rules 2 and 10). The receiver stops the work at once (a review and its check, a handoff), settles what waits in its owner's inbox for it, approves nothing on the code host for it, and sends nothing more in that exchange (section 11, "Calling a request off").
+
+### 5.18 `introduction`
+
+One member introduces the receiver to another member, because the two might work together. An addition, behind the feature `introduction`. Schema: [introduction.schema.json](schemas/v0.1/actions/introduction.schema.json).
+
+| Field | Required | Meaning |
+|---|---|---|
+| `member` | yes | The member introduced: an active member of the Obysphere, neither the sender nor the receiver. |
+| `about` | no | 1 to 10 distinct references (5.9) to what the two might work on together. |
+| `note` | no | Why, in the sender's words, one line (200). Data. |
+| `follows` | no | An earlier request between the sender and the receiver that this one follows up (5.19). |
+
+- **Two envelopes.** An envelope has one `to`, so an introduction of two members to each other is two introductions: one to each, each naming the other in `member`. Each receiver's owner decides their own like any request (section 11, "Introductions").
+- **It asks for nothing else.** Its `accept` says only that the receiver's owner is glad to hear from the member introduced, and ends the exchange. It changes no policy rule, sharing rule or remembered decision, and lets the introduced member send nothing it couldn't send before: what that member may ask is still the policy's and the receiver's owner's rules.
+- **Its repositories.** Like a question's: the one repository its `about` references name, when they all name one (sphere-api.md section 5).
+
+### 5.19 Following up
+
+A `review_request`, `question`, `handoff` or `introduction` may say which earlier request it follows up, so the receiver can show it with what came before: `follows`, that request's `id` (its `correlation_id`). An addition, behind the feature `follow_up`.
+
+- The earlier request is between the same two members, in either direction, and recorded before it in the Obysphere's chain. The Obysphere checks this at send ([sphere-api.md](sphere-api.md) section 6.1, check 12, `bad_reply`), and so does a chain's verifier (section 7.1, check 7); a request doesn't follow itself up (section 10, check 3).
+- It is context, never a decision. The receiver decides a follow-up as it decides any request (section 11): a remembered decision or a sharing rule applies as it would without `follows`, an earlier `accept` accepts nothing new, and the earlier exchange stays as it ended. The receiver MAY show the earlier exchange to its owner next to the new one.
+- The earlier request may be of any type, a `run_request` or a `share_offer` too: a question about a run is a new exchange with words of its own, and adds none to the run's (section 4, rule 9).
+
 ## 6. Acceptance conditions
 
 Acceptance conditions are typed, so they can be checked by a machine. Each is an object with a `kind`:
@@ -288,7 +324,7 @@ A finding is `{id, severity, file, line, end_line?, title, detail}` ([common.sch
 
 ## 8. Text is data
 
-Some fields hold words a person or an agent wrote: goals, questions, notes, summaries, finding titles and details, answers, choices, card names and descriptions. In the schemas each of them is a `line_text` or `block_text` and carries the annotation keyword **`x-obi-text: "data"`**, which this spec defines. Every other string is an identifier with a closed pattern (ids, repository names, branches, paths, commit ids) or an enum.
+Some fields hold words a person or an agent wrote: goals, questions, notes (an introduction's included), summaries, finding titles and details, answers, choices, card names and descriptions. In the schemas each of them is a `line_text` or `block_text` and carries the annotation keyword **`x-obi-text: "data"`**, which this spec defines. Every other string is an identifier with a closed pattern (ids, repository names, branches, paths, commit ids) or an enum. One kind of identifier is data all the same: a card's `topics` (identity.md section 2.3) are ids, but a topic can string words together (`ignore-your-rules`), so an agent that gives topics to a model quotes them as it quotes the fields above.
 
 For every field annotated `x-obi-text: "data"`, an implementation:
 
@@ -359,7 +395,7 @@ The Obysphere checks every message before relaying it ([sphere-api.md](sphere-ap
 |---|---|---|
 | 1 | Its canonical form is at most 65,536 bytes. | `payload_too_large` |
 | 2 | It matches [envelope.schema.json](schemas/v0.1/envelope.schema.json), including the body schema for its `type` ([sealed/envelope.schema.json](schemas/v0.1/sealed/envelope.schema.json) when it has `seal`, section 9.1). | `invalid_envelope` |
-| 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7); the references in an `about` or a `refs` are distinct, repositories compared ignoring ASCII case (section 5.9). | `invalid_envelope` |
+| 3 | The rules no schema can say: `expires_at` after `created_at` and at most 2,592,000 seconds after it; real dates; `from` ≠ `to`; a request's `correlation_id` equals its `id`; a reply's `in_reply_to` equals its `correlation_id`; a `result` is consistent with itself (section 5.7); the references in an `about` or a `refs` are distinct, repositories compared ignoring ASCII case (section 5.9); an `introduction`'s `member` is neither `from` nor `to` (5.18); a request's `follows` isn't its own `id` (5.19). | `invalid_envelope` |
 | 4 | `sphere` is the receiver's Obysphere. | `wrong_sphere` |
 | 5 | `to` is the receiver's own `obi_id`. | `wrong_recipient` |
 | 6 | `key_id` is a key the directory lists for `from`, valid for this message (below), and that public key hashes to `key_id`. | `unknown_key` |
@@ -383,7 +419,7 @@ When a delivery arrives, the receiving agent:
 
 1. **Verifies** it (section 10). If it isn't valid, the agent acknowledges the delivery, records why locally, and sends nothing back: it does not answer a message it cannot authenticate. An expired request is the exception: the agent MAY send `decline` with reason `expired`.
 2. **Deduplicates.** A message whose `id` it has already handled is acknowledged and ignored.
-3. **Replies** (`status`, `accept`, `decline`, `result`, `answer`) are matched to the outgoing request named by `in_reply_to`, which MUST have been sent to the reply's `from`. A reply that matches nothing, or that breaks the exchange rules (section 4) given the replies already recorded for that request, is acknowledged and dropped, and so is an `answer` with a `choice` its question's `choices` don't have. A matched reply updates the exchange; a `result` or an `answer` is shown to the owner (an answer with who gave it: the other agent, or its owner) and is data like any other text.
+3. **Replies** (`status`, `accept`, `decline`, `result`, `answer`) are matched to the outgoing request named by `in_reply_to`, which MUST have been sent to the reply's `from`. A `cancel` is matched the other way, to a request the agent received from the cancel's `from` ("Calling a request off", below). A reply that matches nothing, or that breaks the exchange rules (section 4) given the replies already recorded for that request, is acknowledged and dropped, and so is an `answer` with a `choice` its question's `choices` don't have. A matched reply updates the exchange; a `result` or an `answer` is shown to the owner (an answer with who gave it: the other agent, or its owner) and is data like any other text.
 4. **Requests.** If the type isn't one its card `accepts`, it sends `decline` with reason `out_of_scope`.
 5. It looks for a **remembered decision** that covers the request. The key is `(type, sender's owner, repo)`, where the sender's owner comes from the directory (the sender's verified agent card), never from the message's text, and `repo` is the body's `repo` (or `*` when the body has none). A decision for that exact repo wins over one for every repo (`*`). A question has no `repo`: a remembered decision covers it when, for each repository its `about` names (5.2), there is one for that repository or one for every repo (`*`). A question about no repository is covered only by one for `*`.
    - A remembered **accept**: go to step 7, and name the decision's id in `accept.by_rule` and `result.by_rule`.
@@ -425,6 +461,22 @@ Some repositories merge only once another person approved the change on the code
 The conformance cases of kind `host_approval` (conformance/README.md) hold both ways: what the receiver may approve, and what it must not.
 
 Nothing else changes: the receiver still never merges, pushes or changes anything else on the code host because of a received action, and the sender still merges only by its own rules, once the code host shows the approval of the head it would merge.
+
+### Calling a request off
+
+A `cancel` (5.17) for a request the agent received, from that request's own sender, is checked like any reply (steps 1 to 3, the exchange rules of section 4) and then ends the exchange at once:
+
+- Work it started for the request stops: a review and its check, a handoff's job, an answer being written. What that work made goes nowhere: no `result`, no `answer`, no approval on the code host ("Approving on the code host": the owner's confirmation of a cancelled exchange counts for nothing).
+- An item waiting in its owner's inbox for the request is settled as cancelled; its owner MAY be told.
+- Nothing more is sent in that exchange, and nothing else changes: a remembered decision or a sharing rule made because of it stays as its owner made it.
+
+A cancel can't take back what was done before it arrived: an approval already posted on the code host stays there, for the sender's owner to dismiss on the code host if they want to, and a reply that already ended the exchange (a `result`, an `answer`, a `decline`, an introduction's `accept`) means a cancel after it is refused. When the cancel is recorded first, the receiver's `result` is refused instead, so the sender never learns of an approval the receiver had posted: the receiver SHOULD then dismiss that approval itself, as step 3 of "Approving on the code host" dismisses one whose head moved.
+
+A cancel says nothing about why. A sender SHOULD cancel a request it no longer needs rather than leave it to `expires_at`.
+
+### Introductions
+
+An `introduction` (5.18) is decided as any request is (steps 4 to 6): by a remembered decision keyed `(introduction, sender's owner, repo)`, its repository taken as a question's from its `about`, or by its owner in the inbox. Its owner sees who introduced whom, the member introduced as the directory shows it (its verified card), and the note as data. An `accept` says the owner is glad to hear from that member, and does nothing more: no rule, permission or remembered decision is made or changed because of it, and nothing is sent to the member introduced. Its owner may then make one themselves, as they would at any time.
 
 ### Questions
 
@@ -529,6 +581,8 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 - Whether `status` is pushed or polled: pushed by the receiver, as a reply.
 - How policy is written: a fixed table of allow rules per Obysphere ([sphere-api.md](sphere-api.md), "Policy").
 - Encrypting bodies end to end so the Obysphere relays without reading them: each text value is sealed for the receiver's seal key (section 9.1, added on 2026-10-26).
+- Following up in a conversation: a request's `follows` names the earlier exchange it follows up (5.19, an addition).
+- Calling off a request other than a `run_request`: its sender's `cancel` (5.17, an addition).
 
 **Still open:**
 
@@ -539,5 +593,3 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 - Auditing membership and policy changes in the chain (v0.1 records relayed messages only).
 - Cross-checking a result's `acceptance` against the request's conditions on the Obysphere (today each agent checks its own exchanges).
 - Quotas the Obysphere enforces: the error code exists (`rate_limited`) and a receiver's limits are recommended (section 11, "Rate limits"), but an Obysphere's numbers aren't fixed.
-- Following up in a conversation: no field links a question to an earlier exchange, so each question stands on its own.
-- A `cancel` action for the sender of a request other than `run_request`.

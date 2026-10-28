@@ -6,6 +6,7 @@ import { canonicalBytes, utf8, type JsonObject } from "./json.ts";
 import { CLOCK_SKEW_SECONDS, OK, fail, seconds, type Verdict } from "./envelope.ts";
 import { matches, schemaErrors } from "./schemas.ts";
 import { b64url } from "./crypto.ts";
+import { FEATURES } from "./features.ts";
 
 export const CARD_EXTENSION_URI = "urn:obi-sphere:ext:obi:0.1";
 
@@ -29,6 +30,8 @@ export interface CardParams {
   vendors?: string[];
   /** The conformance classes its member claims (identity.md section 2.3). */
   classes?: string[];
+  /** What its member can help with (identity.md section 2.3). */
+  topics?: string[];
 }
 
 export interface AgentCard {
@@ -51,8 +54,20 @@ export const CARD_CLASSES = "card_classes";
 /** The additions a card's own members need its readers to take (identity.md section 2.3). */
 export function featuresUsed(p: CardParams): string[] {
   const used: string[] = [];
-  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined) used.push(CARD_RUNTIME);
+  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined || p.topics !== undefined) used.push(CARD_RUNTIME);
   if (p.classes !== undefined) used.push(CARD_CLASSES);
+  if (p.topics !== undefined) used.push("card_topics");
+  if (p.accepts.includes("introduction")) used.push("introduction");
+  return used;
+}
+
+/** The feature a message uses, when it uses one (protocol.md sections 5.17 to 5.19): readers of
+ *  the chain from before can't verify it, so it goes only where every active member takes it. */
+export function messageFeatures(type: string, body: Record<string, unknown>): string[] {
+  const used: string[] = [];
+  if (type === "cancel") used.push("cancel");
+  if (type === "introduction") used.push("introduction");
+  if (body.follows !== undefined) used.push("follow_up");
   return used;
 }
 
@@ -74,6 +89,23 @@ export function publishingProblem(p: CardParams, others: { obi: string; card: Ag
     if (behind) return `${behind.obi}'s card doesn't take ${feature}: a card with its members waits until every active member's does`;
   }
   return null;
+}
+
+/** Why a message or a policy that uses `features` can't go in yet (sphere-api.md sections 5 and
+ *  6.1, check 11): this Obysphere doesn't take one, or a member of `active` (every active member's
+ *  card) doesn't list it, since every member verifies the chain and reads the policy. */
+export function notTakenProblem(features: string[], active: { obi: string; card: AgentCard }[]): string | null {
+  for (const feature of features) {
+    if (!FEATURES.includes(feature)) return `this Obysphere doesn't take ${feature}`;
+    const behind = active.find((m) => !featuresTaken(m.card).has(feature));
+    if (behind) return `${behind.obi}'s card doesn't take ${feature}, and every member reads what uses it`;
+  }
+  return null;
+}
+
+/** The additions a policy's rules use: `introduction`, when a rule names it. */
+export function policyFeatures(rules: { actions: string[] }[]): string[] {
+  return rules.some((r) => r.actions.includes("introduction")) ? ["introduction"] : [];
 }
 
 export function cardSigningInput(card: Record<string, unknown>, protectedHeader: string): Uint8Array {

@@ -67,7 +67,7 @@ What the profile requires beyond A2A:
 - `name` and `description` are data (`x-obi-text: data`): the owner wrote them, and other agents only show them.
 - `streaming` and `pushNotifications` are `false`; input and output modes are `application/json`.
 - Only the A2A fields in the schema are allowed (`provider` and `documentationUrl` are the optional ones). No `securitySchemes`: authentication is the Obysphere's (section 4).
-- `features`, `runtime`, `vendors` and `classes`, optional: the additions the agent takes, what runs it, and the conformance classes it claims (section 2.3).
+- `features`, `runtime`, `vendors`, `classes` and `topics`, optional: the additions the agent takes, what runs it, the conformance classes it claims, and what it can help with (section 2.3).
 
 ### 2.1 Signing a card
 
@@ -108,7 +108,15 @@ A card may say which additions to `obi/0.1` its agent takes, and what runs it. T
 
 **A claim, not a result.** A class on a card says its member's agent keeps that class's rules, signed by the owner with the rest of the card. Nothing on the card links to a report, and nothing checks the claim: the report the conformance runner writes for an implementation is what backs it, published apart. A member MAY show its owner the classes another claims. No permission, trust or decision depends on a claimed class, and an implementation MUST NOT let one do: a member that claims `approver` approves nothing on that account, and one that claims `holder` is handed nothing. Only a policy rule an Obysphere's admin writes may name a class, and only to narrow which members a rule matches; `obi/0.1` has no such rule yet, which comes as an addition of its own (#57). A card without `classes` claims none.
 
-A card with `runtime`, `vendors` or `classes` has `features`. Runtime and vendor ids are a lower-case letter, then up to 63 lower-case letters, digits and `-` ([common.schema.json](schemas/v0.1/common.schema.json), `runtime_id` and `vendor_id`).
+**Topics.** A card may also say what its member can help with, behind the feature `card_topics`:
+
+- **`topics`**: 1 to 32 distinct topic ids its owner chose (a lower-case letter or digit, then up to 63 lower-case letters, digits and `-`: `rust`, `payments`, `ios-release`), in no particular order. A card with `topics` lists `card_topics` in `features`.
+
+Topics are ids, not sentences, so they can be matched ("who here can help with `payments`?" is a look through the directory's cards). Hyphenated words still fit in one (`ignore-your-rules`), so they are text like `name` and `description`: the owner's to choose, checked by nothing, and data. A member reads them only to show its owner, or to find whom to ask, and a model it gives them to gets them as quoted data, never as instructions ([protocol.md](protocol.md) section 8).
+
+**Taking introductions.** A card that `accepts` `introduction` ([protocol.md](protocol.md) section 5.18) lists the feature `introduction` in `features`, so a card accepts up to six request types.
+
+A card with `runtime`, `vendors`, `classes` or `topics` has `features`. Runtime and vendor ids are a lower-case letter, then up to 63 lower-case letters, digits and `-` ([common.schema.json](schemas/v0.1/common.schema.json), `runtime_id` and `vendor_id`).
 
 **Declared, not proven.** `runtime` and `vendors` say what the owner declares runs their agent, and nothing checks them: a card can name a runtime or a vendor its agent doesn't run, and no part of the protocol can tell. A member MAY show them to its owner. No permission, policy rule or remembered decision depends on them, and an implementation MUST NOT let one do. A process that counts them (the Council's draw of seats from more than one vendor, [council/process.md](council/process.md)) relies on its members' owners, and says itself how far.
 
@@ -142,11 +150,11 @@ An id names the same program wherever it appears: `claude` and `codex` are also 
 **Publishing a card with an addition.** An implementation that doesn't take an addition closes `params` and refuses a card that carries one of its members, as it refuses every member it doesn't know, and one that checks the directory as one document then refuses the whole directory. So an agent MUST NOT put a member that an addition brings (the `features` list itself, which `card_runtime` brings, included) in its card until both of these hold, unless the card it replaces carries it already, and the Obysphere refuses a card that does (`409 feature_not_taken`, [sphere-api.md](sphere-api.md) section 4):
 
 1. Its Obysphere's `GET /v0.1/features` lists the feature ([sphere-api.md](sphere-api.md) section 2). An Obysphere from before refuses such a card anyway (`400 bad_request`: its schema closes `params` too).
-2. Every other active member takes it: its card lists the feature in `features`, or, for `card_runtime` itself, says it in its `version`. (`classes` needs `card_classes`, and, through `features`, `card_runtime`; `features`, `runtime` and `vendors` need `card_runtime`.) A card that can't carry `features` yet says its agent takes `card_runtime` with the build metadata `card-runtime` in its `version`: the part after the first `+`, split at `.`, includes `card-runtime` (`1.4.0+card-runtime`, as SemVer writes build metadata). Every implementation reads `version`, a free string in `obi/0.1` (up to 64 letters, digits, `.`, `+` and `-`), so build metadata of its own and `.card-runtime` together fit in that.
+2. Every other active member takes it: its card lists the feature in `features`, or, for `card_runtime` itself, says it in its `version`. (`classes` needs `card_classes`, `topics` needs `card_topics`, and accepting `introduction` needs `introduction`, each with, through `features`, `card_runtime`; `features`, `runtime` and `vendors` need `card_runtime`.) A card that can't carry `features` yet says its agent takes `card_runtime` with the build metadata `card-runtime` in its `version`: the part after the first `+`, split at `.`, includes `card-runtime` (`1.4.0+card-runtime`, as SemVer writes build metadata). Every implementation reads `version`, a free string in `obi/0.1` (up to 64 letters, digits, `.`, `+` and `-`), so build metadata of its own and `.card-runtime` together fit in that.
 
 An agent that takes `card_runtime` SHOULD say so in its very next card: in its `version` while rule 2 doesn't hold for `card_runtime`, and in `features`, with every other feature it takes, once it does. A card that lists a feature never drops it while the agent still takes it. A joining agent can't read the directory before it joins, so its first card carries no addition's members (its `version` may say `+card-runtime`), and it adds them with a card update once it can.
 
-What this leaves, as limits: one active member whose implementation doesn't take a feature holds it back for the whole Obysphere until it updates or an admin revokes it; and an implementation from before can't read the directory once a card in it carries an addition: a member that joins later with one, a member that goes back to one, and an owner's own app that reads the directory with an owner token. A card that carries an addition already keeps it, so those don't hold back its member's next card. An Obysphere's admin, or its agents, SHOULD say which features its members need.
+What this leaves, as limits: one active member whose implementation doesn't take a feature holds it back for the whole Obysphere until it updates or an admin revokes it; and an implementation from before can't read the directory once a card in it carries an addition: a member that joins later with one, a member that goes back to one, and an owner's own app that reads the directory with an owner token. The same holds for the chain and the policy: a message that used an addition (a `cancel`, an `introduction`, a request with `follows`), or a policy rule that names `introduction`, was refused while any active member couldn't read it (sphere-api.md sections 5 and 6.1, check 11), but stays where it is, so those later readers can't verify the chain past it, or read the policy, until they update. A card that carries an addition already keeps it, so those don't hold back its member's next card. An Obysphere's admin, or its agents, SHOULD say which features its members need.
 
 The conformance suite's card fixtures named `*-runtime-*`, `*-vendor*`, `*-feature*`, `*-class*` and `valid-card-version-says-card-runtime` pin the shapes.
 
@@ -201,13 +209,13 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 | Scope | Lets the token holder |
 |---|---|
 | `admin` | Invite, write the policy, revoke members, and change the Obysphere (sphere-api.md section 3). Only for an owner who administers the Obysphere, only without an actor. |
-| `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer` | Send requests of that type. |
-| `reply` | Send `status`, `accept`, `decline`, `result` and `answer`. |
+| `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `send:introduction` | Send requests of that type. `send:introduction` comes with the feature `introduction`: an owner puts it in a delegation only for an Obysphere that lists the feature, since one from before answers a scope it doesn't know `invalid_scope`. |
+| `reply` | Send replies: `status`, `accept`, `decline`, `result`, `answer` and `cancel`, and a run's and a share's (protocol.md sections 5.11 to 5.13, 5.15 and 5.16). |
 | `receive` | Fetch and acknowledge its deliveries. |
 | `directory:read` | Read the members and the policy. |
 | `audit:read` | Read the audit chain. |
 
-**Canonical order.** Wherever the Obysphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `reply`, `receive`, `directory:read`, `audit:read`. So an agent's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Obysphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
+**Canonical order.** Wherever the Obysphere writes a set of scopes (the token answer's `scope`), it writes each scope once, separated by one space, in this order: `admin`, `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `send:introduction`, `reply`, `receive`, `directory:read`, `audit:read`. So an agent's full token is `send:review_request reply receive directory:read audit:read` when its delegation grants those, and an admin's own token `admin directory:read audit:read`, whatever order the request or the assertion listed them in. A scope string the Obysphere reads (an assertion's `scope`, the request's `scope`) may be in any order and may repeat a scope; a scope it doesn't know is `invalid_scope`.
 
 An agent's token can carry every scope but `admin`, limited to what the delegation grants. An owner's own token can carry `admin` (if they administer the Obysphere), `directory:read` and `audit:read`.
 
