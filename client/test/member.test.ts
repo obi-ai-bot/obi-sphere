@@ -22,6 +22,7 @@ interface FakeState {
   receipt?: (env: Envelope) => unknown;
   audit?: (url: URL) => unknown;
   raw?: Record<string, string>;
+  features?: string[];
 }
 
 function fakeSphere(state: FakeState) {
@@ -29,6 +30,7 @@ function fakeSphere(state: FakeState) {
     const u = new URL(url);
     const p = u.pathname;
     const json = (status: number, body: unknown) => new Response(state.raw?.[p] ?? JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+    if (p === "/v0.1/features") return json(200, { features: state.features ?? [] });
     if (p === "/v0.1/oauth/token") return json(200, { access_token: "t".repeat(40), issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 3600, scope: "reply receive" });
     if (p.endsWith("/members")) return json(200, { sphere: SPHERE, members: state.members });
     if (p.endsWith("/deliveries")) return json(200, { deliveries: state.deliveries ?? [] });
@@ -51,13 +53,14 @@ interface Party {
   obi: string;
 }
 
-async function party(name: string, o: { seal?: boolean; issuedAt?: number; owner?: Owner; key?: SigningKey; cardSeq?: number } = {}): Promise<Party> {
+async function party(name: string, o: { seal?: boolean; issuedAt?: number; owner?: Owner; key?: SigningKey; cardSeq?: number; features?: string[]; accepts?: string[] } = {}): Promise<Party> {
   const owner = o.owner ?? (await Owner.generate(name));
   const key = o.key ?? (await SigningKey.generate());
   const seal = o.seal ? await SealKey.generate() : undefined;
   const obi = `${name}-agent`;
   const card = await owner.card({
-    base: BASE, sphere: SPHERE, obi_id: obi, public_key: key.publicKey, key_id: key.keyId, accepts: ["question"], card_seq: o.cardSeq ?? 1,
+    base: BASE, sphere: SPHERE, obi_id: obi, public_key: key.publicKey, key_id: key.keyId, accepts: o.accepts ?? ["question"], card_seq: o.cardSeq ?? 1,
+    ...(o.features ? { features: o.features } : {}),
     issued_at: timestamp(o.issuedAt ?? now - 3600), name: `${name}'s agent`, description: "A test member.", version: "0.1.0",
     ...(seal ? { seal_public_key: seal.publicKey, seal_key_id: seal.keyId } : {}),
   });
@@ -359,4 +362,48 @@ test("updateCard publishes only this member's own keys", async () => {
   m.memory.owners.ada = ada.owner.key.publicKey;
   await assert.rejects(m.updateCard(await card(sphereSeal)), /seal key isn't this member's own/);
   await assert.rejects(m.updateCard(await card(undefined)), /seal key isn't this member's own/);
+});
+
+const CONVERSATION = ["card_runtime", "cancel", "follow_up", "introduction"];
+
+test("cancel, follow-ups and introductions go only when every member takes them", async () => {
+  const ada = await party("ada", { features: CONVERSATION, accepts: ["question", "introduction"] });
+  const bea = await party("bea", { features: CONVERSATION, accepts: ["question", "introduction"] });
+  const cal = await party("cal");
+  const state: FakeState = { members: [entry(ada), entry(bea), entry(cal)], features: CONVERSATION };
+  const m = await memberFor(ada, state);
+  const first = await m.ask("bea-agent", { text: "Ready?" });
+  // cal's card takes none of them: nothing that uses them goes.
+  await assert.rejects(m.cancel(first.id), /no cancel yet: cal-agent/);
+  const plain = await m.ask("bea-agent", { text: "And now?" }, { follows: first.id });
+  assert.equal(plain.followed, false);
+  assert.equal(state.sent!.at(-1)!.body.follows, undefined);
+  await assert.rejects(m.introduce("bea-agent", { member: "cal-agent" }), /no introduction yet/);
+  // Without cal, everyone takes them.
+  state.members = [entry(ada), entry(bea), { ...entry(cal), status: "revoked", revoked_at: timestamp(now) }];
+  const followed = await m.ask("bea-agent", { text: "Still?" }, { follows: first.id });
+  assert.equal(followed.followed, true);
+  assert.equal(state.sent!.at(-1)!.body.follows, first.id);
+  await m.cancel(first.id);
+  const cancel = state.sent!.at(-1)!;
+  assert.equal(cancel.type, "cancel");
+  assert.equal(cancel.to, "bea-agent");
+  assert.equal(cancel.in_reply_to, first.id);
+  await assert.rejects(m.cancel(first.id), /exchange rules/);
+  await assert.rejects(m.ask("bea-agent", { text: "x" }, { follows: crypto.randomUUID() }), /no request between/);
+  await assert.rejects(m.introduce("bea-agent", { member: "bea-agent" }), /neither the sender nor the receiver/);
+});
+
+test("an introduction names an active member the sender trusts", async () => {
+  const ada = await party("ada", { features: CONVERSATION, accepts: ["question", "introduction"] });
+  const bea = await party("bea", { features: CONVERSATION, accepts: ["question", "introduction"] });
+  const dan = await party("dan", { features: CONVERSATION, accepts: ["question", "introduction"] });
+  const state: FakeState = { members: [entry(ada), entry(bea), entry(dan)], features: CONVERSATION };
+  const m = await memberFor(ada, state);
+  await m.introduce("bea-agent", { member: "dan-agent", note: "Both of you work on the cache." });
+  const sent = state.sent!.at(-1)!;
+  assert.equal(sent.type, "introduction");
+  assert.deepEqual(sent.body, { member: "dan-agent", note: "Both of you work on the cache." });
+  state.members = [entry(ada), entry(bea), { ...entry(dan), status: "revoked", revoked_at: timestamp(now) }];
+  await assert.rejects(m.introduce("bea-agent", { member: "dan-agent" }), /isn't an active member/);
 });

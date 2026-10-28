@@ -16,12 +16,12 @@
 //
 // Nothing here acts on what a message says: the words are data, for the caller to show or quote.
 
-import { takesFeature, verifyCard, cardParams, type AgentCard } from "./card.ts";
+import { notTakenProblem, takesFeature, verifyCard, cardParams, type AgentCard } from "./card.ts";
 import { rollbackProblem, verifyChain, type AuditEntry, type ChainMemory } from "./chain.ts";
 import type { JsonObject as Json } from "./json.ts";
 import { keyIdOf, type SigningKey } from "./crypto.ts";
 import {
-  CLOCK_SKEW_SECONDS, REQUEST_TYPES, exchangeMessage, exchangeProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
+  CLOCK_SKEW_SECONDS, REQUEST_TYPES, exchangeMessage, exchangeProblem, followUpProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
   type DirectoryKey, type Envelope, type RequestType, type UnsignedEnvelope,
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
@@ -352,9 +352,41 @@ export class Member {
     return { envelope, receipt };
   }
 
-  /** Sends a request to `to`, a member whose card this member trusts and that accepts `type`. */
-  async request(to: string, type: RequestType, body: JsonObject, o: { expiresIn?: number } = {}): Promise<{ id: string; envelope: Envelope; receipt: SendReceipt }> {
+  /**
+   * Why a message that uses these additions can't go yet (protocol.md sections 5.17 to 5.19,
+   * sphere-api.md section 6.1): the Obysphere doesn't take one, or an active member's card doesn't
+   * list it, since every member reads the chain. Null when they can.
+   */
+  async canUse(features: string[]): Promise<string | null> {
+    if (!features.length) return null;
+    const sphereTakes = await this.api.features();
+    await this.directory();
+    // A card this member doesn't trust says nothing it takes: it counts as taking none.
+    const untrusted = this.#directory.find((m) => m.status === "active" && !this.#peers?.get(m.obi)?.trusted);
+    if (untrusted) return `${untrusted.obi}'s card isn't trusted, so it isn't known to take ${features.join(", ")}`;
+    const active = this.#directory.filter((m) => m.status === "active").map((m) => ({ obi: m.obi, card: m.card as AgentCard }));
+    return notTakenProblem(features, active, sphereTakes);
+  }
+
+  /**
+   * Sends a request to `to`, a member whose card this member trusts and that accepts `type`. With
+   * `follows`, it says which earlier request between the two it follows up (protocol.md 5.19),
+   * when every member takes `follow_up`; otherwise it goes as a plain request (`followed` says which).
+   */
+  async request(to: string, type: RequestType, body: JsonObject, o: { expiresIn?: number; follows?: string } = {}): Promise<{ id: string; envelope: Envelope; receipt: SendReceipt; followed: boolean }> {
     if (!isRequestType(type)) throw new Error(`${type} is not a request`);
+    if (to === this.id) throw new Error("that's this member itself");
+    let followed = false;
+    if (o.follows !== undefined) {
+      const earlier = own(this.memory.exchanges, o.follows)?.request;
+      if (!earlier || followUpProblem({ from: this.id, to, body: { follows: o.follows } }, earlier)) {
+        throw new Error(`${o.follows} is no request between this member and ${to} that this member knows`);
+      }
+      if ((await this.canUse(["follow_up"])) === null) {
+        body = { ...body, follows: o.follows };
+        followed = true;
+      }
+    }
     const peer = await this.#peer(to, true);
     if (!peer) throw new Error(`${to} is not a member`);
     if (peer.status !== "active") throw new Error(`${to} was revoked`);
@@ -364,19 +396,45 @@ export class Member {
     const sent = await this.#sendSigned(unsigned, peer);
     this.memory.exchanges[sent.envelope.id] = { request: sent.envelope, replies: [] };
     this.#remember(sent.envelope);
-    return { id: sent.envelope.id, ...sent };
+    return { id: sent.envelope.id, ...sent, followed };
   }
 
-  ask(to: string, q: { text: string; about?: JsonObject[]; choices?: string[] }, o: { expiresIn?: number } = {}) {
+  ask(to: string, q: { text: string; about?: JsonObject[]; choices?: string[] }, o: { expiresIn?: number; follows?: string } = {}) {
     return this.request(to, "question", q as JsonObject, o);
   }
 
-  requestReview(to: string, body: JsonObject, o: { expiresIn?: number } = {}) {
+  requestReview(to: string, body: JsonObject, o: { expiresIn?: number; follows?: string } = {}) {
     return this.request(to, "review_request", body, o);
   }
 
-  handOff(to: string, body: JsonObject, o: { expiresIn?: number } = {}) {
+  handOff(to: string, body: JsonObject, o: { expiresIn?: number; follows?: string } = {}) {
     return this.request(to, "handoff", body, o);
+  }
+
+  /**
+   * Introduces `to` to `member`, another active member, because the two might work together
+   * (protocol.md 5.18): only when every member takes `introduction`. Introducing two members to
+   * each other is one introduction to each.
+   */
+  async introduce(to: string, i: { member: string; about?: JsonObject[]; note?: string }, o: { expiresIn?: number; follows?: string } = {}) {
+    if (i.member === to || i.member === this.id) throw new Error("the member introduced is neither the sender nor the receiver");
+    const introduced = await this.#peer(i.member, true);
+    if (!introduced || introduced.status !== "active" || !introduced.trusted) throw new Error(`${i.member} isn't an active member this member trusts`);
+    const problem = await this.canUse(["introduction"]);
+    if (problem) throw new Error(`no introduction yet: ${problem}`);
+    return this.request(to, "introduction", { member: i.member, ...(i.about ? { about: i.about } : {}), ...(i.note ? { note: i.note } : {}) }, o);
+  }
+
+  /**
+   * Calls off a request this member sent (protocol.md 5.17): only when every member takes `cancel`,
+   * and only a review_request, question, handoff or introduction whose exchange hasn't ended.
+   */
+  async cancel(requestId: string) {
+    const exchange = own(this.memory.exchanges, requestId);
+    if (!exchange || exchange.request.from !== this.id) throw new Error(`${requestId} is no request this member sent`);
+    const problem = await this.canUse(["cancel"]);
+    if (problem) throw new Error(`no cancel yet: ${problem}`);
+    return this.reply(requestId, "cancel", {});
   }
 
   /** Replies to a request this member received (or, for the sender's own replies, sent): to a trusted member, keeping the exchange rules. */

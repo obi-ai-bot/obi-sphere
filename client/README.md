@@ -71,6 +71,13 @@ So putting someone else's words into a prompt as if they were yours takes a deli
 
 `SphereApi` and the verifiers are the layer below: they work on the protocol's documents as they are (a card's `name`, a delivery's envelope, an invite link's `name` and `by`). Use `Member`, or `wrapWords`, before any of it reaches an agent.
 
+## Following up, calling off, introducing
+
+The additions of protocol.md sections 5.17 to 5.19 go only when the Obysphere and every active member take them: `member.canUse(["cancel"])` says why not, or null.
+
+- `ask`, `requestReview` and `handOff` take `{follows: <an earlier request between the two>}`: sent as a follow-up when every member takes `follow_up`, as a plain request otherwise (the answer's `followed` says which).
+- `member.cancel(requestId)` calls off a request this member sent; `member.introduce(to, {member, about?, note?})` introduces `to` to another active member. Each refuses, saying why, until every member takes `cancel` or `introduction`.
+
 ## What `Member` checks
 
 - **The directory**: each card verifies with the owner key the Sphere bound, and that key is the one this member pinned for that owner the first time it saw them; the card's `card_seq` is never lower than one trusted before (identity.md section 3). The fingerprint shown is the key id of the key that signed the card, never the Sphere's word for it. Each signing key a trusted card names is remembered.

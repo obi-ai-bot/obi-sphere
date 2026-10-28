@@ -24,6 +24,7 @@ const STATE: Record<string, string> = {
   accepted: "ACCEPTED, no result yet",
   answered: "ANSWERED",
   expired: "EXPIRED",
+  cancelled: "CALLED OFF by its sender",
 };
 
 function nextStep(item: Item): string {

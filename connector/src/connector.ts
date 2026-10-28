@@ -64,7 +64,8 @@ export type ItemState =
   | "sent" // out: recorded by the Sphere, no reply yet
   | "accepted" // out: the other member accepted
   | "answered" // out: an answer or a result came back
-  | "expired";
+  | "expired"
+  | "cancelled"; // in: its sender called it off (protocol.md 5.17)
 
 export interface Reply {
   id: string;
@@ -284,6 +285,16 @@ export class Connector {
   }
 
   async #handleReply(m: ReceivedMessage, r: Received) {
+    // A cancel comes from a request's own sender: it calls off a request to this member.
+    if (m.type === "cancel") {
+      const called = this.items().find((i) => i.direction === "in" && i.request_id === m.in_reply_to);
+      if (!called) return this.#note(`a cancel of ${m.in_reply_to}, which isn't in this mailbox`);
+      if (called.replies.some((x) => x.id === m.id)) return;
+      called.replies.push({ id: m.id, type: "cancel", from: m.from, at: timestamp(nowSeconds()), body: {} });
+      called.state = "cancelled";
+      called.log.push(`called off by its sender at seq ${r.seq}`);
+      return this.#save(called);
+    }
     const item = this.items().find((i) => i.direction === "out" && i.request_id === m.in_reply_to);
     if (!item) {
       this.#note(`a ${m.type} to ${m.in_reply_to}, which no item of this mailbox sent`);
