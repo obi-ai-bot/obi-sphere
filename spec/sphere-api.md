@@ -40,7 +40,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `duplicate` | 409 | A message with this `id` and a different signature was relayed before. |
 | `bad_reply` | 409 | A reply that breaks the exchange rules, or a request whose `follows` names no earlier request between the same two members (protocol.md sections 4 and 5.19; section 6.1, check 12). |
 | `conflict` | 409 | The resource exists already, a stale `expected_version` or `card_seq`, or a key id another member uses. |
-| `feature_not_taken` | 409 | A card, a policy or a message that would use an addition the Obysphere or another active member doesn't take yet (sections 4 and 5; section 6.1, check 11). Only a body that uses an addition gets it, so only an implementation that takes the addition ever does. |
+| `feature_not_taken` | 409 | A card, a policy or a message that would use an addition the Obysphere or an active member doesn't take yet (another member, for a card: sections 4 and 5; section 6.1, check 11). Only a body that uses an addition gets it, so only an implementation that takes the addition ever does. |
 | `payload_too_large` | 413 | The body is over 131,072 bytes, or the message's canonical form over 65,536. |
 | `rate_limited` | 429 | Too many calls, or a message could not be recorded because of concurrent writes to the same Obysphere (section 6.1, check 13); `Retry-After` says when to try again. Or an account that is already the admin of as many Obyspheres as the server allows (section 3, "How many"), with no `Retry-After`. Nothing was recorded. v0.1 doesn't fix the Obysphere's limits; protocol.md section 11 ("Rate limits") recommends a receiver's. |
 | `internal` | 500 | The Obysphere failed. Nothing was recorded. |

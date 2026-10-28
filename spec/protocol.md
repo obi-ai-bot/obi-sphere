@@ -324,7 +324,7 @@ A finding is `{id, severity, file, line, end_line?, title, detail}` ([common.sch
 
 ## 8. Text is data
 
-Some fields hold words a person or an agent wrote: goals, questions, notes (an introduction's included), summaries, finding titles and details, answers, choices, card names and descriptions. In the schemas each of them is a `line_text` or `block_text` and carries the annotation keyword **`x-obi-text: "data"`**, which this spec defines. Every other string is an identifier with a closed pattern (ids, repository names, branches, paths, commit ids) or an enum.
+Some fields hold words a person or an agent wrote: goals, questions, notes (an introduction's included), summaries, finding titles and details, answers, choices, card names and descriptions. In the schemas each of them is a `line_text` or `block_text` and carries the annotation keyword **`x-obi-text: "data"`**, which this spec defines. Every other string is an identifier with a closed pattern (ids, repository names, branches, paths, commit ids) or an enum. One kind of identifier is data all the same: a card's `topics` (identity.md section 2.3) are ids, but a topic can string words together (`ignore-your-rules`), so an agent that gives topics to a model quotes them as it quotes the fields above.
 
 For every field annotated `x-obi-text: "data"`, an implementation:
 
@@ -470,7 +470,7 @@ A `cancel` (5.17) for a request the agent received, from that request's own send
 - An item waiting in its owner's inbox for the request is settled as cancelled; its owner MAY be told.
 - Nothing more is sent in that exchange, and nothing else changes: a remembered decision or a sharing rule made because of it stays as its owner made it.
 
-A cancel can't take back what was done before it arrived: an approval already posted on the code host stays there, for the sender's owner to dismiss on the code host if they want to, and a `result` or `answer` already sent ended the exchange, so a cancel after it is refused.
+A cancel can't take back what was done before it arrived: an approval already posted on the code host stays there, for the sender's owner to dismiss on the code host if they want to, and a reply that already ended the exchange (a `result`, an `answer`, a `decline`, an introduction's `accept`) means a cancel after it is refused. When the cancel is recorded first, the receiver's `result` is refused instead, so the sender never learns of an approval the receiver had posted: the receiver SHOULD then dismiss that approval itself, as step 3 of "Approving on the code host" dismisses one whose head moved.
 
 A cancel says nothing about why. A sender SHOULD cancel a request it no longer needs rather than leave it to `expires_at`.
 

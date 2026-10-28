@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { BRIEF, World, makeCard, newKey } from "./helpers";
 
-const FEATURES = ["cancel", "card_runtime", "follow_up", "introduction"];
+const FEATURES = ["cancel", "card_runtime", "card_topics", "follow_up", "introduction"];
 const SCOPE = "send:review_request send:question send:introduction reply receive directory:read audit:read";
 
 const RULES = [
@@ -13,7 +13,7 @@ const RULES = [
   { id: "talk", from_owner: "*", to_owner: "*", actions: ["question", "introduction"], repos: ["*"] },
 ];
 
-/** A team whose members' cards all take the four features and accept introductions, and a policy
+/** A team whose members' cards all take #53's features and accept introductions, and a policy
  *  that names introduction; `extra` members, whose cards list no features, join after it. */
 async function talking(extra: string[] = []): Promise<World> {
   const w = new World();
@@ -116,6 +116,8 @@ describe("a message that uses an addition (sphere-api.md section 6.1, check 11)"
     expect(r.body.error.message).toContain("obi-dana");
     const cancel = await w.envelope("obi-wellington", "obi-ernesto", "cancel", {}, { correlation_id: q1.id, in_reply_to: q1.id });
     expect((await w.send(cancel, tw)).body.error.code).toBe("feature_not_taken");
+    const intro = await w.envelope("obi-wellington", "obi-ernesto", "introduction", { member: "obi-sangam" });
+    expect((await w.send(intro, tw)).body.error.code).toBe("feature_not_taken");
     // Plain messages still go.
     const plain = await w.envelope("obi-wellington", "obi-ernesto", "question", { text: "Plain words still go." });
     expect((await w.send(plain, tw)).status).toBe(202);
@@ -134,10 +136,11 @@ describe("a card or a policy that uses an addition (sphere-api.md sections 4 and
     expect(early.body.error.message).toContain("introduction");
     const wKey = w.obis.get("obi-wellington")!.key;
     const accepts = ["review_request", "question", "introduction"];
-    const topics = await makeCard({ sphere: w.sphere, obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, accepts, cardSeq: 2, issuedAt: w.clock.ts(), params: { features: [...FEATURES, "card_topics"], topics: ["payments"] } });
+    const topics = await makeCard({ sphere: w.sphere, obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, accepts, cardSeq: 2, issuedAt: w.clock.ts(), params: { features: FEATURES, topics: ["payments"] } });
     const r = await w.call("PUT", `/v0.1/spheres/${w.sphere}/members/obi-wellington/card`, { token: await w.obiToken("obi-wellington"), body: { card: topics } });
     expect(r.status).toBe(409);
     expect(r.body.error.code).toBe("feature_not_taken");
+    expect(r.body.error.message).toContain("obi-dana");
     expect(r.body.error.message).toContain("card_topics");
   });
 
