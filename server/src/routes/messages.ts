@@ -7,8 +7,7 @@ import { SPHERE_COLUMNS, guardedWrite, requireSphere, withRetries, type KeyRow, 
 import type { Deps, Env } from "../env.ts";
 import { ring, rung } from "../doorbell.ts";
 import { apiError, json, parseBody, readBody } from "../http.ts";
-import { cardParams, featuresTaken, messageFeatures, type AgentCard } from "../protocol/card.ts";
-import { FEATURES } from "../protocol/features.ts";
+import { cardParams, messageFeatures, notTakenProblem, type AgentCard } from "../protocol/card.ts";
 import { entryHash } from "../protocol/chain.ts";
 import { uuid } from "../protocol/crypto.ts";
 import {
@@ -122,11 +121,8 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     // Obysphere and every active member take it (sphere-api.md section 6.1, check 11).
     if (uses.length > 0) {
       const active = rows<{ obi: string; card: string }>(at.active);
-      for (const feature of uses) {
-        if (!FEATURES.includes(feature)) throw apiError("policy_denied", `this Obysphere doesn't take ${feature}`);
-        const behind = active.find((m) => !featuresTaken(JSON.parse(m.card) as AgentCard).has(feature));
-        if (behind) throw apiError("policy_denied", `${behind.obi}'s card doesn't take ${feature}, and every member verifies the chain`);
-      }
+      const problem = notTakenProblem(uses, active.map((m) => ({ obi: m.obi, card: JSON.parse(m.card) as AgentCard })));
+      if (problem) throw apiError("feature_not_taken", problem);
       // An introduction's member is an active member (protocol.md section 5.18).
       if (env_.type === "introduction" && !active.some((m) => m.obi === env_.body.member)) throw apiError("not_found", `${String(env_.body.member)} is not an active member`);
     }

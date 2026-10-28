@@ -8,29 +8,37 @@ import { BRIEF, World, makeCard, newKey } from "./helpers";
 const FEATURES = ["cancel", "card_runtime", "follow_up", "introduction"];
 const SCOPE = "send:review_request send:question send:introduction reply receive directory:read audit:read";
 
-/** A team whose members' cards all take the four features and accept introductions. */
+const RULES = [
+  { id: "reviews", from_owner: "*", to_owner: "*", actions: ["review_request"], repos: ["obi-e2e/fixture-app"] },
+  { id: "talk", from_owner: "*", to_owner: "*", actions: ["question", "introduction"], repos: ["*"] },
+];
+
+/** A team whose members' cards all take the four features and accept introductions, and a policy
+ *  that names introduction; `extra` members, whose cards list no features, join after it. */
 async function talking(extra: string[] = []): Promise<World> {
   const w = new World();
   expect((await w.create()).status).toBe(201);
   for (const [owner, obi] of [["wellington", "obi-wellington"], ["ernesto", "obi-ernesto"], ["sangam", "obi-sangam"]] as const) await join(w, owner, obi, FEATURES);
+  expect((await w.putPolicy(RULES)).status).toBe(200);
   for (const [owner, obi] of extra.map((o) => [o, `obi-${o}`] as const)) await join(w, owner, obi, null);
-  const rules = [
-    { id: "reviews", from_owner: "*", to_owner: "*", actions: ["review_request"], repos: ["obi-e2e/fixture-app"] },
-    { id: "talk", from_owner: "*", to_owner: "*", actions: ["question", "introduction"], repos: ["*"] },
-  ];
-  expect((await w.putPolicy(rules)).status).toBe(200);
   return w;
 }
 
-async function join(w: World, owner: string, obi: string, features: string[] | null): Promise<void> {
+/** Redeems an invitation with a first card that lists `features`, and accepts introductions when they include it. */
+async function redeem(w: World, owner: string, obi: string, features: string[] | null) {
   const inv = await w.invite(owner, obi);
   const ownerKey = await w.ownerKey(owner);
   const key = await newKey();
-  const accepts = features ? ["review_request", "question", "introduction"] : ["review_request", "question"];
+  const accepts = features?.includes("introduction") ? ["review_request", "question", "introduction"] : ["review_request", "question"];
   const card = await makeCard({ sphere: w.sphere, obi, owner, ownerKey, obiKey: key, accepts, issuedAt: w.clock.ts(), ...(features ? { params: { features } } : {}) });
   const r = await w.call("POST", `/v0.1/spheres/${w.sphere}/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: ownerKey.publicKey, card } });
+  if (r.status === 201) w.obis.set(obi, { owner, key, accepts });
+  return r;
+}
+
+async function join(w: World, owner: string, obi: string, features: string[] | null): Promise<void> {
+  const r = await redeem(w, owner, obi, features);
   expect(r.status, JSON.stringify(r.body)).toBe(201);
-  w.obis.set(obi, { owner, key, accepts });
 }
 
 const token = async (w: World, obi: string) => {
@@ -96,20 +104,57 @@ describe("introductions (protocol.md section 5.18)", () => {
 });
 
 describe("a message that uses an addition (sphere-api.md section 6.1, check 11)", () => {
-  it("is 403 policy_denied while an active member's card doesn't take its feature, since every member verifies the chain", async () => {
+  it("is 409 feature_not_taken while an active member's card doesn't take its feature, since every member verifies the chain", async () => {
     const w = await talking(["dana"]);
     const tw = await token(w, "obi-wellington");
     const q1 = await w.envelope("obi-wellington", "obi-ernesto", "question", { text: "Should average() round?" });
     expect((await w.send(q1, tw)).status).toBe(202);
     const followUp = await w.envelope("obi-wellington", "obi-ernesto", "question", { text: "And for an empty list?", follows: q1.id });
     const r = await w.send(followUp, tw);
-    expect(r.status).toBe(403);
-    expect(r.body.error.code).toBe("policy_denied");
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe("feature_not_taken");
     expect(r.body.error.message).toContain("obi-dana");
     const cancel = await w.envelope("obi-wellington", "obi-ernesto", "cancel", {}, { correlation_id: q1.id, in_reply_to: q1.id });
-    expect((await w.send(cancel, tw)).body.error.code).toBe("policy_denied");
+    expect((await w.send(cancel, tw)).body.error.code).toBe("feature_not_taken");
     // Plain messages still go.
     const plain = await w.envelope("obi-wellington", "obi-ernesto", "question", { text: "Plain words still go." });
     expect((await w.send(plain, tw)).status).toBe(202);
+  });
+});
+
+describe("a card or a policy that uses an addition (sphere-api.md sections 4 and 5)", () => {
+  it("holds back topics, and a card that accepts introductions, until every other active member takes them", async () => {
+    const w = await talking();
+    // obi-dana takes card_runtime and nothing more.
+    await join(w, "dana", "obi-dana", ["card_runtime"]);
+    const early = await redeem(w, "kofi", "obi-kofi", ["card_runtime", "introduction"]);
+    expect(early.status).toBe(409);
+    expect(early.body.error.code).toBe("feature_not_taken");
+    expect(early.body.error.message).toContain("obi-dana");
+    expect(early.body.error.message).toContain("introduction");
+    const wKey = w.obis.get("obi-wellington")!.key;
+    const accepts = ["review_request", "question", "introduction"];
+    const topics = await makeCard({ sphere: w.sphere, obi: "obi-wellington", owner: "wellington", ownerKey: await w.ownerKey("wellington"), obiKey: wKey, accepts, cardSeq: 2, issuedAt: w.clock.ts(), params: { features: [...FEATURES, "card_topics"], topics: ["payments"] } });
+    const r = await w.call("PUT", `/v0.1/spheres/${w.sphere}/members/obi-wellington/card`, { token: await w.obiToken("obi-wellington"), body: { card: topics } });
+    expect(r.status).toBe(409);
+    expect(r.body.error.code).toBe("feature_not_taken");
+    expect(r.body.error.message).toContain("card_topics");
+  });
+
+  it("holds back a policy rule that names introduction until every active member takes it, unless the policy names it already", async () => {
+    const w = new World();
+    expect((await w.create()).status).toBe(201);
+    await join(w, "wellington", "obi-wellington", FEATURES);
+    await join(w, "dana", "obi-dana", null);
+    const refused = await w.putPolicy(RULES);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("feature_not_taken");
+    expect(refused.body.error.message).toContain("obi-dana");
+    expect((await w.putPolicy(RULES.slice(0, 1))).status).toBe(200);
+  });
+
+  it("lets the admin keep a rule that names introduction when a member from before joins after it", async () => {
+    const w = await talking(["dana"]);
+    expect((await w.putPolicy(RULES, 1)).status).toBe(200);
   });
 });

@@ -361,7 +361,7 @@ export function newRequest(opts: MessageOptions & { to: string; type: RequestTyp
 
 /**
  * A reply to `request`, unsigned. It goes to the request's sender, or, for the replies a request's
- * own sender sends (`run_cancel`, `share_status`, `share_revoke`), to its receiver.
+ * own sender sends (`run_cancel`, `share_status`, `share_revoke`, `cancel`), to its receiver.
  */
 export function newReply(request: Pick<Envelope, "id" | "from" | "to" | "sphere">, opts: Omit<MessageOptions, "sphere"> & { type: string; body: JsonObject }): UnsignedEnvelope {
   if (!isReplyType(opts.type)) throw new Error(`${opts.type} is not a reply`);

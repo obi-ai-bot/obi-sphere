@@ -6,6 +6,7 @@ import { canonicalBytes, utf8, type JsonObject } from "./json.ts";
 import { CLOCK_SKEW_SECONDS, OK, fail, seconds, type Verdict } from "./envelope.ts";
 import { matches, schemaErrors } from "./schemas.ts";
 import { b64url } from "./crypto.ts";
+import { FEATURES } from "./features.ts";
 
 export const CARD_EXTENSION_URI = "urn:obi-sphere:ext:obi:0.1";
 
@@ -88,6 +89,23 @@ export function publishingProblem(p: CardParams, others: { obi: string; card: Ag
     if (behind) return `${behind.obi}'s card doesn't take ${feature}: a card with its members waits until every active member's does`;
   }
   return null;
+}
+
+/** Why a message or a policy that uses `features` can't go in yet (sphere-api.md sections 5 and
+ *  6.1, check 11): this Obysphere doesn't take one, or a member of `active` (every active member's
+ *  card) doesn't list it, since every member verifies the chain and reads the policy. */
+export function notTakenProblem(features: string[], active: { obi: string; card: AgentCard }[]): string | null {
+  for (const feature of features) {
+    if (!FEATURES.includes(feature)) return `this Obysphere doesn't take ${feature}`;
+    const behind = active.find((m) => !featuresTaken(m.card).has(feature));
+    if (behind) return `${behind.obi}'s card doesn't take ${feature}, and every member reads what uses it`;
+  }
+  return null;
+}
+
+/** The additions a policy's rules use: `introduction`, when a rule names it. */
+export function policyFeatures(rules: { actions: string[] }[]): string[] {
+  return rules.some((r) => r.actions.includes("introduction")) ? ["introduction"] : [];
 }
 
 export function cardSigningInput(card: Record<string, unknown>, protectedHeader: string): Uint8Array {
