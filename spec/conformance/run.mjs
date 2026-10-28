@@ -9,7 +9,7 @@
 //                                               live implementation, enrolled through its adapter
 //                                               command, against scripted adversarial peers
 //   node conformance/run.mjs --badge <report.json>  write an SVG badge from a report to stdout
-//   options: --kinds envelope,card,audit,wire,host_approval   only these case kinds (impl mode)
+//   options: --kinds envelope,card,audit,wire,host_approval,a2a   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
 //            --report <file> --label <impl>   with --impl or --receiver: write/merge a per-class
 //                                             report (conformance/report.mjs) an impl can publish
@@ -27,8 +27,9 @@ import { buildFixtures } from "./generate.mjs";
 import { badgeSvg, classOfFixture, loadOrNew, recordImpl, recordReceiver, writeReport } from "./report.mjs";
 import {
   ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, channelKeys, fromB64url, helloSigningInput, judge, openFrame, schemas, sealFrame,
-  x25519FromPrivate, x25519Shared, SEAL_INFO_PREFIX, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce,
+  x25519FromPrivate, x25519Shared, SEAL_INFO_PREFIX, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce, schemaErrors, verifyChain,
 } from "./lib/obi.mjs";
+import { exchangeTask } from "./lib/a2a.mjs";
 import { createPublicKey, verify } from "node:crypto";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -252,6 +253,22 @@ function checkSeal() {
   console.log(`${ok} sealing answers as expected.`);
 }
 
+/** GetTask's known answers (a2a-vectors.json): a valid chain, each task as the reference shows it, each matching its schema. */
+function checkA2aVectors() {
+  section("A2A binding known answers (a2a.md section 5)");
+  const v = JSON.parse(readFileSync(join(here, "a2a-vectors.json"), "utf8"));
+  const chain = verifyChain(v.chain, { keys: v.keys });
+  if (!chain.ok) failed("a2a", `the vectors' chain doesn't verify: ${chain.message}`);
+  let ok = 0;
+  for (const t of v.vectors) {
+    const got = exchangeTask(v.chain.entries, t.id, t.caller, t.member, { historyLength: t.history_length });
+    if (canonicalize(got) !== canonicalize(t.task)) failed("a2a", `${t.name}: the task differs`);
+    else if (t.task !== null && schemaErrors("wire/a2a-task", t.task).length) failed("a2a", `${t.name}: ${schemaErrors("wire/a2a-task", t.task).join("; ")}`);
+    else ok++;
+  }
+  console.log(`${ok} of ${v.vectors.length} tasks as expected, each matching wire/a2a-task; the chain verifies.`);
+}
+
 function checkDeterminism() {
   section("Fixtures are reproducible");
   const expected = buildFixtures();
@@ -340,6 +357,8 @@ function checkCoverage(cases) {
   for (const n of ["valid-features-card-runtime", "valid-features-takes-none", "valid-features-unknown-id", "invalid-features-list-missing", "invalid-features-id-repeated", "invalid-health-lists-features"]) need.push(`wire/${n}`);
   // A policy rule may require a conformance class (sphere-api.md section 5, the policy_classes feature).
   for (const n of ["valid-policy-put", "valid-policy-put-classes", "valid-policy-classes-response", "invalid-policy-put-class-not-an-id", "invalid-policy-put-classes-empty", "invalid-policy-put-classes-repeated", "invalid-policy-put-seventeen-classes"]) need.push(`wire/${n}`);
+  // The A2A binding (a2a.md section 4): the envelope is all that travels, and the message agrees with it.
+  for (const n of ["valid-question", "valid-answer", "invalid-text-part-beside-envelope", "invalid-message-metadata", "invalid-message-id-not-envelope-id", "invalid-task-id-on-request", "invalid-reply-without-task-id", "invalid-blocking", "invalid-envelope-bad-signature", "invalid-to-another-member"]) need.push(`a2a/${n}`);
   // Invitations, named and open (sphere-api.md section 4).
   for (const n of ["valid-invitation-named", "valid-invitation-open", "invalid-invitation-owner-without-obi", "invalid-invitation-named-max-uses", "invalid-invitation-email-domain", "valid-invitation-preview-response"]) need.push(`wire/${n}`);
   // Approving on the code host (protocol.md section 11): the owner's confirmation counts only for
@@ -381,6 +400,7 @@ async function selfCheck() {
   checkJcs();
   checkChannel();
   checkSeal();
+  checkA2aVectors();
   checkDeterminism();
   checkSecretScanAllowlist();
   const cases = checkVerdicts();
