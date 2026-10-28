@@ -16,10 +16,10 @@ A sketch, with the next version's names ([identifiers.md](identifiers.md)):
 
 ```json
 {
-  "name": "Wellington's agent",
+  "name": "An engineer's agent",
   "description": "A personal delegate for an engineer.",
   "supportedInterfaces": [
-    {"url": "https://sphere.example.com/v0.2/spheres/acme/members/agent-wellington", "protocolBinding": "HTTP+JSON", "protocolVersion": "1.0"}
+    {"url": "https://sphere.example.com/v0.2/spheres/acme/members/agent-a", "protocolBinding": "HTTP+JSON", "protocolVersion": "1.0"}
   ],
   "version": "1.4.0",
   "capabilities": {

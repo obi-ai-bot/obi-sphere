@@ -1,6 +1,6 @@
 // The A2A binding (spec/a2a.md): each member's card url is an A2A 1.0 interface, in A2A's
 // HTTP+JSON binding. SendMessage carries one signed envelope, unchanged, as its message's one data
-// part, and goes through the relay's own checks and record (routes/messages.ts, `relay`), so a
+// part, and goes through the relay's own checks and record (routes/messages.ts, `recordSend`), so a
 // message sent this way is the one the relay would have recorded. GetTask shows an exchange
 // between the caller and the URL's member, read from the chain. Every error here is A2A's
 // (google.rpc.Status), never the Obysphere's own form.
@@ -176,7 +176,9 @@ export const sendMessage = operation("send", async (request, env, deps, sphere, 
   let task: Record<string, unknown> | null = null;
   try {
     task = await readTask(env, sphere.id, correlationId, caller.actor!, member, configuration.historyLength);
-  } catch {}
+  } catch (e) {
+    console.error("sphere: a2a: reading a recorded message's task failed", e instanceof Error ? e.name : typeof e);
+  }
   if (!task) throw new A2aError(500, "INTERNAL", "INTERNAL", EXTENSION, `recorded as seq ${sent.receipt.seq}, but its task couldn't be read: read it with GetTask`);
   return answer(200, { task: { ...task, metadata: { [EXTENSION]: sent.receipt } } });
 });

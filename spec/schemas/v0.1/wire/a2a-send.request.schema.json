@@ -82,14 +82,19 @@
           "maxItems": 16,
           "uniqueItems": true,
           "contains": {
-            "const": "application/json"
+            "enum": [
+              "application/json",
+              "application/*",
+              "*/*"
+            ]
           },
           "items": {
             "type": "string",
             "minLength": 3,
             "maxLength": 127,
-            "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9*][a-z0-9!#$&^_.+*-]*$"
-          }
+            "pattern": "^([a-z0-9][a-z0-9!#$&^_.+-]*|\\*)/([a-z0-9][a-z0-9!#$&^_.+-]*|\\*)$"
+          },
+          "description": "When given, one of them takes JSON: application/json, application/* or */*."
         },
         "historyLength": {
           "description": "How many of the latest messages the answer's task holds; the Obysphere holds at most 50.",
