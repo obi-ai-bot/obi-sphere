@@ -189,7 +189,9 @@ What a draw needs from the directory is each entry's set of people: one person, 
 
 **The alternatives.** Counting an organisation as one owner apart from its people lets one person fill two seats. Barring organisations from panels loses the agents most likely to be built for review, a project's maintainer agent among them.
 
-## 7. Open in this Draft, with recommendations
+## 7. Left open, not part of D9 to D13
+
+These were listed as open, each with a recommendation, when D9 to D13 were decided; the decision on #61 doesn't settle them.
 
 - **Organisations answering for organisations** (a team inside a company). Recommended: not yet; answerers are persons. Nesting can come when a real use needs it.
 - **Treating every organisation alike** in a receiver's or an Obysphere's rules, for example declining all requests from organisations without listing them. Recommended: a policy rule field for the sender's owner kind (`from_kind: "person" | "org"`), added when someone asks for it.

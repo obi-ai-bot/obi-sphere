@@ -42,9 +42,9 @@ A server speaks both versions while its Obyspheres move: `/v0.1/…` as today, a
 
 ## 4. The switch (D8)
 
-**Decided: one switch per Obysphere** ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52#issuecomment-6456517732)), made by its admin, at a sequence number of its chain. It is the same idea as the rule this Draft proposes for additions (README.md, "Why a new version"): since every member reads and verifies the whole chain, a message that uses an addition is relayed only when every active member's card lists its feature. A new version is used only once every member can read it, except that a switch suspends the members that can't, rather than waiting for them.
+**Decided: one switch per Obysphere** ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52#issuecomment-6456517732)), made by its admin, at a sequence number of its chain, once every active member has a next-version card. It is the same idea as the rule this Draft proposes for additions (README.md, "Why a new version"): since every member reads and verifies the whole chain, a new version is used only once every member can read it.
 
-1. **When.** The admin chooses when. Members whose waiting next-version card is missing, voided, or names other keys than their current `obi/0.1` card at that moment are **suspended** by the switch.
+1. **When.** The admin chooses when, once every active member has a waiting next-version card (D8). This Draft adds, as its own proposal and not part of D8: a member whose waiting card is voided, or names other keys than its current `obi/0.1` card, at the moment of the switch is **suspended** by it rather than holding the switch back; and whether an admin may switch before every member has a card, suspending the rest, is left to the maintainer.
 2. **Suspended** is a member status between active and revoked. The member stays in the directory with its keys, sends nothing and receives nothing (`403 member_suspended`), and policy and the Council treat it as absent. **The way back:** its owner (for an organisation's agent, an answerer) registers a next-version card with the member's current keys, with their own owner token, since the member's `/v0.1` tokens are gone; the member then gets tokens with a next-version delegation, and is active again. Nothing it had is lost. An admin may revoke it as any member.
 3. **What happens at the switch.** In one step, at the chain's head seq *s*, the server:
    - makes each member's waiting card current;
@@ -60,7 +60,7 @@ A server speaks both versions while its Obyspheres move: `/v0.1/…` as today, a
 
 ## 5. Organisations
 
-If organisation owners come to `obi/0.1` first, as an addition (README.md, D13), an Obysphere has organisations at its switch. Before it, each organisation:
+Since organisation owners come to `obi/0.1` first, as an addition (D13), an Obysphere may have organisations at its switch. Before it, each organisation:
 
 - **signs a next-version charter**: the same answerers, approvers and thresholds, `protocol` `sphere/0.2`, the next `charter_seq`, `prev` the hash of its last `obi/0.1` charter, signed by `thresholds.charter` answerers under the `sphere/0.2 charter` prefix. Pinning follows that `prev` link across the versions as it follows any other;
 - has each of its agents' next-version cards and delegations signed by `thresholds.card` answerers, as section 3 says for every member.
