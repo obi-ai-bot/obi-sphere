@@ -32,7 +32,7 @@ export const IDP_ED_KEY = (await crypto.subtle.generateKey({ name: "Ed25519" }, 
 const idpEdJwk = { ...((await crypto.subtle.exportKey("jwk", IDP_ED_KEY.publicKey)) as JsonWebKey), kid: "test-idp-ed-key" };
 
 /** What the Sphere fetches from issuers, answered here: Google's keys, and the test provider's discovery and keys. */
-export const ISSUERS = new Issuers(async (url) => {
+export const ISSUERS_GET = async (url: string): Promise<Response> => {
   if (url === "https://www.googleapis.com/oauth2/v3/certs") return Response.json({ keys: [googleJwk] });
   if (url === `${IDP.issuer}/.well-known/openid-configuration`) {
     return Response.json({ issuer: IDP.issuer, authorization_endpoint: IDP.authorize, jwks_uri: IDP.jwks, response_types_supported: ["code", "id_token"], response_modes_supported: ["query", "fragment", "form_post"], id_token_signing_alg_values_supported: ["ES256"] });
@@ -42,7 +42,8 @@ export const ISSUERS = new Issuers(async (url) => {
   if (url === "https://other-idp.test/.well-known/openid-configuration") return Response.json({ issuer: IDP.issuer, authorization_endpoint: IDP.authorize, jwks_uri: IDP.jwks });
   if (url === "https://plain-idp.test/.well-known/openid-configuration") return Response.json({ issuer: "https://plain-idp.test", authorization_endpoint: "http://127.0.0.1:9/authorize", jwks_uri: "http://127.0.0.1:9/keys" });
   return new Response("not found", { status: 404 });
-});
+};
+export const ISSUERS = new Issuers(ISSUERS_GET);
 
 /** The Sphere's clock in the tests: starts at 2026-10-14T12:00:00Z, moves only when told. */
 export class Clock {

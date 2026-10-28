@@ -1,7 +1,7 @@
 // Spheres (spec/sphere-api.md section 3) and health: creating one, reading it, and what its admins
 // change afterwards (its name and picture, who else administers it, and deleting it).
 
-import { bearer, knowsOrigin, ownOrigin, requireOperator, requireOwnerToken, requireScope, type Caller } from "../auth.ts";
+import { bearer, ownOrigin, requireOperator, requireOwnerToken, requireScope, type Caller } from "../auth.ts";
 import { constraintFailure, getOwner, getSphere, requireSphere, unforeseen, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readBody, readJson } from "../http.ts";
@@ -23,7 +23,7 @@ export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, 
  */
 export function features(request: Request, env: Env): Response {
   // DPoP and the URL form of aud need this server to know its own address (SPHERE_URL on the Node build).
-  const known = knowsOrigin(env) && ownOrigin(env, request) !== null;
+  const known = ownOrigin(env, request) !== null;
   return json(200, { features: [...FEATURES, "signin_providers", ...(known ? ["dpop", "sphere_url_aud"] : []), ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
 }
 

@@ -7,7 +7,7 @@ import { handle } from "../src/app";
 import { Issuers } from "../src/signin";
 import { b64url } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
-import { BASE, GOOGLE_KEY, IDP, IDP_ED_KEY, IDP_KEY, ISSUERS, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
+import { BASE, GOOGLE_KEY, IDP, IDP_ED_KEY, IDP_KEY, ISSUERS, ISSUERS_GET, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
 
 const CLIENT = env.GOOGLE_CLIENT_ID;
 
@@ -412,6 +412,24 @@ describe("signing in with any OpenID Connect provider", () => {
     const start = await call("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey, return_to: "http://127.0.0.1:53682/cb" } });
     w.clock.advance(601);
     expect((await post(start.body.state)).headers.get("Location")).toMatch(/^obi-sphere:\/\/signin\?state=.*&error=failed$/);
+  });
+
+  it("gives no code to a callback that loses the race for its sign-in", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    const call = makeCall(w.clock, e as never);
+    const start = await call("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey, return_to: "http://127.0.0.1:53682/cb" } });
+    const nonce = new URL(start.body.url).searchParams.get("nonce")!;
+    const token = await es256({ iss: IDP.issuer, aud: "acme-client", sub: "u-1", nonce, iat: w.clock.s, exp: w.clock.s + 600 });
+    // Another post finishes the sign-in while this one reads the issuer's keys.
+    const racing = new Issuers(async (url) => {
+      if (url === IDP.jwks) await env.DB.prepare("UPDATE sign_ins SET account = 'acme:first', code_sha256 = ?2 WHERE state = ?1").bind(start.body.state, "0".repeat(64)).run();
+      return ISSUERS_GET(url);
+    });
+    const back = await handle(new Request(`${BASE}/v0.1/signin/acme/callback`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ state: start.body.state, id_token: token }).toString() }), e as never, { now: w.clock.now, issuers: racing });
+    const location = back.headers.get("Location")!;
+    expect(location).toMatch(/^obi-sphere:\/\/signin\?state=.*&error=failed$/);
+    expect(location).not.toContain("code=");
   });
 
   it("takes Oby's scheme only for its sign-in page, and no browser scheme from the operator", async () => {

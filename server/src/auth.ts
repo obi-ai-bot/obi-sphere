@@ -45,11 +45,12 @@ export function ownOrigin(env: Env, request: Request): string | null {
   return env.SPHERE_URL === undefined ? new URL(request.url).origin : configuredOrigin(env.SPHERE_URL);
 }
 
-/** SPHERE_URL's origin: an http or https URL with a host; null for anything else (`localhost:8787` parses, as a scheme). */
+/** SPHERE_URL's origin: an https URL, or http on this machine, with a host; null for anything else (`localhost:8787` parses, as a scheme). */
 export function configuredOrigin(url: string): string | null {
   try {
     const u = new URL(url);
-    return (u.protocol === "https:" || u.protocol === "http:") && u.host && u.origin !== "null" ? u.origin : null;
+    const ok = u.protocol === "https:" || (u.protocol === "http:" && ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname));
+    return ok && u.host && u.origin !== "null" ? u.origin : null;
   } catch {
     return null;
   }
@@ -154,5 +155,5 @@ export async function requireOperator(request: Request, env: Env): Promise<void>
   if (!want) throw apiError("forbidden", "this Sphere server has no operator token configured");
   const m = /^Bearer (.+)$/i.exec(request.headers.get("Authorization") ?? "");
   const given = m ? m[1]! : "";
-  if (!constantTimeEqual(utf8(await sha256Hex(utf8(given))), utf8(want))) throw apiError("unauthorized", "the operator token is missing or wrong");
+  if (!constantTimeEqual(utf8(await sha256Hex(utf8(given))), utf8(want))) throw new ApiError("unauthorized", "the operator token is missing or wrong", [], undefined, { "WWW-Authenticate": "Bearer" });
 }

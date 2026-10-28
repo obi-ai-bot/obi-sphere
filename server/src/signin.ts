@@ -284,8 +284,9 @@ export function returnTo(text: string, env: Env): string | null {
     const url = webUrl(text);
     return url && url.protocol === "http:" && LOOPBACK.has(url.hostname) ? url.href : null;
   }
-  // Oby's scheme only to its sign-in page, where Oby takes a code back.
-  if (scheme === OBY_SCHEME) return text === BACK ? text : null;
+  // Oby's scheme, and a listed client's, only to its sign-in page, where the client takes a code
+  // back: never to another of its routes (`join`, `claim`) that would make it contact a host.
+  if (scheme === OBY_SCHEME || CLIENTS.some((c) => c.scheme === scheme)) return text === `${scheme}://signin` ? text : null;
   return returnSchemes(env).has(scheme) ? text : null;
 }
 
@@ -293,7 +294,12 @@ export function returnTo(text: string, env: Env): string | null {
 export function returnSchemes(env: Env): Set<string> {
   // An operator's scheme is reverse-DNS, as RFC 8252 section 7.1 asks of a native app's (`com.example.app`):
   // never a browser's, and never one with no dot.
-  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(x) && !BROWSER_SCHEMES.has(x));
+  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => {
+    // The browser list is a backstop: none of its schemes has a dot.
+    const ok = /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(x) && !BROWSER_SCHEMES.has(x);
+    if (x && !ok) console.warn(`sign-in: SIGNIN_RETURN_SCHEMES leaves out ${x}: a client's scheme is reverse-DNS, like com.example.app`);
+    return ok;
+  });
   return new Set([OBY_SCHEME, ...CLIENTS.flatMap((c) => (c.scheme ? [c.scheme] : [])), ...named]);
 }
 

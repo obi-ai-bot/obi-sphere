@@ -80,7 +80,7 @@ const digest = (s: string) => createHash("sha256").update(s).digest();
 if (!env.SPHERE_OPERATOR_TOKEN && existsSync(CLAIMED)) env.SPHERE_OPERATOR_TOKEN_SHA256 = readFileSync(CLAIMED, "utf8").trim();
 let claimCode = env.SPHERE_OPERATOR_TOKEN || env.SPHERE_OPERATOR_TOKEN_SHA256 ? null : randomBytes(24).toString("base64url");
 if (claimCode) {
-  const origin = setting("SPHERE_URL")?.replace(/\/+$/, "") ?? "https://<this Sphere's address>";
+  const origin = configuredOrigin(setting("SPHERE_URL") ?? "") ?? "https://<this Sphere's address>";
   console.log(`sphere: not claimed yet. To claim it, open this link (it works once):\nsphere:   ${origin}/claim#${claimCode}`);
 }
 
