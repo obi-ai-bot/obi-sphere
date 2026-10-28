@@ -351,7 +351,7 @@
       "pattern": "^[a-z][a-z0-9_]{0,63}$"
     },
     "class_id": {
-      "description": "A conformance class a member claims (spec/identity.md section 2.3; spec/conformance/README.md, 'Classes'): a lower-case letter, then up to 63 lower-case letters, digits and _. Any id that matches is valid.",
+      "description": "A conformance class a member claims (spec/identity.md section 2.3), as the conformance suite defines them (spec/conformance/README.md, 'The classes a case belongs to'): a lower-case letter, then up to 63 lower-case letters, digits and _. An id a reader doesn't know is one from a later suite.",
       "type": "string",
       "minLength": 1,
       "maxLength": 64,

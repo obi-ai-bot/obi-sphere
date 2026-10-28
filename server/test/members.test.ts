@@ -494,12 +494,26 @@ describe("publishing a card with an addition (identity.md section 2.3)", () => {
     const early = await makeCard({ sphere: "e2e", obi: "obi-wellington", owner: "wellington", ownerKey: wOwner, obiKey: wKey, cardSeq: 3, issuedAt: w.clock.ts(), params: claims });
     const refused = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken3, body: { card: early } });
     expect(refused.status).toBe(409);
+    expect(refused.body.error.code).toBe("feature_not_taken");
     expect(refused.body.error.message).toContain("card_classes");
     // Once obi-ernesto's card lists card_classes, it goes in.
     const eNext = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey: await w.ownerKey("ernesto"), obiKey: eKey, cardSeq: 3, issuedAt: w.clock.ts(), params: { features: ["card_classes", "card_runtime"] } });
     expect((await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token: await w.obiToken("obi-ernesto"), body: { card: eNext } })).status).toBe(200);
     const now = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken3, body: { card: early } });
     expect(now.status, JSON.stringify(now.body)).toBe(200);
+    // A newcomer from before card_classes joins: obi-wellington's card carries classes already, so it
+    // can still change its claim; a member whose card carries none can't start one.
+    const inv = await w.invite("sangam", "obi-sangam");
+    const sKey = await w.ownerKey("sangam");
+    const plain = await makeCard({ sphere: "e2e", obi: "obi-sangam", owner: "sangam", ownerKey: sKey, obiKey: await newKey(), issuedAt: w.clock.ts() });
+    expect((await w.call("POST", `/v0.1/spheres/e2e/invitations/${inv.body.invitation_id}/redeem`, { body: { secret: inv.body.secret, owner_key: sKey.publicKey, card: plain } })).status).toBe(201);
+    const changed = await makeCard({ sphere: "e2e", obi: "obi-wellington", owner: "wellington", ownerKey: wOwner, obiKey: wKey, cardSeq: 4, issuedAt: w.clock.ts(), params: { ...claims, classes: ["participant", "approver"] } });
+    const kept = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-wellington/card", { token: wToken3, body: { card: changed } });
+    expect(kept.status, JSON.stringify(kept.body)).toBe(200);
+    const eClaims = await makeCard({ sphere: "e2e", obi: "obi-ernesto", owner: "ernesto", ownerKey: await w.ownerKey("ernesto"), obiKey: eKey, cardSeq: 4, issuedAt: w.clock.ts(), params: claims });
+    const held = await w.call("PUT", "/v0.1/spheres/e2e/members/obi-ernesto/card", { token: await w.obiToken("obi-ernesto"), body: { card: eClaims } });
+    expect(held.status).toBe(409);
+    expect(held.body.error.code).toBe("feature_not_taken");
   });
 
   it("is 409 conflict at redeem too, and counts only active members", async () => {
