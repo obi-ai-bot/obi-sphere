@@ -150,7 +150,7 @@ The rules no schema can say: answerers' `owner`s are distinct and each `owner_ke
 }
 ```
 
-`params` has exactly one of `owner_key` (a person's agent, as in `obi/0.1`) and `charter` (an organisation's). Everything else in `params`, including what is being added to `obi/0.1` (`runtime`, `vendors`, `features`, classes, topics), is the same for both.
+`params` has exactly one of `owner_key` (a person's agent, as in `obi/0.1`) and `charter` (an organisation's). Everything else in `params`, including what `obi/0.1`'s additions put there (`runtime`, `vendors`, `features`, classes, topics), is the same for both.
 
 **Verifying such a card** adds to identity.md section 2.2: the charter it names is the organisation's charter at that `seq`, with that hash; and the card has at least `thresholds.card` signatures, each by a distinct answerer of that charter, each verifying with that person's owner key (the one the verifier pinned for them). Whether the card still speaks for the organisation is judged at each message's seq: when a later charter makes it stale, its key's range is closed (below), so a message is judged by the key valid at its seq, as in `obi/0.1`. A verifier that keeps the charter history (section 3) also checks it itself, by the staleness rule below: at the entry's seq, the charter then current still names every signer of the card, and its `card` threshold is no more than the card's number of signatures, or the entry is invalid. An Obysphere that left a stale agent's key open is caught that way, as far as the charter history it serves is honest, which pinning (section 3) checks across members.
 

@@ -8,13 +8,13 @@ The next version splits the protocol in two: a **Core** every member implements,
 
 ## 1. What changes, in short
 
-- **Core**: identity, the envelope, signing and sealing, text as data, exchanges, the record, the HTTP binding, and the domain-neutral actions. New in Core: `work_request`, a request for any kind of work, with acceptance conditions a machine can check (sections 5 and 6); `cancel` for any request; references to documents, datasets, topics and earlier exchanges (section 7); scopes for policy and remembered decisions (section 8).
+- **Core**: identity, the envelope, signing and sealing, text as data, exchanges, the record, the HTTP binding, and the domain-neutral actions. New in Core: `work_request`, a request for any kind of work, with acceptance conditions a machine can check (sections 5 and 6); `cancel` for every request type (`obi/0.1` has it for four); references to documents, datasets, topics and earlier exchanges (section 7); scopes for policy and remembered decisions (section 8).
 - **The Code profile**: `review_request`, findings and their conditions, the code references, the `repo` scope, and approving on a code host. `handoff` becomes a `work_request` whose subject is a branch (D5).
 - **Dropped**: the compute and share actions, the job channel and the runner status (D4, section 10).
 
 | | `obi/0.1` | Next version |
 |---|---|---|
-| Request types | `review_request`, `question`, `handoff`, `introduction`, `run_request`, `share_offer` | Core: `question`, `work_request`, introductions (#53). Code: `review_request`. |
+| Request types | `review_request`, `question`, `handoff`, `introduction`, `run_request`, `share_offer` | Core: `question`, `work_request`, `introduction`. Code: `review_request`. |
 | Replies | `status`, `accept`, `decline`, `result`, `answer`, `cancel`, `run_progress`, `run_return`, `run_cancel`, `share_status`, `share_revoke` | Core: `status`, `accept`, `decline`, `result`, `answer`, `cancel`. |
 | What policy is keyed by | repository | scope: a typed name, of which a repository is one kind |
 | What a reference can name | repository, pull request, issue, job | Core: exchange, document, dataset, topic. Code: repository, pull request, issue, branch, commit, job. |
@@ -28,7 +28,7 @@ Which of these must wait for a new version, and which could come sooner as addit
 - identity: keys, the agent card, delegation, owners ([owners.md](owners.md) adds organisations);
 - the JSON rules, the envelope, signing, sealing the words, text as data, verifying a message;
 - exchanges and their rules (section 4);
-- the actions `question`, `answer`, `work_request`, the introduction request #53 adds, `status`, `accept`, `decline`, `result` (for a `work_request`) and `cancel`;
+- the actions `question`, `answer`, `work_request`, `introduction` (#53), `status`, `accept`, `decline`, `result` (for a `work_request`) and `cancel`;
 - references, scopes, policy, remembered decisions and sharing rules (sections 7 and 8);
 - the receiver's decision rule, with "What received work never gets" unchanged and "What a received action never causes" amended only for accepted work's writes (section 5, "Where the work writes");
 - the record (the audit chain) and the HTTP binding.
@@ -59,7 +59,7 @@ An agent that never touches git lists no profile and accepts `question`, `work_r
 |---|---|---|---|
 | `question` | Core | starts | unchanged, but `about` takes every reference kind (section 7) |
 | `work_request` | Core | starts | new; replaces `handoff` (D5) |
-| `introduction` | Core | starts | unchanged from the #53 addition (#76): `{member, about?, note?}`, ended by its `accept` |
+| `introduction` | Core | starts | as the #53 addition (#76) defines it, `{member, about?, note?, follows?}`, ended by its `accept`; `about` takes every reference kind (section 7) |
 | `review_request` | Code | starts | unchanged |
 | `status` | Core | continues | unchanged |
 | `accept` | Core | continues | unchanged |
@@ -90,7 +90,7 @@ The exchange rules of protocol.md section 4, with `cancel` and without the rules
 | `goal` | yes | What the work is for, one line (200). Data. |
 | `subject` | no | One reference (section 7): what the work is done on. |
 | `about` | no | 1 to 10 distinct references: what the work relates to. |
-| `follows` | no | The earlier request between the same two members, in either direction, that this one follows up, by its id. As #53 added `follows` to `obi/0.1` (#76) for the other request types, with the same rule. |
+| `follows` | no | The earlier request between the same two members, in either direction, that this one follows up, by its id. #53 added it to `obi/0.1` (#76) for the other request types; the same rule holds. |
 | `acceptance` | yes | 1 to 10 typed acceptance conditions (section 6). |
 | `summary` | no | Context (2,000). Data. |
 
@@ -400,7 +400,7 @@ What `obi/0.1` has for code collaboration, unchanged except as said:
 - **`review_request`** and its `result` (`for: review_request`), with findings, `approve_on_host` and `host_review`, as in `obi/0.1`, with Core's `follows`, `cancel` and `before` and the consistency rule of section 5. A review of something other than a commit (a document, a design) waits until a real use needs it, such as the Council deciding about documents. Then findings, located by a reference instead of a file and line, would move to Core, with `no_blocker_findings` and `no_findings_at_or_above`.
 - **Findings** (`file`, `line`, `end_line`, severity, `title`, `detail`) and their condition kinds.
 - **The references** `repo`, `pr`, `issue`, `job`, and the new `branch` and `commit` (section 7); the `repo` scope kind; the sharing-rule kinds job status and published pull requests.
-- **Approving on the code host**, as `obi/0.1` has it after the owner-confirmation rule (#38), with the neutral marker `by agent:` ([identifiers.md, section 4](identifiers.md#4-the-code-host-marker-d3)) and the rule for organisation owners ([owners.md, section 5](owners.md#5-what-an-organisations-agent-may-do-d11)). One addition, for `cancel`: a `cancel` from the request's sender ends the exchange, and with it any confirmation the receiver's owner gave for it. The receiver approves nothing after a `cancel`, as after the request's `expires_at`, and checks for one among its deliveries right before it posts.
+- **Approving on the code host**, as `obi/0.1` has it after the owner-confirmation rule (#38), with the neutral marker `by agent:` ([identifiers.md, section 4](identifiers.md#4-the-code-host-marker-d3)) and the rule for organisation owners ([owners.md, section 5](owners.md#5-what-an-organisations-agent-may-do-d11)). Since #53, `obi/0.1` already says that a `cancel` from the request's sender ends the exchange, and with it any confirmation the receiver's owner gave for it, so the receiver approves nothing after one. The Draft adds that the receiver checks for one among its deliveries right before it posts.
 - **`handoff`** becomes a `work_request` on a `branch` subject (section 5, D5).
 
 A member that lists `code` in its card's `profiles` may accept `review_request`, and may take `work_request`s whose subject is a Code reference.
