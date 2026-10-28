@@ -42,13 +42,21 @@ export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(toke
  * nothing that must name it is taken, and it is never read from a request's Host.
  */
 export function ownOrigin(env: Env, request: Request): string | null {
-  if (env.SPHERE_URL === undefined) return new URL(request.url).origin;
+  return env.SPHERE_URL === undefined ? new URL(request.url).origin : configuredOrigin(env.SPHERE_URL);
+}
+
+/** SPHERE_URL's origin: an http or https URL with a host; null for anything else (`localhost:8787` parses, as a scheme). */
+export function configuredOrigin(url: string): string | null {
   try {
-    return env.SPHERE_URL ? new URL(env.SPHERE_URL).origin : null;
+    const u = new URL(url);
+    return (u.protocol === "https:" || u.protocol === "http:") && u.host && u.origin !== "null" ? u.origin : null;
   } catch {
     return null;
   }
 }
+
+/** Whether this server knows its own origin: always on a Worker (SPHERE_URL unset), else when SPHERE_URL is a valid address. */
+export const knowsOrigin = (env: Env): boolean => env.SPHERE_URL === undefined || configuredOrigin(env.SPHERE_URL) !== null;
 
 /** The URL a DPoP proof for `request` must name: this server's origin and the request's path; null when it doesn't know its origin. */
 export function ownUrl(env: Env, request: Request): string | null {
@@ -70,7 +78,7 @@ export function presented(request: Request): { scheme: "Bearer" | "DPoP"; token:
  */
 export async function bearer(request: Request, env: Env, sphere: SphereRow | null, nowS: number): Promise<Caller> {
   const given = presented(request);
-  if (!given) throw new ApiError("unauthorized", "an access token is needed: Authorization: Bearer <token>", [], undefined, CHALLENGE);
+  if (!given) throw unauthorized(env, "an access token is needed: Authorization: Bearer <token>");
   const row = await env.DB.prepare(
     `SELECT t.subject, t.actor, t.scope, t.expires_at_s, t.revoked, t.sphere, t.jkt, m.status AS actor_status
        FROM tokens t LEFT JOIN members m ON m.sphere = t.sphere AND m.obi = t.actor
@@ -78,7 +86,7 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow | nul
   )
     .bind(await tokenHash(given.token))
     .first<{ subject: string; actor: string | null; scope: string; expires_at_s: number; revoked: number; sphere: string; jkt: string | null; actor_status: string | null }>();
-  if (!row || row.revoked || row.expires_at_s <= nowS) throw new ApiError("unauthorized", "the access token is unknown, expired or revoked", [], undefined, { "WWW-Authenticate": 'Bearer error="invalid_token", DPoP error="invalid_token", algs="EdDSA ES256"' });
+  if (!row || row.revoked || row.expires_at_s <= nowS) throw unauthorized(env, "the access token is unknown, expired or revoked", "invalid_token");
   // A token bound to a key (identity.md 4.6) works only with a new proof from that key; a bearer
   // token only as Bearer.
   if (row.jkt === null && given.scheme === "DPoP") throw dpopRefused("invalid_token", "this access token isn't bound to a key: Authorization: Bearer <token>");
@@ -102,13 +110,19 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow | nul
       }
     }
   }
-  if (sphere && row.sphere !== sphere.id) throw apiError("unauthorized", "the access token is for another Sphere");
-  if (row.actor !== null && row.actor_status !== "active") throw apiError("unauthorized", "the token's Obi is no longer an active member");
+  if (sphere && row.sphere !== sphere.id) throw unauthorized(env, "the access token is for another Sphere", "invalid_token");
+  if (row.actor !== null && row.actor_status !== "active") throw unauthorized(env, "the token's Obi is no longer an active member", "invalid_token");
   return { sphere: row.sphere, subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
 }
 
-/** The challenge on a 401 with no token: either scheme (RFC 6750 section 3, RFC 9449 section 7.1). */
-const CHALLENGE = { "WWW-Authenticate": 'Bearer, DPoP algs="EdDSA ES256"' };
+/** The challenge on a 401 (RFC 6750 section 3, RFC 9449 section 7.1): Bearer, and DPoP where this server takes it. */
+export function challenge(env: Env, error?: "invalid_token"): Record<string, string> {
+  const e = error ? ` error="${error}"` : "";
+  return { "WWW-Authenticate": knowsOrigin(env) ? `Bearer${e}, DPoP${error ? e + "," : ""} algs="EdDSA ES256"` : `Bearer${e}` };
+}
+
+/** A 401 with its challenge. */
+export const unauthorized = (env: Env, message: string, error?: "invalid_token") => new ApiError("unauthorized", message, [], undefined, challenge(env, error));
 
 /** A 401 for a DPoP token or proof, with the challenge RFC 9449 section 7.1 asks for. */
 const dpopRefused = (error: "invalid_token" | "invalid_dpop_proof", message: string) =>
@@ -138,7 +152,7 @@ export async function requireOperator(request: Request, env: Env): Promise<void>
   const configured = env.SPHERE_OPERATOR_TOKEN;
   const want = typeof configured === "string" && configured.length >= 32 ? await sha256Hex(utf8(configured)) : env.SPHERE_OPERATOR_TOKEN_SHA256;
   if (!want) throw apiError("forbidden", "this Sphere server has no operator token configured");
-  const m = /^Bearer (.+)$/.exec(request.headers.get("Authorization") ?? "");
+  const m = /^Bearer (.+)$/i.exec(request.headers.get("Authorization") ?? "");
   const given = m ? m[1]! : "";
   if (!constantTimeEqual(utf8(await sha256Hex(utf8(given))), utf8(want))) throw apiError("unauthorized", "the operator token is missing or wrong");
 }

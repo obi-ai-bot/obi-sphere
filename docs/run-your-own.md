@@ -64,7 +64,7 @@ With sign-in, anyone with an account from a domain you name can create an Obysph
    - The client ids are public; they are fine in git. Never reuse a provider's `id` for another issuer: an account is the `id` and the issuer's `sub`.
 3. **Push** (by hand: `pnpm run deploy -- --env acme` again). Variables set in the dashboard instead are replaced by `wrangler.jsonc`'s at the next deploy.
 
-A client that isn't Oby gets the sign-in's code back on its own machine: it sends `return_to`, a loopback URL or a scheme of its own, when it starts the sign-in. Oby's scheme is the default. The server takes only schemes it knows: Oby's, the listed clients', and those you name for the clients your people use, `"SIGNIN_RETURN_SCHEMES": "com.example.client"` (comma-separated). Any other scheme could belong to an app that opens a web address, so it is refused.
+A client that isn't Oby gets the sign-in's code back on its own machine: it sends `return_to`, a loopback URL or a scheme of its own, when it starts the sign-in. Oby's scheme is the default. The server takes only schemes it knows: Oby's, the listed clients', and those you name for the clients your people use, `"SIGNIN_RETURN_SCHEMES": "com.example.client"` (comma-separated, each reverse-DNS with a dot, never a browser's). Any other scheme could belong to an app that opens a web address, so it is refused.
 
 ## Optional: turn off the phone relay
 

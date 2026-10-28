@@ -26,7 +26,9 @@ export interface Env {
    * This server's public address. Set, its origin is the server's own: the one an assertion's `aud`
    * URL must name, and the one DPoP proofs and the sign-in's callback are for. Unset, a Worker takes
    * the request's own (Cloudflare routes only its own hosts to it). The Node build sets it from
-   * SPHERE_URL, and leaves it empty without one, which refuses the URL form of `aud`.
+   * SPHERE_URL, and leaves it empty without one: then, or for one that isn't an http or https
+   * address, the server signs nobody in, takes no DPoP proof (it ignores one at the token endpoint)
+   * and no URL form of `aud`, and lists neither `dpop` nor `sphere_url_aud`.
    */
   SPHERE_URL?: string;
   /** The domains, comma-separated, whose people may create a Sphere with a sign-in (a Google Workspace, or a provider's `domain`). Empty: only the operator creates. */

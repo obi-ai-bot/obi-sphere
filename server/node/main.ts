@@ -41,6 +41,7 @@ const { handle } = await import("../src/app.ts");
 const { Doorbell } = await import("../src/doorbell.ts");
 const { PhoneRelay } = await import("../src/relay.ts");
 const { CLIENTS } = await import("../src/clients.ts");
+const { configuredOrigin } = await import("../src/auth.ts");
 const { ApiError, apiError, errorResponse, json, readJson } = await import("../src/http.ts");
 
 const DATA = process.env.SPHERE_DATA || "data";
@@ -49,6 +50,7 @@ const sqlite = open(join(DATA, "sphere.db"));
 for (const name of migrate(sqlite, fileURLToPath(new URL("../migrations", import.meta.url)))) console.log(`sphere: applied migration ${name}`);
 
 const setting = (name: string) => process.env[name] || undefined;
+if (!configuredOrigin(setting("SPHERE_URL") ?? "")) console.log("sphere: SPHERE_URL isn't an http or https address, so it signs nobody in and takes no DPoP proof or URL aud");
 const env: Record<string, unknown> = {
   DB: d1(sqlite),
   CHANNELS: {

@@ -5,7 +5,7 @@
 // issuer, the client id, the nonce). Only the account (`<provider>:<sub>`) and its domain are
 // kept, never the email or the token.
 
-import { ownOrigin } from "./auth.ts";
+import { knowsOrigin, ownOrigin } from "./auth.ts";
 import type { Deps, Env } from "./env.ts";
 import { apiError, json, rateLimited, readJson } from "./http.ts";
 import { constantTimeEqual, fromB64url, randomToken, sha256, sha256Hex } from "./protocol/crypto.ts";
@@ -26,7 +26,7 @@ const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z
 /** Hosts an issuer, or a `return_to`, may name over plain http: this machine only. */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 /** Schemes a browser handles itself, never a client's: an operator can't name them. */
-const BROWSER_SCHEMES = new Set(["http", "https", "ws", "wss", "javascript", "data", "file", "blob", "about", "intent", "ftp", "mailto", "tel", "view-source"]);
+const BROWSER_SCHEMES = new Set(["http", "https", "ws", "wss", "javascript", "vbscript", "data", "file", "filesystem", "blob", "about", "intent", "ftp", "mailto", "tel", "view-source", "microsoft-edge", "edge", "x-safari-https", "googlechrome", "googlechromes", "firefox", "opera"]);
 /** Oby's scheme, where a sign-in returns when the client names nowhere: always one this server knows. */
 const OBY_SCHEME = "obi-sphere";
 
@@ -135,7 +135,7 @@ export function providers(env: Env): Provider[] {
 }
 
 /** Whether this Obysphere server signs anyone in (an invitation with a `domain` needs it). */
-export const signsIn = (env: Env): boolean => providers(env).length > 0;
+export const signsIn = (env: Env): boolean => knowsOrigin(env) && providers(env).length > 0;
 
 const named = (env: Env, id: string): Provider => {
   const p = providers(env).find((q) => q.id === id);
@@ -262,7 +262,8 @@ const shared = new Issuers();
 // GET /v0.1/signin
 
 export function listSignIns(_request: Request, env: Env): Response {
-  return json(200, { providers: providers(env).map((p) => ({ id: p.id, name: p.name })) });
+  // A server that doesn't know its own address signs nobody in, so it lists no provider.
+  return json(200, { providers: knowsOrigin(env) ? providers(env).map((p) => ({ id: p.id, name: p.name })) : [] });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -290,7 +291,9 @@ export function returnTo(text: string, env: Env): string | null {
 
 /** The schemes a sign-in may return to: Oby's, the listed clients', and SIGNIN_RETURN_SCHEMES (comma-separated). */
 export function returnSchemes(env: Env): Set<string> {
-  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9+.-]*$/.test(x) && !BROWSER_SCHEMES.has(x));
+  // An operator's scheme is reverse-DNS, as RFC 8252 section 7.1 asks of a native app's (`com.example.app`):
+  // never a browser's, and never one with no dot.
+  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(x) && !BROWSER_SCHEMES.has(x));
   return new Set([OBY_SCHEME, ...CLIENTS.flatMap((c) => (c.scheme ? [c.scheme] : [])), ...named]);
 }
 
@@ -334,6 +337,7 @@ export async function startSignIn(request: Request, env: Env, deps: Deps, provid
 
 export async function finishSignIn(request: Request, env: Env, deps: Deps, providerId: string): Promise<Response> {
   const p = named(env, providerId);
+  if (!knowsOrigin(env)) throw apiError("forbidden", "this server doesn't know its own address (SPHERE_URL), so it signs nobody in");
   const to = (where: string, state: string, query: string) =>
     new Response(null, { status: 303, headers: { Location: `${where}?state=${encodeURIComponent(state)}&${query}`, "Cache-Control": "no-store" } });
   let form: FormData;
@@ -365,9 +369,11 @@ export async function finishSignIn(request: Request, env: Env, deps: Deps, provi
     return to(where, state, "error=failed");
   }
   const code = randomToken(32);
-  await env.DB.prepare("UPDATE sign_ins SET account = ?2, workspace = ?3, code_sha256 = ?4 WHERE state = ?1 AND account IS NULL")
+  const kept = await env.DB.prepare("UPDATE sign_ins SET account = ?2, workspace = ?3, code_sha256 = ?4 WHERE state = ?1 AND account IS NULL")
     .bind(state, `${p.id}:${account.sub}`, account.workspace, await sha256Hex(utf8(code)))
     .run();
+  // Another post finished it first: this browser gets no code.
+  if (kept.meta.changes !== 1) return to(BACK, state, "error=failed");
   return to(where, state, `code=${code}`);
 }
 

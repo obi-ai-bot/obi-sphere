@@ -5,7 +5,7 @@
 // reading them. The operator turns it off with PHONE_RELAY=off: then every relay path answers 404
 // and /v0.1/features doesn't list it.
 
-import { bearer, presented, requireActor, requireScope, tokenHash } from "../auth.ts";
+import { bearer, presented, requireActor, requireScope, tokenHash, unauthorized } from "../auth.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json } from "../http.ts";
 
@@ -127,7 +127,7 @@ export async function openRelay(request: Request, env: Env, deps: Deps, id: stri
   const relay = relayId(env, id);
   if ((request.headers.get("Upgrade") ?? "").toLowerCase() !== "websocket") throw apiError("bad_request", "a relay is a WebSocket: Upgrade: websocket");
   const given = presented(request);
-  if (!given) throw apiError("unauthorized", "a relay token or the Mac's access token is needed: Authorization: Bearer <…>");
+  if (!given) throw unauthorized(env, "a relay token or the Mac's access token is needed: Authorization: Bearer <…>");
   // The Worker's clock, as the relay's alarms read it (zero apart in production; a test's own clock otherwise).
   const headers = new Headers({ Upgrade: "websocket", "X-Obi-Relay": relay, "X-Obi-Clock-Offset": String(deps.now() - Date.now()) });
   // A phone's relay token is a bearer secret; a token bound to a key is only ever the Mac's.

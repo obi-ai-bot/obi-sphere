@@ -182,10 +182,14 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   let proof: Proof | null = null;
   const dpop = request.headers.get("DPoP");
   if (dpop !== null) {
+    // A server that doesn't take DPoP (it doesn't know its own address) ignores the header, as
+    // RFC 9449 section 5 lets it: the token it issues is a bearer one, and token_type says so.
     const url = ownUrl(env, request);
-    const checked = url === null ? "this server doesn't know its own address (SPHERE_URL), so it takes no DPoP proof" : await checkProof(dpop, "POST", url, now, { behind: TOKEN_PROOF_BEHIND });
-    if (typeof checked === "string") throw new OAuthError("invalid_dpop_proof", checked);
-    proof = checked;
+    if (url !== null) {
+      const checked = await checkProof(dpop, "POST", url, now, { behind: TOKEN_PROOF_BEHIND });
+      if (typeof checked === "string") throw new OAuthError("invalid_dpop_proof", checked);
+      proof = checked;
+    }
   }
 
   const accessToken = randomToken(32);

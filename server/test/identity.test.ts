@@ -205,8 +205,19 @@ describe("DPoP's edges", () => {
     const key = await dpopKey();
     const owner = await w.ownerKey("wellington");
     const claims = { iss: "wellington", sub: "wellington", aud: "obi-sphere:e2e", iat: w.clock.s, exp: w.clock.s + 300, jti: crypto.randomUUID(), scope: "admin" };
+    // The token endpoint ignores the proof (RFC 9449 section 5) and issues a bearer token.
     const r = await unknown("POST", "/v0.1/oauth/token", { raw: form({ grant_type: TOKEN_EXCHANGE, subject_token: await signJwt(claims, owner), subject_token_type: JWT_TYPE }), headers: { ...FORM, DPoP: await key.proof("POST", TOKEN_URL) } });
-    expect(r.body.error).toBe("invalid_dpop_proof");
+    expect(r.status).toBe(200);
+    expect(r.body.token_type).toBe("Bearer");
+    // A token bound while the server knew its address works nowhere once it doesn't.
+    const bound = (await boundOwnerToken(w, key)).body.access_token as string;
+    const refused = await unknown("GET", "/v0.1/spheres/e2e", { headers: { Authorization: `DPoP ${bound}`, DPoP: await key.proof("GET", `${BASE}/v0.1/spheres/e2e`, bound) } });
+    expect(refused.status).toBe(401);
+    expect(refused.headers.get("WWW-Authenticate")).toContain('DPoP error="invalid_dpop_proof"');
+    // A SPHERE_URL that isn't an http or https address is no address.
+    const malformed = makeCall(w.clock, { ...env, SPHERE_URL: "localhost:8787" } as never);
+    expect((await malformed("GET", "/v0.1/features")).body.features).not.toContain("dpop");
+    expect((await malformed("GET", "/v0.1/spheres/e2e", { headers: {} })).headers.get("WWW-Authenticate")).toBe("Bearer");
   });
 });
 

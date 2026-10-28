@@ -451,10 +451,35 @@ describe("signing in with any OpenID Connect provider", () => {
     expect(fetches).toBe(2);
   });
 
-  it("signs nobody in when the server doesn't know its own address", async () => {
+  it("signs nobody in, and lists no provider, when the server doesn't know its own address", async () => {
     const w = new World();
-    const r = await makeCall(w.clock, withProviders([ACME], { SPHERE_URL: "" }) as never)("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } });
-    expect(r.status).toBe(403);
+    for (const SPHERE_URL of ["", "localhost:8787", "not a url"]) {
+      const call = makeCall(w.clock, withProviders([ACME], { SPHERE_URL }) as never);
+      expect((await call("GET", "/v0.1/signin")).body, SPHERE_URL).toEqual({ providers: [] });
+      expect((await call("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } })).status, SPHERE_URL).toBe(403);
+      const back = await call("POST", "/v0.1/signin/acme/callback", { raw: new URLSearchParams({ state: "S".repeat(43), id_token: "x.y.z" }).toString(), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      expect(back.status, SPHERE_URL).toBe(403);
+    }
+  });
+
+  it("takes from the operator only reverse-DNS schemes that no browser handles", async () => {
+    const w = new World();
+    const call = makeCall(w.clock, withProviders([ACME], { SIGNIN_RETURN_SCHEMES: "microsoft-edge, x-safari-https, firefox, myapp, com.example.client" }) as never);
+    const key = await newKey();
+    for (const returnTo of ["microsoft-edge:https://attacker.example/cb", "x-safari-https://attacker.example/cb", "firefox:https://attacker.example/cb", "myapp:/cb"]) {
+      expect((await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: returnTo } })).status, returnTo).toBe(400);
+    }
+    expect((await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: "com.example.client:/cb" } })).status).toBe(201);
+  });
+
+  it("leaves out a SIGNIN_PROVIDERS entry with Google's id, even with Google's issuer", async () => {
+    const w = new World();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const e = withProviders([{ id: "google", name: "My Google", issuer: "https://accounts.google.com", client_id: "another-client" }]);
+    expect((await makeCall(w.clock, e as never)("GET", "/v0.1/signin")).body).toEqual({ providers: [{ id: "google", name: "Google" }] });
+    const start = await makeCall(w.clock, e as never)("POST", "/v0.1/signin/google", { body: { owner_key: (await newKey()).publicKey } });
+    expect(new URL(start.body.url).searchParams.get("client_id")).toBe(env.GOOGLE_CLIENT_ID);
+    vi.restoreAllMocks();
   });
 
   it("is 403 forbidden for a provider the server doesn't have", async () => {
