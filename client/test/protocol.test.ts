@@ -144,3 +144,23 @@ test("a chain the library appends verifies with both verifiers, and a rollback i
   assert.match(rollbackProblem(entries, { sends: [{ seq: 2, hash: entries[0]!.hash }] })!, /send/);
   assert.equal(b64url(new Uint8Array([255])), "_w");
 });
+
+test("a card may say what runs its agent (identity.md 2.3), and whether it takes card_runtime", async () => {
+  const { takesFeature } = await import("../src/index.ts");
+  const owner = await SigningKey.fromSeedString("client-test-owner");
+  const obi = await SigningKey.fromSeedString("client-test-a");
+  const base = {
+    base: "http://127.0.0.1:8792", sphere, obi_id: "obi-a", owner: "ada", owner_key: owner.publicKey, public_key: obi.publicKey, key_id: obi.keyId,
+    accepts: ["question"], card_seq: 2, issued_at: "2026-10-14T12:00:00Z", name: "Ada's agent", description: "A delegate.",
+  };
+  const declared = await signCard(newCard({ ...base, version: "0.1.0", features: ["card_runtime"], runtime: { id: "claude", version: "2.1.204" }, vendors: ["anthropic"] }), owner);
+  assert.deepEqual(await verifyCard(declared, { now: "2026-10-14T12:00:00Z" }), { ok: true });
+  assert.ok(takesFeature(declared, "card_runtime"));
+  const byVersion = await signCard(newCard({ ...base, version: "0.1.0+build.card-runtime" }), owner);
+  assert.ok(takesFeature(byVersion, "card_runtime"));
+  assert.equal(takesFeature(byVersion, "something_else"), false);
+  const plain = await signCard(newCard({ ...base, version: "0.1.0-card-runtime" }), owner);
+  assert.equal(takesFeature(plain, "card_runtime"), false);
+  const noFeatures = await signCard(newCard({ ...base, version: "0.1.0", runtime: { id: "claude", version: "1" } }), owner);
+  assert.equal((await verifyCard(noFeatures, {})).ok, false);
+});

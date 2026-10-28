@@ -115,6 +115,14 @@ export interface NewCard {
   version: string;
   provider?: { organization: string; url?: string };
   documentationUrl?: string;
+  /**
+   * The additions it takes, what runs its agent and the model vendors it may use (identity.md
+   * section 2.3), declared by its owner. Only on a card update, once the Obysphere and every other
+   * active member take `card_runtime`; a first card says `+card-runtime` in its version instead.
+   */
+  features?: string[];
+  runtime?: { id: string; version: string };
+  vendors?: string[];
 }
 
 /** An unsigned card for `NewCard` (identity.md section 2). */
@@ -124,6 +132,7 @@ export function newCard(c: NewCard): Record<string, unknown> {
     protocol: "obi/0.1", sphere: c.sphere, obi_id: c.obi_id, owner: c.owner, owner_key: c.owner_key, key_id: c.key_id, public_key: c.public_key,
     ...(c.seal_public_key !== undefined ? { seal_key_id: c.seal_key_id, seal_public_key: c.seal_public_key } : {}),
     accepts: c.accepts, card_seq: c.card_seq, issued_at: c.issued_at ?? timestamp(Date.now() / 1000),
+    ...(c.features ? { features: c.features } : {}), ...(c.runtime ? { runtime: c.runtime } : {}), ...(c.vendors ? { vendors: c.vendors } : {}),
   };
   return {
     protocolVersion: "0.3.0",
@@ -147,4 +156,18 @@ export async function signCard(unsigned: Record<string, unknown>, ownerKey: Sign
   const protectedHeader = b64url(canonicalBytes({ alg: "EdDSA", kid: ownerKey.keyId, typ: "JOSE" }));
   const signature = await ownerKey.sign(cardSigningInput(rest, protectedHeader));
   return { ...rest, signatures: [{ protected: protectedHeader, signature }] } as unknown as AgentCard;
+}
+
+/**
+ * Whether a card's agent takes an addition (identity.md section 2.3): its `features` list names it,
+ * or, for `card_runtime`, a card that can't carry the list yet says so in its version's build
+ * metadata (the part after the first `+`, split at `.`, includes `card-runtime`).
+ */
+export function takesFeature(card: AgentCard, feature: string): boolean {
+  const params = cardParams(card) as CardParams & { features?: string[] };
+  if (params.features?.includes(feature)) return true;
+  if (feature !== "card_runtime") return false;
+  const version = typeof card.version === "string" ? card.version : "";
+  const plus = version.indexOf("+");
+  return plus >= 0 && version.slice(plus + 1).split(".").includes("card-runtime");
 }

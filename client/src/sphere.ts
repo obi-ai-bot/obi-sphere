@@ -216,6 +216,16 @@ export class SphereApi {
     return this.call("GET", "/v0.1/health", { schema: "wire/health.response" });
   }
 
+  /** The additions to obi/0.1 the Obysphere takes (`GET /v0.1/features`); none when it answers anything but a valid 200, as an older one does. */
+  async features(): Promise<string[]> {
+    try {
+      return (await this.call<{ features: string[] }>("GET", "/v0.1/features", { schema: "wire/features.response" })).features;
+    } catch (e) {
+      if (e instanceof SphereError) return [];
+      throw e;
+    }
+  }
+
   /** Creates a Sphere with the server's operator token (section 3). */
   createSphere(operatorToken: string, body: { sphere: string; name: string; admin: { owner: string; owner_key: string } }): Promise<SphereInfo> {
     return this.call("POST", "/v0.1/spheres", { token: operatorToken, json: body, schema: "wire/sphere", ok: [201] });

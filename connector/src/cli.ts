@@ -3,7 +3,9 @@
 import { readFileSync } from "node:fs";
 import { dirname, join as joinPath } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Member, Owner, SealKey, SigningKey, SphereApi, nowSeconds, parseJwt, parseInviteLink, seconds, timestamp } from "@obysphere/client";
+import {
+  Member, Owner, SealKey, SigningKey, SphereApi, cardParams, emptyMemory, fromB64url, nowSeconds, parseJwt, parseInviteLink, seconds, timestamp, type MemberMemory,
+} from "@obysphere/client";
 import { Connector, ConnectorError, VERSION, itemDigest, type Item, type MemberFile } from "./connector.ts";
 import { scanOutgoing } from "./scan.ts";
 import { Home, defaultHome } from "./home.ts";
@@ -23,11 +25,12 @@ export const USAGE = `obysphere-connector: join an Obysphere from any MCP host.
   obysphere-connector decline <item> [--reason owner_declined|busy|out_of_scope|other] [--note <text>]
   obysphere-connector answer <item> --text <your words> [--choice <n>]   the owner answers a question themselves
   obysphere-connector rules [--allow <type,...> --to <id|*>]... | [--ask-always]
+  obysphere-connector card --runtime <id> --runtime-version <v> --vendor <id>...   what runs this member, on its card
   obysphere-connector renew [--days <n>]   a new delegation from the owner
   obysphere-connector mcp-config     an MCP host's config for this connector
 
 Every command takes --home <dir> (default $OBYSPHERE_CONNECTOR_HOME or ~/.obysphere-connector).
-The owner's commands (join, approve, decline, answer, rules, renew) ask the owner's passphrase on the
+The owner's commands (join, approve, decline, answer, rules, card, renew) ask the owner's passphrase on the
 terminal, or read it from standard input with --passphrase-stdin.`;
 
 const ACCEPTABLE = ["question", "review_request", "handoff"];
@@ -98,7 +101,8 @@ async function join(home: Home, p: Parsed) {
   let member: Member;
   try {
     member = await Member.join({
-      link, owner: new Owner(owner, ownerSigning), obi, key, ...(sealKey ? { sealKey } : {}), accepts: accepts as "question"[], name, description, version: VERSION,
+      // A first card carries no addition's members: its version says it takes card_runtime (identity.md 2.3).
+      link, owner: new Owner(owner, ownerSigning), obi, key, ...(sealKey ? { sealKey } : {}), accepts: accepts as "question"[], name, description, version: `${VERSION}+card-runtime`,
     });
   } catch (e) {
     home.remove("joining.json");
@@ -159,6 +163,42 @@ async function decide(home: Home, p: Parsed, decision: "approve" | "decline" | "
   home.writeJson(`decisions/${item.id}.json`, await signStatement(d, key));
   const running = runningPid(home);
   say(`${decision === "approve" ? "Approved" : decision === "answer" ? "Answered" : "Declined"} ${item.id}. ${running ? `The connector (pid ${running}) applies it within seconds;` : "No connector is running: it is applied the next time one runs (within 15 minutes, or sign it again);"} \`obysphere-connector inbox --all\` shows how it went.`);
+}
+
+/**
+ * A new card that says what runs this member's agent and which model vendors it may use
+ * (identity.md section 2.3), signed by the owner: only once the Obysphere and every other active
+ * member take `card_runtime`, as the spec requires.
+ */
+async function card(home: Home, p: Parsed) {
+  const file = home.readJson<MemberFile>("member.json");
+  const runtime = p.flag("--runtime");
+  const runtimeVersion = p.flag("--runtime-version");
+  const vendors = p.all("--vendor");
+  const ID = /^[a-z][a-z0-9-]{0,63}$/;
+  if (!runtime || !ID.test(runtime)) throw new ConnectorError("card needs --runtime <id> (claude, codex, cursor, gemini, goose, opencode, copilot, … as identity.md section 2.3 names them)");
+  if (!runtimeVersion || !/^[0-9A-Za-z.+-]{1,64}$/.test(runtimeVersion)) throw new ConnectorError("card needs --runtime-version <version>, as the runtime names its own (like 2.1.204)");
+  if (!vendors.length || vendors.some((v) => !ID.test(v))) throw new ConnectorError("card needs one --vendor <id> or more (anthropic, openai, google, mistral, …)");
+  const api = new SphereApi(file.base);
+  if (!(await api.features()).includes("card_runtime")) throw new ConnectorError(`${new URL(file.base).host} doesn't take card_runtime yet: the card can't say what runs this member`);
+  const member = new Member({
+    api, sphere: file.sphere, obi: file.obi, owner: file.owner, ownerKey: file.owner_key, key: await SigningKey.fromSeed(fromB64url(file.key_seed)),
+    delegation: file.delegation, memory: home.readJsonOr<MemberMemory>("memory.json", emptyMemory()),
+  });
+  const peers = await member.directory();
+  const behind = peers.filter((x) => x.obi !== file.obi && x.status === "active" && !x.features.includes("card_runtime")).map((x) => x.obi);
+  if (behind.length) throw new ConnectorError(`not every member takes card_runtime yet (${behind.join(", ")}): the Obysphere would refuse the card; try again once they do`);
+  const me = await api.member(await member.accessToken(), file.sphere, file.obi);
+  const current = cardParams(me.card);
+  const key = await ownerKey(home, p);
+  const next = await new Owner(file.owner, key).card({
+    base: file.base, sphere: file.sphere, obi_id: file.obi, public_key: current.public_key, key_id: current.key_id,
+    ...(current.seal_public_key ? { seal_public_key: current.seal_public_key, seal_key_id: current.seal_key_id } : {}),
+    accepts: current.accepts, card_seq: current.card_seq + 1, name: file.name, description: file.description, version: `${VERSION}+card-runtime`,
+    features: ["card_runtime"], runtime: { id: runtime, version: runtimeVersion }, vendors,
+  });
+  await member.updateCard(next);
+  say(`The card now says: runtime ${runtime} ${runtimeVersion}, vendors ${vendors.join(", ")} (card_seq ${current.card_seq + 1}). Declared, not proven: every member sees it.`);
 }
 
 async function rules(home: Home, p: Parsed) {
@@ -300,6 +340,8 @@ export async function main(argv: string[]) {
       return decide(home, p, "answer");
     case "rules":
       return rules(home, p);
+    case "card":
+      return card(home, p);
     case "renew":
       return renew(home, p);
     case "mcp-config":
