@@ -26,6 +26,7 @@ export const USAGE = `obysphere-connector: join an Obysphere from any MCP host.
   obysphere-connector answer <item> --text <your words> [--choice <n>]   the owner answers a question themselves
   obysphere-connector rules [--allow <type,...> --to <id|*>]... | [--ask-always]
   obysphere-connector card --runtime <id> --runtime-version <v> --vendor <id>...   what runs this member, on its card
+  obysphere-connector card --announce   say on the card that this member takes card_runtime
   obysphere-connector renew [--days <n>]   a new delegation from the owner
   obysphere-connector mcp-config     an MCP host's config for this connector
 
@@ -172,33 +173,48 @@ async function decide(home: Home, p: Parsed, decision: "approve" | "decline" | "
  */
 async function card(home: Home, p: Parsed) {
   const file = home.readJson<MemberFile>("member.json");
+  const announce = p.has("--announce");
   const runtime = p.flag("--runtime");
   const runtimeVersion = p.flag("--runtime-version");
   const vendors = p.all("--vendor");
   const ID = /^[a-z][a-z0-9-]{0,63}$/;
-  if (!runtime || !ID.test(runtime)) throw new ConnectorError("card needs --runtime <id> (claude, codex, cursor, gemini, goose, opencode, copilot, … as identity.md section 2.3 names them)");
-  if (!runtimeVersion || !/^[0-9A-Za-z.+-]{1,64}$/.test(runtimeVersion)) throw new ConnectorError("card needs --runtime-version <version>, as the runtime names its own (like 2.1.204)");
-  if (!vendors.length || vendors.some((v) => !ID.test(v))) throw new ConnectorError("card needs one --vendor <id> or more (anthropic, openai, google, mistral, …)");
+  if (!announce) {
+    if (!runtime || !ID.test(runtime)) throw new ConnectorError("card needs --runtime <id> (claude, codex, cursor, gemini, goose, opencode, copilot, … as identity.md section 2.3 names them), or --announce");
+    if (!runtimeVersion || !/^[0-9A-Za-z.+-]{1,64}$/.test(runtimeVersion)) throw new ConnectorError("card needs --runtime-version <version>, as the runtime names its own (like 2.1.204)");
+    if (!vendors.length || vendors.some((v) => !ID.test(v))) throw new ConnectorError("card needs one --vendor <id> or more (anthropic, openai, google, mistral, …)");
+  }
   const api = new SphereApi(file.base);
-  if (!(await api.features()).includes("card_runtime")) throw new ConnectorError(`${new URL(file.base).host} doesn't take card_runtime yet: the card can't say what runs this member`);
+  const sealKey = file.seal_private ? await SealKey.fromPrivate(fromB64url(file.seal_private)) : undefined;
+  const memory = home.readJsonOr<MemberMemory>("memory.json", emptyMemory());
   const member = new Member({
     api, sphere: file.sphere, obi: file.obi, owner: file.owner, ownerKey: file.owner_key, key: await SigningKey.fromSeed(fromB64url(file.key_seed)),
-    delegation: file.delegation, memory: home.readJsonOr<MemberMemory>("memory.json", emptyMemory()),
+    ...(sealKey ? { sealKey } : {}), delegation: file.delegation, memory,
   });
   const peers = await member.directory();
-  const behind = peers.filter((x) => x.obi !== file.obi && x.status === "active" && !x.features.includes("card_runtime")).map((x) => x.obi);
-  if (behind.length) throw new ConnectorError(`not every member takes card_runtime yet (${behind.join(", ")}): the Obysphere would refuse the card; try again once they do`);
-  const me = await api.member(await member.accessToken(), file.sphere, file.obi);
-  const current = cardParams(me.card);
+  const self = peers.find((x) => x.obi === file.obi);
+  // What the card says comes from this member's own folder, never from the Sphere's copy of it:
+  // its keys, what it accepts, its words; only card_seq takes the highest seen, so it only grows.
+  const kept = Object.hasOwn(memory.cardSeq, file.obi) ? memory.cardSeq[file.obi]! : 1;
+  const cardSeq = Math.max(kept, self?.trusted ? self.cardSeq : 0) + 1;
+  const carries = !!self?.trusted && self.features.length > 0 && !!self.runtime;
+  let extra: { features: string[]; runtime: { id: string; version: string }; vendors: string[] } | undefined;
+  if (!announce) {
+    if (!(await api.features()).includes("card_runtime")) throw new ConnectorError(`${new URL(file.base).host} doesn't take card_runtime yet: the card can't say what runs this member (\`card --announce\` says the connector takes it)`);
+    // A card that carries the addition already keeps it (identity.md 2.3); else every other active member must take it.
+    const behind = carries ? [] : peers.filter((x) => x.obi !== file.obi && x.status === "active" && !x.features.includes("card_runtime")).map((x) => x.obi);
+    if (behind.length) throw new ConnectorError(`not every member takes card_runtime yet (${behind.join(", ")}): the Obysphere would refuse the card. A member of an older connector can say it takes it with \`obysphere-connector card --announce\`; then try again`);
+    extra = { features: ["card_runtime"], runtime: { id: runtime!, version: runtimeVersion! }, vendors };
+  }
   const key = await ownerKey(home, p);
   const next = await new Owner(file.owner, key).card({
-    base: file.base, sphere: file.sphere, obi_id: file.obi, public_key: current.public_key, key_id: current.key_id,
-    ...(current.seal_public_key ? { seal_public_key: current.seal_public_key, seal_key_id: current.seal_key_id } : {}),
-    accepts: current.accepts, card_seq: current.card_seq + 1, name: file.name, description: file.description, version: `${VERSION}+card-runtime`,
-    features: ["card_runtime"], runtime: { id: runtime, version: runtimeVersion }, vendors,
+    base: file.base, sphere: file.sphere, obi_id: file.obi, public_key: member.key.publicKey, key_id: member.key.keyId,
+    ...(sealKey ? { seal_public_key: sealKey.publicKey, seal_key_id: sealKey.keyId } : {}),
+    accepts: file.accepts, card_seq: cardSeq, name: file.name, description: file.description, version: `${VERSION}+card-runtime`, ...(extra ?? {}),
   });
   await member.updateCard(next);
-  say(`The card now says: runtime ${runtime} ${runtimeVersion}, vendors ${vendors.join(", ")} (card_seq ${current.card_seq + 1}). Declared, not proven: every member sees it.`);
+  say(extra
+    ? `The card now says: runtime ${runtime} ${runtimeVersion}, vendors ${vendors.join(", ")} (card_seq ${cardSeq}). Declared, not proven: every member sees it.`
+    : `The card now says this member takes card_runtime (card_seq ${cardSeq}).`);
 }
 
 async function rules(home: Home, p: Parsed) {

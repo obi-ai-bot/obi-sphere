@@ -312,6 +312,7 @@ export class Member {
     const verdict = await verifyCard(card, { now: nowSeconds(), bound_owner_key: own(this.memory.owners, this.owner) ?? params.owner_key });
     if (!verdict.ok) throw new Error(`that card fails: ${verdict.message}`);
     if (params.key_id !== this.key.keyId) throw new Error("that card names another key than this member's: rotating a key is a new SigningKey and a new Member");
+    if ((params.seal_public_key ?? null) !== (this.sealKey?.publicKey ?? null)) throw new Error("that card's seal key isn't this member's own");
     const member = await this.api.updateCard(await this.accessToken(), this.sphere, this.id, card);
     this.memory.cardSeq[this.id] = params.card_seq;
     if (params.seal_public_key && this.memory.sealedSince === undefined) this.memory.sealedSince = params.issued_at;

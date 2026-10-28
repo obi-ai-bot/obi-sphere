@@ -221,7 +221,8 @@ export class SphereApi {
     try {
       return (await this.call<{ features: string[] }>("GET", "/v0.1/features", { schema: "wire/features.response" })).features;
     } catch (e) {
-      if (e instanceof SphereError) return [];
+      // An Obysphere that answers, but not with a valid list, takes none; one that doesn't answer says nothing.
+      if (e instanceof SphereError && e.code !== "unreachable") return [];
       throw e;
     }
   }
