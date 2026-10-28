@@ -1,7 +1,7 @@
 {
   "case": "card",
   "name": "invalid-card-header-not-utf8",
-  "description": "A header its owner signed with a byte that isn't UTF-8 in it.",
+  "description": "A header its owner signed with a byte that isn't UTF-8 after its opening brace: a decoder that dropped it would read the spec's header.",
   "expect": "reject",
   "reason": "card_invalid",
   "context": {
@@ -66,8 +66,8 @@
     ],
     "signatures": [
       {
-        "protected": "eyJhbGciOiJFZERTQSIsImtpZCI6ImVkMjU1MTk6QU5WX3N1bXA1ckpXdWV2X1lJNjZUTjFKS0UwdV9wTU5jUlFtaHB4UjdfQSIsInR5cCI6Iv9PU0UifQ",
-        "signature": "9E_F0FtzQxJl-IexhIs2MUM56xV9K4wyWvuN8H50n2F1jPbDLuNrP8knbd6AL_9MRe1AVdCEuD80JVk7bwjoCg"
+        "protected": "e_8iYWxnIjoiRWREU0EiLCJraWQiOiJlZDI1NTE5OkFOVl9zdW1wNXJKV3Vldl9ZSTY2VE4xSktFMHVfcE1OY1JRbWhweFI3X0EiLCJ0eXAiOiJKT1NFIn0",
+        "signature": "CQBdXadtzwC_-iR5tVV8D-ZTonDhfs1q03JvPwh5S_gI0OQyz3fuZXAfhg-a6xR0M2sc14ekR6lo4zIk4yQVBA"
       }
     ]
   }
