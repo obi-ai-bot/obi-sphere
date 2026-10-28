@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, test } from "node:test";
-import { Owner, SigningKey, newRequest, signEnvelope, timestamp, type Envelope } from "@obysphere/client";
+import { Owner, SigningKey, newReply, newRequest, signEnvelope, timestamp, type Envelope } from "@obysphere/client";
 import { Connector, itemDigest, type Item, type MemberFile } from "../src/connector.ts";
 import { Home } from "../src/home.ts";
 import { renderInbox, renderItem } from "../src/render.ts";
@@ -66,7 +66,7 @@ async function setup() {
     const d: Decision = { kind: "decision", sphere: SPHERE, obi: "dee-agent", item: item.id, decision, digest: item.digest, at: timestamp(Math.floor(Date.now() / 1000)), ...o };
     home.writeJson(`decisions/${item.id}.json`, await signStatement(d, dee.key));
   };
-  return { c, home, state, sent, question, deliver, decide, file };
+  return { c, home, state, sent, question, deliver, decide, file, adaKey };
 }
 
 test("the agent sees a request's words only once the owner approved it, the whole message inside a quote", async () => {
@@ -154,4 +154,19 @@ test("a request declined at once and delivered again isn't put in the mailbox", 
   await c.poll();
   assert.equal(c.items().length, 5);
   assert.equal(c.item(qs[5]!.id), undefined);
+});
+
+test("a request its sender calls off is settled, and nothing more goes in its exchange", async () => {
+  const { c, state, question, deliver, decide, adaKey } = await setup();
+  const q = await question("Still need this?");
+  state.deliveries = [deliver(q, 1)];
+  await c.poll();
+  await decide(c.item(q.id)!, "approve");
+  state.deliveries = [];
+  await c.poll();
+  const cancel = await signEnvelope(newReply(q, { from: "oby-ada", type: "cancel", keyId: adaKey.keyId, body: {} }), adaKey);
+  state.deliveries = [deliver(cancel, 2)];
+  await c.poll();
+  assert.equal(c.item(q.id)!.state, "cancelled");
+  await assert.rejects(c.reply(q.id, "answer", { text: "Yes." }), /cancelled/);
 });
