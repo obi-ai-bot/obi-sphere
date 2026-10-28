@@ -26,7 +26,7 @@ import {
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
 import type { JsonObject } from "./json.ts";
-import { actorAssertion, serverAudience } from "./jws.ts";
+import { actorAssertion, parseJwt, serverAudience } from "./jws.ts";
 import { DpopKey } from "./dpop.ts";
 import type { Owner } from "./owner.ts";
 import { SealKey, sealEnvelope, verifyAndOpen } from "./seal.ts";
@@ -181,6 +181,7 @@ export class Member {
   memory: MemberMemory;
   #token: { value: string; until: number } | null = null;
   #features: Promise<string[]> | null = null;
+  #dpopKey: Promise<DpopKey> | null = null;
   #peers: Map<string, Peer> | null = null;
   #directory: DirectoryMember[] = [];
 
@@ -252,12 +253,27 @@ export class Member {
     // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
     const aud = (await api.features().catch(() => [] as string[])).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
     const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
-    return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
+    const member = new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
+    if (aud) {
+      // A server knows its own address; reached by another name (localhost for 127.0.0.1), it refuses
+      // an assertion bound to that name. Then the delegation names the Sphere alone, as before.
+      try {
+        await member.accessToken();
+      } catch (e) {
+        if (!(e instanceof SphereError && e.code === "invalid_request")) throw e;
+        member.delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
+      }
+    }
+    return member;
   }
 
-  /** The Obysphere's features, read once (`GET /v0.1/features`; none from an older one). */
+  /** The Obysphere's features, read once (`GET /v0.1/features`; none from an older one). A read that fails is tried again next time. */
   async features(): Promise<string[]> {
-    return (this.#features ??= this.api.features());
+    this.#features ??= this.api.features().catch((e) => {
+      this.#features = null;
+      throw e;
+    });
+    return this.#features;
   }
 
   /**
@@ -268,8 +284,11 @@ export class Member {
   async accessToken(): Promise<string> {
     if (this.#token && this.#token.until - 60 > nowSeconds()) return this.#token.value;
     const features = await this.features().catch(() => [] as string[]);
-    if (features.includes("dpop") && !this.api.dpop) this.api.dpop = await DpopKey.generate();
-    const aud = features.includes("sphere_url_aud") ? serverAudience(this.api.base, this.sphere) : undefined;
+    // One key for the process, made once even when calls overlap.
+    if (features.includes("dpop") && !this.api.dpop) this.api.dpop = await (this.#dpopKey ??= DpopKey.generate());
+    // The actor assertion names the Sphere as the delegation does: both bound to the server, or neither.
+    const delegated = parseJwt(this.#delegation)?.claims.aud;
+    const aud = typeof delegated === "string" && delegated.includes("/v0.1/spheres/") ? delegated : undefined;
     const t = await this.api.token({ subject: this.#delegation, actor: await actorAssertion(this.key, { obi: this.id, sphere: this.sphere, ...(aud ? { aud } : {}) }) });
     this.#token = { value: t.access_token, until: nowSeconds() + t.expires_in };
     return t.access_token;

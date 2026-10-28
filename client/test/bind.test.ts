@@ -4,7 +4,7 @@
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { DpopKey, Member, Owner, SigningKey, SphereApi, b64url, fromB64url, parseJwt, sha256, timestamp, utf8, verifyEd25519 } from "../src/index.ts";
+import { DpopKey, Member, Owner, SigningKey, SphereApi, b64url, fromB64url, keyIdOf, parseJwt, serverAudience, sha256, utf8, verifyEd25519 } from "../src/index.ts";
 
 const BASE = "https://sphere.example.com";
 const SPHERE = "team";
@@ -46,7 +46,9 @@ async function fake(features: string[]) {
   };
   const owner = await Owner.generate("ada");
   const key = await SigningKey.generate();
-  const m = new Member({ api: new SphereApi(BASE, { fetch }), sphere: SPHERE, obi: "ada-agent", owner: "ada", key, delegation: await owner.delegation(SPHERE, "ada-agent") });
+  // As join makes it: bound to the server when the server takes that.
+  const delegation = await owner.delegation(SPHERE, "ada-agent", features.includes("sphere_url_aud") ? { aud: serverAudience(BASE, SPHERE) } : {});
+  const m = new Member({ api: new SphereApi(BASE, { fetch }), sphere: SPHERE, obi: "ada-agent", owner: "ada", key, delegation });
   return { m, seen, fetch };
 }
 
@@ -80,6 +82,50 @@ test("a delegation can name the server, and a sign-in carries return_to", async 
   const started = await api.signinStart("google", owner.key.publicKey, "http://127.0.0.1:41234/signin");
   assert.equal(started.state.length, 43);
   assert.deepEqual(JSON.parse(seen.at(-1)!.body), { owner_key: owner.key.publicKey, return_to: "http://127.0.0.1:41234/signin" });
-  assert.throws(() => api.signinStart("Google!", owner.key.publicKey));
-  void timestamp;
+  await assert.rejects(api.signinStart("Google!", owner.key.publicKey));
+});
+
+test("calls that overlap at the start share one DPoP key, and every proof is signed with the token's key", async () => {
+  const { m, seen } = await fake(["dpop", "sphere_url_aud"]);
+  await Promise.all([m.receive(), m.receive(), m.directory().catch(() => {})]);
+  const keys = new Set(seen.filter((s) => s.headers.DPoP).map((s) => decodeJwt(s.headers.DPoP!).header.jwk.x));
+  assert.equal(keys.size, 1);
+  const token = "t".repeat(40);
+  const headers = await m.api.authHeaders("GET", `${BASE}/v0.1/spheres/${SPHERE}/channels/x`, token);
+  assert.equal(headers.Authorization, `DPoP ${token}`);
+  assert.equal(decodeJwt(headers.DPoP!).header.jwk.x, [...keys][0]);
+  assert.deepEqual(await m.api.authHeaders("GET", `${BASE}/x`, "another-token"), { Authorization: "Bearer another-token" });
+});
+
+test("join binds to the server, and falls back to the Sphere alone when the server knows itself by another name", async () => {
+  for (const sameName of [true, false]) {
+    const tokens: string[] = [];
+    const fetch = async (url: string, init: RequestInit) => {
+      const p = new URL(url).pathname;
+      const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+      if (p === "/v0.1/features") return json(200, { features: ["sphere_url_aud"] });
+      if (p.endsWith("/redeem")) {
+        const body = JSON.parse(String(init.body));
+        const params = body.card.capabilities.extensions[0].params;
+        return json(201, {
+          obi: "ada-agent", owner: "ada", owner_key: body.owner_key, owner_key_id: await keyIdOf(body.owner_key), status: "active", joined_at: "2026-10-28T00:00:00Z", card: body.card,
+          keys: [{ key_id: params.key_id, public_key: params.public_key, valid_from_seq: 1, valid_until_seq: null }],
+        });
+      }
+      if (p === "/v0.1/oauth/token") {
+        const actor = new URLSearchParams(String(init.body)).get("actor_token")!;
+        const aud = String(parseJwt(actor)!.claims.aud);
+        tokens.push(aud);
+        if (!sameName && aud.startsWith("http")) return json(400, { error: "invalid_request", error_description: "aud names an Obysphere on another server" });
+        return json(200, { access_token: "t".repeat(40), issued_token_type: "urn:ietf:params:oauth:token-type:access_token", token_type: "Bearer", expires_in: 3600, scope: "receive" });
+      }
+      return json(404, { error: { code: "not_found", message: "no" } });
+    };
+    const owner = await Owner.generate("ada");
+    const link = `${BASE}/join#sphere=${SPHERE}&id=9187a87a-3126-424c-8861-8811bba1a5ec&secret=${"A".repeat(43)}`;
+    const m = await Member.join({ link, owner, obi: "ada-agent", key: await SigningKey.generate(), accepts: ["question"], name: "A", description: "a", version: "0.1.0", fetch }).catch((e) => e);
+    if (!(m instanceof Member)) throw m;
+    const aud = parseJwt(m.delegation)!.claims.aud;
+    assert.equal(aud, sameName ? serverAudience(BASE, SPHERE) : `obi-sphere:${SPHERE}`, `same name: ${sameName}`);
+  }
 });
