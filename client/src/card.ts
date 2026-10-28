@@ -22,6 +22,14 @@ export interface CardParams {
   accepts: string[];
   card_seq: number;
   issued_at: string;
+  /** The additions the agent takes, and what its owner declares runs it (identity.md section 2.3). */
+  features?: string[];
+  runtime?: { id: string; version: string };
+  vendors?: string[];
+  /** The conformance classes its member claims (identity.md section 2.3). */
+  classes?: string[];
+  /** What its member can help with (identity.md section 2.3). */
+  topics?: string[];
 }
 
 export interface AgentCard {
@@ -158,16 +166,68 @@ export async function signCard(unsigned: Record<string, unknown>, ownerKey: Sign
   return { ...rest, signatures: [{ protected: protectedHeader, signature }] } as unknown as AgentCard;
 }
 
-/**
- * Whether a card's agent takes an addition (identity.md section 2.3): its `features` list names it,
- * or, for `card_runtime`, a card that can't carry the list yet says so in its version's build
- * metadata (the part after the first `+`, split at `.`, includes `card-runtime`).
- */
-export function takesFeature(card: AgentCard, feature: string): boolean {
-  const params = cardParams(card) as CardParams & { features?: string[] };
-  if (params.features?.includes(feature)) return true;
-  if (feature !== "card_runtime") return false;
+/** The feature a card's `features`, `runtime` and `vendors` come with (identity.md section 2.3). */
+export const CARD_RUNTIME = "card_runtime";
+
+/** The feature a card's `classes` come with (identity.md section 2.3). */
+export const CARD_CLASSES = "card_classes";
+
+/** The additions a card's own members need its readers to take (identity.md section 2.3). */
+export function featuresUsed(p: CardParams): string[] {
+  const used: string[] = [];
+  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined || p.topics !== undefined) used.push(CARD_RUNTIME);
+  if (p.classes !== undefined) used.push(CARD_CLASSES);
+  if (p.topics !== undefined) used.push("card_topics");
+  if (p.accepts.includes("introduction")) used.push("introduction");
+  return used;
+}
+
+/** The feature a message uses, when it uses one (protocol.md sections 5.17 to 5.19): readers of
+ *  the chain from before can't verify it, so it goes only where every active member takes it. */
+export function messageFeatures(type: string, body: Record<string, unknown>): string[] {
+  const used: string[] = [];
+  if (type === "cancel") used.push("cancel");
+  if (type === "introduction") used.push("introduction");
+  if (body.follows !== undefined) used.push("follow_up");
+  return used;
+}
+
+/** The additions a card says its agent takes: its `features`, and `card_runtime` when its
+ *  `version`'s build metadata (after the first `+`, split at `.`) has `card-runtime`. */
+export function featuresTaken(card: AgentCard): Set<string> {
+  const taken = new Set(cardParams(card).features ?? []);
   const version = typeof card.version === "string" ? card.version : "";
   const plus = version.indexOf("+");
-  return plus >= 0 && version.slice(plus + 1).split(".").includes("card-runtime");
+  if (plus >= 0 && version.slice(plus + 1).split(".").includes("card-runtime")) taken.add(CARD_RUNTIME);
+  return taken;
 }
+
+/** Why a card can't be published yet ("Publishing a card with an addition"): the first member of
+ *  `others` (the other active members' cards, by agent id) that doesn't take an addition it uses. */
+export function publishingProblem(p: CardParams, others: { obi: string; card: AgentCard }[], carried: Set<string> = new Set()): string | null {
+  for (const feature of featuresUsed(p).filter((f) => !carried.has(f))) {
+    const behind = others.find((o) => !featuresTaken(o.card).has(feature));
+    if (behind) return `${behind.obi}'s card doesn't take ${feature}: a card with its members waits until every active member's does`;
+  }
+  return null;
+}
+
+/** Why a message or a policy that uses `features` can't go in yet (sphere-api.md sections 5 and
+ *  6.1, check 11): the Obysphere doesn't take one (`sphereTakes`, its own list), or a member of `active` (every active member's
+ *  card) doesn't list it, since every member verifies the chain and reads the policy. */
+export function notTakenProblem(features: string[], active: { obi: string; card: AgentCard }[], sphereTakes?: readonly string[]): string | null {
+  for (const feature of features) {
+    if (sphereTakes && !sphereTakes.includes(feature)) return `this Obysphere doesn't take ${feature}`;
+    const behind = active.find((m) => !featuresTaken(m.card).has(feature));
+    if (behind) return `${behind.obi}'s card doesn't take ${feature}, and every member reads what uses it`;
+  }
+  return null;
+}
+
+/** The additions a policy's rules use: `introduction`, when a rule names it. */
+export function policyFeatures(rules: { actions: string[] }[]): string[] {
+  return rules.some((r) => r.actions.includes("introduction")) ? ["introduction"] : [];
+}
+
+/** Whether a card's agent takes an addition: what `featuresTaken` says. */
+export const takesFeature = (card: AgentCard, feature: string): boolean => featuresTaken(card).has(feature);

@@ -46,7 +46,8 @@ console.log(await me.verifyChain());
 | Module | What it does | Runs in |
 |---|---|---|
 | `json`, `crypto`, `schemas` | Strict JSON and RFC 8785, base64url, SHA-256, Ed25519 keys (`SigningKey`) and key ids, every schema of `spec/schemas/v0.1` compiled ahead of time | anywhere (WebCrypto) |
-| `envelope` | Making, signing and verifying envelopes (protocol.md sections 3, 9, 10), the exchange rules (section 4) | anywhere |
+| `rules` | The action types, the exchange and follow-up rules (protocol.md section 4), the rules no schema can say (section 10, check 3), which key is valid at a seq: pure functions | anywhere |
+| `envelope` | Making, signing and verifying envelopes (protocol.md sections 3, 9, 10) | anywhere (WebCrypto) |
 | `card` | Making, signing and verifying agent cards (identity.md section 2) | anywhere |
 | `jws` | Owner assertions, delegations and actor assertions (identity.md section 4) | anywhere |
 | `chain` | Entry hashes, verifying the chain, and the no-rollback check against a member's own receipts (sphere-api.md section 7) | anywhere |
@@ -56,7 +57,7 @@ console.log(await me.verifyChain());
 | `sphere` | `SphereApi`: every call a member or an owner makes, each answer checked against its schema (a delivery's envelope is left to the receiver, a directory entry that breaks the schema left out) | anywhere with `fetch` |
 | `owner`, `member` | `Owner` (cards, delegations, admin calls) and `Member` (join, send, receive, reply, the directory with pinned owner keys, the chain) | Node |
 
-`@obysphere/client/protocol` is the part that needs only WebCrypto, for a Worker or a browser.
+`@obysphere/client/protocol` is the part that needs only WebCrypto, for a Worker or a browser. The server runs it: `server/src/protocol/lib/` is a copy of `json`, `crypto`, `rules`, `envelope`, `card`, `chain` and `jws` that the server's CI checks against this folder (`pnpm run check:client` there), so the server and the Docker image build from `server/` alone. The spec's reference verifier (`spec/conformance/lib/obi.mjs`) takes its rules from `rules.ts`, which has no schemas and no cryptography. So each rule has one implementation, here: change it here, then `pnpm run sync:client` in `server/`.
 
 ## Words are data
 

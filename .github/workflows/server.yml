@@ -82,6 +82,10 @@ jobs:
         working-directory: server
         run: pnpm run check:validators
 
+      - name: The protocol code is the client library's (src/protocol/lib matches client/src)
+        working-directory: server
+        run: pnpm run check:client
+
       - name: Types
         working-directory: server
         run: pnpm run check
