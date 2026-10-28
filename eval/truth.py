@@ -13,8 +13,12 @@ for d in diff.splitlines():
     elif d.startswith("@@") and cur:
         m = re.match(r"@@ -(\d+)(?:,(\d+))? ", d); s, n = int(m.group(1)), int(m.group(2) or 1)
         if n > 0: removed[cur].append((s, s + n - 1))
+# Tests, fixtures and docs aren't where a reviewer finds the bug: they leave the ground truth, as mine.py's SKIP.
+SKIP = re.compile(r"(^|/)(tests?|e2e|fixtures?|docs?)/|_test\.|\.test\.|Tests?/|spikes/|design/")
 out = collections.defaultdict(list)
 for f, ranges in removed.items():
+    if SKIP.search(f):
+        continue
     args = ["blame", "--porcelain"]
     for a, b in ranges: args += ["-L", f"{a},{b}"]
     lines = git(*args, f"{fix}^", "--", f).splitlines()

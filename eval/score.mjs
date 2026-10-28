@@ -41,7 +41,7 @@ function seat(rec, c) {
   };
 }
 
-/** A panel's verdict by the clerk: majority, every seat needed for quorum, blocking findings veto, none challenged. */
+/** A panel's verdict by the clerk: majority, a quorum of half the seats (rounded up), blocking findings veto, none challenged. */
 function panel(recs, c) {
   const seats = recs.map((_, i) => `s${i + 1}`);
   const ballots = recs.flatMap((r, i) => (r.outcome ? [{ seat: seats[i], vote: r.outcome === "approved" ? "approve" : "reject" }] : []));
@@ -112,7 +112,7 @@ for (const c of spec.cases) {
     pr: c.pr,
     fixed_by: c.fixed_by.pr,
     seats,
-    single: { caught: mean(seats.map((s) => +s.caught)), caught_blocking: mean(seats.map((s) => +s.caught_blocking)), false_blockers: mean(seats.map((s) => s.false_blockers)), cost: mean(seats.map((s) => s.cost)) },
+    single: { answered_caught: mean(seats.filter((s) => s.ok).map((s) => +s.caught)), answered: seats.filter((s) => s.ok).length, caught: mean(seats.map((s) => +s.caught)), caught_blocking: mean(seats.map((s) => +s.caught_blocking)), false_blockers: mean(seats.map((s) => s.false_blockers)), cost: mean(seats.map((s) => s.cost)) },
     panel3: { n: p3.length, caught: mean(p3.map((p) => +p.caught)), stops: mean(p3.map((p) => +p.stops_for_the_bug)), false_vetoes: mean(p3.map((p) => p.false_vetoes)), cost: mean(p3.map((p) => p.cost)) },
     panel5: { n: p5.length, caught: mean(p5.map((p) => +p.caught)), stops: mean(p5.map((p) => +p.stops_for_the_bug)), false_vetoes: mean(p5.map((p) => p.false_vetoes)), cost: mean(p5.map((p) => p.cost)) },
     open3: op && { ...op, herding: herd(openPanel.slice(0, 3)), seats: openPanel.slice(0, 3).map((r) => seat(r, c)) },
@@ -125,6 +125,8 @@ for (const c of spec.cases) {
       open3: openNames.slice(0, 3).some((n) => described(c, n)),
     },
     runs: blind.length + openSeats.length,
+    answered: [...blind, ...openSeats].filter((r) => r.outcome).length,
+    out_of_budget: [...blind, ...openSeats].filter((r) => r.subtype === "error_max_budget_usd").length,
     failed: Object.keys(recs).filter((n) => n.startsWith("failed-")).length,
     run_cost: Object.values(recs).reduce((s, r) => s + (r.cost_usd ?? 0), 0),
   });
@@ -135,9 +137,9 @@ writeFileSync(join(here, "scores.json"), JSON.stringify(out, null, 1) + "\n");
 const cs = out.cases.filter((c) => c.seats.length);
 const best = cs.length ? Math.max(...cs[0].seats.map((_, i) => cs.filter((c) => c.seats[i]?.caught).length)) : 0;
 console.log(`### Caught, per case (a finding within ${W} lines of the fixed lines)\n`);
-console.log("| Case | Single seat (mean of blind seats) | Caught as a blocker | Panel of 3 (all subsets) | Panel of 5 | Panel of 3 stops it for the bug |");
-console.log("|---|---|---|---|---|---|");
-for (const c of cs) console.log(`| ${c.id} (#${c.pr}, fixed by #${c.fixed_by}) | ${pct(c.single.caught)} | ${pct(c.single.caught_blocking)} | ${pct(c.panel3.caught)} | ${pct(c.panel5.caught)} | ${pct(c.panel3.stops)} |`);
+console.log("| Case | Single seat (all five blind seats) | Single seat (seats that answered) | Caught as a blocker | Panel of 3 (all subsets) | Panel of 5 | Panel of 3 stops it for the bug |");
+console.log("|---|---|---|---|---|---|---|");
+for (const c of cs) console.log(`| ${c.id} (#${c.pr}, fixed by #${c.fixed_by}) | ${pct(c.single.caught)} | ${pct(c.single.answered_caught)} (${c.single.answered} of ${c.seats.length}) | ${pct(c.single.caught_blocking)} | ${pct(c.panel3.caught)} | ${pct(c.panel5.caught)} | ${pct(c.panel3.stops)} |`);
 console.log(`\nBest single seat (the blind seat number that caught the most cases): ${best} of ${cs.length} cases.\n`);
 console.log("### Caught, by the author's reading: the finding's words describe the confirmed bug (reading.json)\n");
 console.log("| Case | Single seat | Panel of 3 (all subsets) | Panel of 5 | Blind 1–3 | Open 1–3 |");
@@ -150,8 +152,9 @@ console.log("| Case | Blind 1–3 caught | Open 1–3 caught | Blind repeats | O
 console.log("|---|---|---|---|---|---|---|");
 for (const c of cs) if (c.open3 && c.blind3_first) console.log(`| ${c.id} | ${c.blind3_first.caught ? "yes" : "no"} | ${c.open3.caught ? "yes" : "no"} | ${pct(c.blind3_first.herding)} | ${pct(c.open3.herding)} | ${c.blind3_first.false_vetoes} | ${c.open3.false_vetoes} |`);
 console.log("\n### False alarms and cost\n");
-console.log("| Case | False blockers per seat | False vetoes, panel of 3 | False vetoes, panel of 5 | Cost per seat | Panel of 3 | Panel of 5 | Runs (failed) | Spent, failed runs included |");
-console.log("|---|---|---|---|---|---|---|---|---|");
-for (const c of cs) console.log(`| ${c.id} | ${c.single.false_blockers.toFixed(1)} | ${c.panel3.false_vetoes.toFixed(1)} | ${c.panel5.false_vetoes.toFixed(1)} | ${usd(c.single.cost)} | ${usd(c.panel3.cost)} | ${usd(c.panel5.cost)} | ${c.runs} (${c.failed}) | ${usd(c.run_cost)} |`);
+console.log("| Case | False blockers per seat | False vetoes, panel of 3 | False vetoes, panel of 5 | Cost per seat | Panel of 3 | Panel of 5 | Seat runs: answered, out of budget | Failed and run again | Spent, failed runs included |");
+console.log("|---|---|---|---|---|---|---|---|---|---|");
+for (const c of cs) console.log(`| ${c.id} | ${c.single.false_blockers.toFixed(1)} | ${c.panel3.false_vetoes.toFixed(1)} | ${c.panel5.false_vetoes.toFixed(1)} | ${usd(c.single.cost)} | ${usd(c.panel3.cost)} | ${usd(c.panel5.cost)} | ${c.runs}: ${c.answered}, ${c.out_of_budget} | ${c.failed} | ${usd(c.run_cost)} |`);
 const total = cs.reduce((s, c) => s + c.run_cost, 0);
-console.log(`\nTotal: ${cs.reduce((s, c) => s + c.runs, 0)} runs with an answer, ${cs.reduce((s, c) => s + c.failed, 0)} failed and run again, ${usd(total)} in all.`);
+const sum = (k) => cs.reduce((s, c) => s + c[k], 0);
+console.log(`\nTotal: ${sum("runs")} seat runs, ${sum("answered")} answered and ${sum("out_of_budget")} out of budget; ${sum("failed")} more failed on the account's usage limit and were run again; ${usd(total)} in all.`);

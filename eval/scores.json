@@ -53,6 +53,8 @@
     }
    ],
    "single": {
+    "answered_caught": 1,
+    "answered": 5,
     "caught": 1,
     "caught_blocking": 0.6,
     "false_blockers": 0,
@@ -125,6 +127,8 @@
     "open3": true
    },
    "runs": 7,
+   "answered": 7,
+   "out_of_budget": 0,
    "failed": 2,
    "run_cost": 2.9153119000000003
   },
@@ -180,6 +184,8 @@
     }
    ],
    "single": {
+    "answered_caught": 0.4,
+    "answered": 5,
     "caught": 0.4,
     "caught_blocking": 0,
     "false_blockers": 0,
@@ -252,6 +258,8 @@
     "open3": false
    },
    "runs": 7,
+   "answered": 7,
+   "out_of_budget": 0,
    "failed": 2,
    "run_cost": 2.2729347
   },
@@ -307,6 +315,8 @@
     }
    ],
    "single": {
+    "answered_caught": 0.8,
+    "answered": 5,
     "caught": 0.8,
     "caught_blocking": 0,
     "false_blockers": 0,
@@ -379,6 +389,8 @@
     "open3": false
    },
    "runs": 7,
+   "answered": 7,
+   "out_of_budget": 0,
    "failed": 4,
    "run_cost": 5.9342579
   },
@@ -434,6 +446,8 @@
     }
    ],
    "single": {
+    "answered_caught": 0.3333333333333333,
+    "answered": 3,
     "caught": 0.2,
     "caught_blocking": 0,
     "false_blockers": 0,
@@ -506,6 +520,8 @@
     "open3": false
    },
    "runs": 7,
+   "answered": 4,
+   "out_of_budget": 3,
    "failed": 7,
    "run_cost": 10.3321544
   }

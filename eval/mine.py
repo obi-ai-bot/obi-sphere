@@ -1,7 +1,13 @@
 """SZZ-style mining: for each fix or revert commit on origin/dev, blame the lines it removed or changed in its
-parent, and report the earlier squash-merged pull requests that wrote them."""
+parent, and report the earlier squash-merged pull requests that wrote them (README.md, "The cases", step 1).
+With --candidates it also applies step 2's size filter: the earlier pull request changed at most 700 lines,
+the fix at most 25, and at least 2 of the fix's lines blame back to it.
+
+    python3 eval/mine.py <oby checkout> [--candidates] > pairs.json
+"""
 import re, subprocess, sys, json, collections
 repo = sys.argv[1]
+CANDIDATES = "--candidates" in sys.argv[2:]
 def git(*a):
     return subprocess.run(["git", "-C", repo, *a], capture_output=True, text=True).stdout
 CODE = re.compile(r"\.(rs|ts|tsx|mjs|js|swift|py|sh)$")
@@ -46,4 +52,11 @@ for line in git("log", "--format=%H\t%s", "origin/dev").splitlines():
             continue
         stat = git("show", "--shortstat", "--format=", intro).strip()
         out.append({"fix": sha[:10], "fix_subject": subj, "fix_lines": nlines, "intro": intro[:10], "intro_subject": isubj, "blamed_lines": count, "intro_stat": stat})
+def size(stat):
+    return sum(int(n) for n, _ in re.findall(r"(\d+) (insertion|deletion)", stat))
+
+
+if CANDIDATES:
+    out = [x for x in out if size(x["intro_stat"]) <= 700 and x["fix_lines"] <= 25 and x["blamed_lines"] >= 2]
+    out.sort(key=lambda x: (x["fix_lines"], size(x["intro_stat"])))
 json.dump(out, sys.stdout, indent=1)

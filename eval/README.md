@@ -13,13 +13,13 @@ It compares:
 A case is a pull request whose bug a later commit confirmed by fixing it, from public history only: [obi-ai-bot/oby](https://github.com/obi-ai-bot/oby) and [obi-ai-bot/oby-sphere](https://github.com/obi-ai-bot/oby-sphere). Nothing from any private repository. [cases.json](cases.json) lists them. They were chosen like this, before any seat ran:
 
 1. **Mining** ([mine.py](mine.py), the SZZ method). For every commit on `dev` whose subject starts with `fix` or `revert`, take the lines it removed or changed in code files (Rust, TypeScript, JavaScript, Swift, Python, shell; not tests, fixtures, docs, spikes or design files), at most 40 of them, and `git blame` them in the fix's parent. Every earlier squash-merged pull request that wrote some of them is a candidate. In oby, 232 fix commits gave 468 candidate pairs; in oby-sphere, 4 fix commits gave 4.
-2. **Size.** Keep pairs where the earlier pull request changed at most 700 lines, so one seat can review it within its budget, and where the fix changed at most 25 lines, of which at least 2 the earlier pull request wrote. 63 pairs were left, all in oby.
+2. **Size.** Keep pairs where the earlier pull request changed at most 700 lines, so one seat can review it within its budget, and where the fix changed at most 25 lines, of which at least 2 the earlier pull request wrote (`python3 eval/mine.py <oby checkout> --candidates`). 63 pairs were left, all in oby: [candidates.json](candidates.json) lists them, with how far each was read.
    - oby-sphere had none. It has 36 commits on `dev`. Its fixes blame back to two pull requests: the initial server import (20,758 lines added) and the sign-in change (2,105). Both are too large to review in one seat's budget. The fix to a deploy script that touched only one hosting account's settings isn't a defect a reviewer of the code could find.
 3. **Reading.** Read each fix's message and diff, smallest first. Keep a pair only when:
    - the fix names a defect in the earlier pull request's own code;
    - a reviewer of the earlier diff alone could have found it;
    - it isn't a decision the owner changed later (e.g. #630 to #720, investigations made read-only and then not).
-4. **Fewest that can show a difference.** Four cases of different kinds and difficulty, from an easy-to-spot loophole to a timing detail:
+4. **Fewest that can show a difference.** Among pairs whose fix names a defect, four cases of different kinds and difficulty, from an easy-to-spot loophole to a timing detail. Reading stopped once they were in hand, so this is a choice, not a sample:
 
 | Case | Pull request | Fixed by | The bug |
 |---|---|---|---|
@@ -28,7 +28,7 @@ A case is a pull request whose bug a later commit confirmed by fixing it, from p
 | `keychain-found-time` | oby#1526 | oby#1527 | A Keychain item found is cached from when the slow `security` call answered, not when it was asked, so a removed login shows as signed in for longer than promised. |
 | `blocking-none` | oby#113 | oby#140 | A review whose Blocking heading says "none" still has what follows read as blocking findings, so an approval becomes changes requested. |
 
-The **ground truth** for each case is the lines of the pull request's own version that the fix removed or changed and that the pull request wrote ([truth.py](truth.py): `git blame --porcelain` through the fix's parent, which gives each line's number in the earlier commit).
+The **ground truth** for each case is the lines of the pull request's own version that the fix removed or changed and that the pull request wrote ([truth.py](truth.py): `git blame --porcelain` through the fix's parent, which gives each line's number in the earlier commit). Like mine.py, it leaves out tests, fixtures and docs: `python3 eval/truth.py <oby checkout> <fix> <earlier>`.
 
 ## How a seat runs
 
@@ -43,9 +43,10 @@ The **ground truth** for each case is the lines of the pull request's own versio
 - **The run.**
   - `claude -p --model sonnet --tools Read,Grep,Glob --permission-mode dontAsk`, with the inputs folder added (`--add-dir`), no settings or MCP servers (`--setting-sources "" --strict-mcp-config`), no session kept, a spending cap (`--max-budget-usd`), and a fixed system prompt.
   - The answer must match the JSON Schema in seat.mjs: an outcome (`approved` or `changes_requested`) and up to 15 findings, each with a file, a line, a severity (`blocker`, `major`, `minor`, `nit`), a title and a detail.
-  - A seat can read the checkout and its inputs and nothing else: it can't run anything, write anything or reach the network.
+  - A seat can read the checkout and its inputs and nothing else: it can't run anything, write anything or reach the network. A probe with these exact flags (2026-10-27, Haiku, $0.03) read a file in its checkout and one in its inputs, and was denied `/etc/hosts`, `~/.zshrc` and a file in the oby checkout that holds the fixes ("Permission to use Read has been denied because Claude Code is running in don't ask mode").
   - It runs with a clean environment: only `HOME`, `PATH` and `USER`, so nothing from the session that started it reaches it.
-- **The record.** Each seat's answer, its cost (`total_cost_usd`), turns, time and token usage go to `runs/<case>/<seat>.json`, as returned.
+- **The record.** Each seat's answer, its cost (`total_cost_usd`), turns, time and token usage go to `runs/<case>/<seat>.json`, as returned, with the resolved model ids and, when a run fails, its error.
+- **Reruns.** A run that fails for a reason other than its budget (an account's usage limit, a network error) is renamed `failed-<seat>.json` by hand and run again; its cost still counts. A seat that reaches its budget without answering keeps its record and counts as absent.
 
 Blind seats are `blind-1` to `blind-5`. The open panel is `blind-1`, then `open-2`, which sees `blind-1`'s findings, then `open-3`, which sees both. A first seat sees nothing either way, so the open panel's first seat is the blind one.
 
@@ -73,4 +74,4 @@ node eval/run.mjs --oby /path/to/oby [--cases secret-names,...] [--blind 5] [--o
 node eval/score.mjs
 ```
 
-It needs Node 22.18 or later, `git`, and `claude` signed in. Each seat spends from that account: [RESULTS.md](RESULTS.md) reports what this run spent. A seat whose record exists in `runs/` isn't run again. Checkouts and inputs go under `$TMPDIR/council-eval`.
+It needs Node 22.18 or later, `git`, Python 3 (for mine.py and truth.py), and `claude` signed in. `score.mjs` also writes `scores.json`, the numbers behind the tables. Each seat spends from that account: [RESULTS.md](RESULTS.md) reports what this run spent. A seat whose record exists in `runs/` isn't run again. Checkouts and inputs go under `$TMPDIR/council-eval`.
