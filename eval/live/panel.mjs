@@ -442,9 +442,11 @@ async function recheckChecks(record, saved) {
   const tally = tallyRun.value;
   const blocking = tally.findings.filter((f) => f.blocking).length;
   const verifier = last.verifiers[0];
-  const vreqs = requests.filter((r) => r.envelope.to === verifier && asChallenge(r)).sort((a, b) => a.seq - b.seq);
+  // Every request to the verifier in the window, as the tally reads them: any one not in the challenge's shape fails.
+  const vreqs = requests.filter((r) => r.envelope.to === verifier).sort((a, b) => a.seq - b.seq);
   const conds = vreqs.flatMap((r) => r.envelope.body.acceptance ?? []);
-  // A verifier brought in by its predecessor's decline gets the challenge within 600 seconds of it (review.md section 6).
+  // The verifier's requests come after the round or the decline that brought its run; one brought in by its
+  // predecessor's decline gets the challenge within 600 seconds of it (review.md section 6).
   const vrun = runs.find(({ out }) => out.verifiers.includes(verifier));
   const vby = vrun?.verifier ? vrun.at + 600 : challengeBy;
   // The challenge goes out once every seat's exchange has ended, or deadlines.reviews has passed.
@@ -452,9 +454,9 @@ async function recheckChecks(record, saved) {
   const afterSeats = (r) => (seatEnds.every(Boolean) && seatEnds.every((e) => r.seq > e.seq)) || secs(r.recorded_at) > secs(m.deadlines.reviews);
   check(!verifier || blocking === 0 || (vreqs.length === Math.ceil(blocking / 10) && vreqs.every((r) => {
     const n = r.envelope.body.acceptance?.length ?? 0;
-    return n >= 1 && n <= 10 && afterSeats(r) && secs(r.recorded_at) <= vby;
+    return n >= 1 && n <= 10 && asChallenge(r) && afterSeats(r) && r.seq > vrun.seq && secs(r.recorded_at) <= vby;
   }) && conds.length === blocking && conds.every((c) => c.kind === "custom")),
-    `the verifier's challenge: one custom condition per blocking finding (${blocking}), ten at most to a request, expiring at deadlines.challenge, sent once the seats were done and by deadlines.challenge less 600 seconds (or within 600 seconds of the decline that seated the verifier)`);
+    `the verifier's challenge: its every request in the window, one custom condition per blocking finding (${blocking}), ten at most to a request, expiring at deadlines.challenge, sent once the seats were done and the verifier drawn, by deadlines.challenge less 600 seconds (or within 600 seconds of the decline that seated it)`);
 
   // Check 7: the tally and the count.
   const count = clerk.count(tally);
@@ -562,8 +564,9 @@ try {
   check(calls.length === 5 && calls.every((c) => c.sealed), `5 calls recorded, each sealed for its member (seqs ${calls.map((c) => c.seq).join(", ")})`);
   // A member that joined or left between the convener's read and the first call would fail the re-check's card
   // match (draw.md section 2): the convener reads the directory again, and would convene again if it changed.
-  const activeIds = (list) => list.filter((m) => m.keys.some((k) => spec.keyValidAt(k, before.head.seq + 1))).map((m) => m.obi).sort();
-  check(clerk.sameJson(activeIds(await members()), activeIds(listed)), "the directory, read again after the calls, shows the same members active at the pool's point");
+  // A rotation in that gap keeps the member active but leaves its card naming a closed key: so members and keys.
+  const activeKeys = (list) => list.flatMap((m) => m.keys.filter((k) => spec.keyValidAt(k, before.head.seq + 1)).map((k) => `${m.obi} ${k.key_id}`)).sort();
+  check(clerk.sameJson(activeKeys(await members()), activeKeys(listed)), "the directory, read again after the calls, shows the same members active at the pool's point, with the same keys");
   const anchoredAt = calls.map((c) => c.recorded_at).sort()[0];
   const R = clerk.beaconRound(anchoredAt, clerk.QUICKNET.genesis_time, clerk.QUICKNET.period);
   const roundTime = clerk.QUICKNET.genesis_time + (R - 1) * clerk.QUICKNET.period;

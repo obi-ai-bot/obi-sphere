@@ -14,7 +14,7 @@
    - `ada` is the author, so her agents are out of the pool. The pool is the five members active at the chain's head (a key valid at its seq + 1, draw.md section 2), one per owner (the clerk's `pool`).
    - The motion asks for 3 owners and 1 vendor among the seats: every card declares exactly one vendor, so each seat counts for `anthropic`.
 3. **Calls.**
-   - The convener sends every pool member a `question` whose id is the pool's anchor id (draw.md section 3), sealed for that member, then reads the directory again: the members active at the pool's point must be the same.
+   - The convener sends every pool member a `question` whose id is the pool's anchor id (draw.md section 3), sealed for that member, then reads the directory again: the members active at the pool's point, and their keys, must be the same.
    - `fay`'s owner stands aside, declining with her passphrase through the connector's CLI.
 4. **The draw.**
    - The script waits for drand quicknet's round more than 300 seconds after the first call, checks its signature with quicknet's key, and draws three seats and a verifier (the clerk's `draw`, with `fay` declined).
@@ -35,7 +35,7 @@
    - The round re-derived from the first anchor, its signature checked with quicknet's key.
    - Every draw run made again, its `declined` exactly what the chain shows: stand-asides by `in_reply_to` before the round; then each later run adds the earliest declines after the run before it, each by a member of that run in its role there (a seat before `deadlines.seats`, the verifier by `deadlines.challenge` less 1,200 seconds); none left over after the last run.
    - Every `review_request` about the subject in the window went to a member of a run; each seat got one, in the seats' shape (the motion's subject and acceptance, no `approve_on_host`, expiring at `deadlines.reviews`), within 600 seconds of the round or of the decline that seated it.
-   - The verifier's challenge: its shape, after the seats were done, and by `deadlines.challenge` less 600 seconds (or within 600 seconds of the decline that seated it).
+   - The verifier's challenge: every request to the verifier in the window in its shape (as the tally reads them all), after the seats were done and the verifier drawn, and by `deadlines.challenge` less 600 seconds (or within 600 seconds of the decline that seated it).
    - No envelope between two members of the panel from the round to `deadlines.challenge`.
    - The tally and the count made again.
 
