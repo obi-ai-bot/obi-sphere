@@ -1,5 +1,5 @@
 {
- "description": "The author's reading of every finding that the location rule counts as a catch (score.mjs): whether its words describe the bug the later fix confirmed. `yes`: it does. `partly`: the right cause, but another way it fails than the fix's. `no`: another issue on the same lines. A seat not listed has no finding at the bug's lines. This is a person's reading of quoted model output, kept apart from the mechanical rule so anyone can check it against runs/ and disagree.",
+ "description": "The author's reading of each seat with a finding that the location rule counts as a catch (score.mjs): whether any of its located findings describes, in its words, the bug the later fix confirmed. `yes`: one does. `partly`: one has the right cause, but another way it fails than the fix's. `no`: each is another issue on the same lines. Graded per seat, not per finding: a seat graded `yes` may also hold located findings about other issues. A seat not listed has no finding at the bug's lines. This is a person's reading of quoted model output, kept apart from the mechanical rule so anyone can check it against runs/ and disagree.",
  "cases": {
   "secret-names": {
    "blind-1": "yes", "blind-2": "yes", "blind-3": "yes", "blind-4": "yes", "blind-5": "yes", "open-2": "yes", "open-3": "yes"

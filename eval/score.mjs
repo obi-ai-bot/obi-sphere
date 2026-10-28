@@ -77,7 +77,7 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : Na
 const pct = (x) => (Number.isNaN(x) ? "–" : `${Math.round(x * 100)}%`);
 const usd = (x) => (Number.isNaN(x) ? "–" : `$${x.toFixed(2)}`);
 
-// The author's reading of each located finding (reading.json): `yes` when its words describe the confirmed bug.
+// The author's reading of each seat with a located finding (reading.json): `yes` when one of them describes the confirmed bug.
 const reading = existsSync(join(here, "reading.json")) ? JSON.parse(readFileSync(join(here, "reading.json"), "utf8")).cases : {};
 const described = (c, name) => reading[c.id]?.[name] === "yes";
 

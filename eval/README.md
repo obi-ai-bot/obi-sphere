@@ -12,14 +12,14 @@ It compares:
 
 A case is a pull request whose bug a later commit confirmed by fixing it, from public history only: [obi-ai-bot/oby](https://github.com/obi-ai-bot/oby) and [obi-ai-bot/oby-sphere](https://github.com/obi-ai-bot/oby-sphere). Nothing from any private repository. [cases.json](cases.json) lists them. They were chosen like this, before any seat ran:
 
-1. **Mining** ([mine.py](mine.py), the SZZ method). For every commit on `dev` whose subject starts with `fix` or `revert`, take the lines it removed or changed in code files (Rust, TypeScript, JavaScript, Swift, Python, shell; not tests, fixtures, docs, spikes or design files), at most 40 of them, and `git blame` them in the fix's parent. Every earlier squash-merged pull request that wrote some of them is a candidate. In oby, 232 fix commits gave 468 candidate pairs; in oby-sphere, 4 fix commits gave 4.
-2. **Size.** Keep pairs where the earlier pull request changed at most 700 lines, so one seat can review it within its budget, and where the fix changed at most 25 lines, of which at least 2 the earlier pull request wrote (`python3 eval/mine.py <oby checkout> --candidates`). 63 pairs were left, all in oby: [candidates.json](candidates.json) lists them, with how far each was read.
+1. **Mining** ([mine.py](mine.py), the SZZ method). For every commit on `dev` whose subject starts with `fix` or `revert`, take the lines it removed or changed in code files (Rust, TypeScript, JavaScript, Swift, Python, shell; not tests, fixtures, docs, spikes or design files), at most 40 of them, and `git blame` them in the fix's parent. Every earlier squash-merged pull request that wrote some of them is a candidate. In oby's `dev` at `f694bc3b` (`--ref f694bc3b`; a later `dev` has more fixes), 232 fix commits gave 468 candidate pairs; in oby-sphere, 4 fix commits gave 4.
+2. **Size.** Keep pairs where the earlier pull request changed at most 700 lines, so one seat can review it within its budget, and where the fix removed or changed at most 25 code lines (as step 1 counts them; the fix may change more in tests and docs), of which at least 2 the earlier pull request wrote (`python3 eval/mine.py <oby checkout> --candidates --ref f694bc3b`). 63 pairs were left, all in oby: [candidates.json](candidates.json) lists them, with how far each was read.
    - oby-sphere had none. It has 36 commits on `dev`. Its fixes blame back to two pull requests: the initial server import (20,758 lines added) and the sign-in change (2,105). Both are too large to review in one seat's budget. The fix to a deploy script that touched only one hosting account's settings isn't a defect a reviewer of the code could find.
-3. **Reading.** Read each fix's message and diff, smallest first. Keep a pair only when:
+3. **Reading.** Read the pairs' subjects, smallest fix first, and pick by subject the fixes that name a defect of a kind not yet in hand; read those in full (the fix's message and diff). Of the 63, 55 were read by subject only and 8 in full: four kept and four dropped, with the reason in candidates.json. Keep a pair only when:
    - the fix names a defect in the earlier pull request's own code;
    - a reviewer of the earlier diff alone could have found it;
    - it isn't a decision the owner changed later (e.g. #630 to #720, investigations made read-only and then not).
-4. **Fewest that can show a difference.** Among pairs whose fix names a defect, four cases of different kinds and difficulty, from an easy-to-spot loophole to a timing detail. Reading stopped once they were in hand, so this is a choice, not a sample:
+4. **Fewest that can show a difference.** Four cases of different kinds and difficulty, from an easy-to-spot loophole to a timing detail. Reading stopped once they were in hand, so this is a choice, not a sample:
 
 | Case | Pull request | Fixed by | The bug |
 |---|---|---|---|
@@ -45,7 +45,7 @@ The **ground truth** for each case is the lines of the pull request's own versio
   - The answer must match the JSON Schema in seat.mjs: an outcome (`approved` or `changes_requested`) and up to 15 findings, each with a file, a line, a severity (`blocker`, `major`, `minor`, `nit`), a title and a detail.
   - A seat can read the checkout and its inputs and nothing else: it can't run anything, write anything or reach the network. A probe with these exact flags (2026-10-27, Haiku, $0.03) read a file in its checkout and one in its inputs, and was denied `/etc/hosts`, `~/.zshrc` and a file in the oby checkout that holds the fixes ("Permission to use Read has been denied because Claude Code is running in don't ask mode").
   - It runs with a clean environment: only `HOME`, `PATH` and `USER`, so nothing from the session that started it reaches it.
-- **The record.** Each seat's answer, its cost (`total_cost_usd`), turns, time and token usage go to `runs/<case>/<seat>.json`, as returned, with the resolved model ids and, when a run fails, its error.
+- **The record.** Each seat's answer, its cost (`total_cost_usd`), turns, time and token usage go to `runs/<case>/<seat>.json`, as returned. Runs made after this evaluation's also keep the resolved model ids and, when a run fails, its error: seat.mjs records both now, and the committed records predate that.
 - **Reruns.** A run that fails for a reason other than its budget (an account's usage limit, a network error) is renamed `failed-<seat>.json` by hand and run again; its cost still counts. A seat that reaches its budget without answering keeps its record and counts as absent.
 
 Blind seats are `blind-1` to `blind-5`. The open panel is `blind-1`, then `open-2`, which sees `blind-1`'s findings, then `open-3`, which sees both. A first seat sees nothing either way, so the open panel's first seat is the blind one.
@@ -63,7 +63,7 @@ Blind seats are `blind-1` to `blind-5`. The open panel is `blind-1`, then `open-
 - **Herding** is the share of a later seat's findings that repeat one of an earlier seat's (same file, within 5 lines). Blind seats 1 to 3 are measured the same way, for comparison.
 - **Cost** is the seats' `total_cost_usd`, per seat and per panel.
 
-**The author's reading.** Location matching counts a finding at the right lines for the wrong reason. So [reading.json](reading.json) records, for each located finding, whether its words describe the bug the fix confirmed: `yes`, `partly` (the right cause, but another way it fails) or `no`. `score.mjs` reports both. The reading is a person's judgement, kept apart from the mechanical rule.
+**The author's reading.** Location matching counts a finding at the right lines for the wrong reason. So [reading.json](reading.json) records, for each seat with a located finding, whether any of its located findings describes in its words the bug the fix confirmed: `yes`, `partly` (the right cause, but another way it fails) or `no`. It is graded per seat: a seat graded `yes` may also hold located findings about other issues. `score.mjs` reports both. The reading is a person's judgement, kept apart from the mechanical rule.
 
 **What a false alarm means here.** Every blocker that isn't the confirmed bug counts as a false alarm. Some may be real bugs nobody fixed yet, so the false-alarm counts are an upper bound.
 
