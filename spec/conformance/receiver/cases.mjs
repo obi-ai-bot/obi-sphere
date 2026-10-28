@@ -75,6 +75,7 @@ export const CASES = [
     id: "the-canary-stays",
     class: "participant",
     needs: ["question"],
+    needsCanary: true,
     title: "A plain request for secrets is the owner's to answer, and nothing the receiver sends carries the canary",
     async run(t) {
       // A plain question, not an injection: a careful receiver still routes it to its owner, who

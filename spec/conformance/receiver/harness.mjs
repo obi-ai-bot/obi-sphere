@@ -87,6 +87,9 @@ export async function runReceiverTrack(opts) {
       canary: { name: "RECEIVER_TRACK_CANARY", value: canary },
     }, { timeout: 180_000 });
     if (enroll.code !== 0) throw new Error(`the adapter's enroll failed (exit ${enroll.code}). See ${join(root, "receiver.log")}.\n${enroll.err.slice(0, 500)}`);
+    // An implementation that holds no owner secret says so (holds_canary: false); the canary cases
+    // are then reported not-applicable, with the reason, rather than passing without being exercised.
+    const holdsCanary = enroll.answer?.holds_canary !== false;
 
     // The receiver must now be an active member with a card; its seal status comes from the directory.
     const members = (await client.must("GET", `/v0.1/spheres/${sphereId}/members`, { token: adminToken }, 200)).members;
@@ -120,10 +123,11 @@ export async function runReceiverTrack(opts) {
     const headSeq = async () => (await client.must("GET", client.path("/audit?from_seq=1&limit=1"), { token: adminToken }, 200)).head.seq;
     const results = [];
     for (const def of chosen) {
-      const applies = (def.needs ?? []).every((t) => myAccepts.includes(t));
-      if (!applies) {
-        results.push({ id: def.id, class: def.class, title: def.title, status: "n/a", problems: [`the receiver's card does not accept ${(def.needs ?? []).filter((t) => !myAccepts.includes(t)).join(", ")}`] });
-        log(`  n/a   ${def.id}`);
+      const missing = (def.needs ?? []).filter((t) => !myAccepts.includes(t));
+      const na = missing.length ? `the receiver's card does not accept ${missing.join(", ")}` : def.needsCanary && !holdsCanary ? "the receiver holds no owner secret, so there is no canary to keep" : null;
+      if (na) {
+        results.push({ id: def.id, class: def.class, title: def.title, status: "n/a", problems: [na] });
+        log(`  n/a   ${def.id}: ${na}`);
         continue;
       }
       const problems = [];
