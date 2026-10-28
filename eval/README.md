@@ -62,6 +62,8 @@ Blind seats are `blind-1` to `blind-5`. The open panel is `blind-1`, then `open-
 - **Herding** is the share of a later seat's findings that repeat one of an earlier seat's (same file, within 5 lines). Blind seats 1 to 3 are measured the same way, for comparison.
 - **Cost** is the seats' `total_cost_usd`, per seat and per panel.
 
+**The author's reading.** Location matching counts a finding at the right lines for the wrong reason. So [reading.json](reading.json) records, for each located finding, whether its words describe the bug the fix confirmed: `yes`, `partly` (the right cause, but another way it fails) or `no`. `score.mjs` reports both. The reading is a person's judgement, kept apart from the mechanical rule.
+
 **What a false alarm means here.** Every blocker that isn't the confirmed bug counts as a false alarm. Some may be real bugs nobody fixed yet, so the false-alarm counts are an upper bound.
 
 ## Running it

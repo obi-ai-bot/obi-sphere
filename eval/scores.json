@@ -73,12 +73,12 @@
     "cost": 2.3844657000000002
    },
    "open3": {
-    "outcome": "no_quorum",
+    "outcome": "reject",
     "caught": true,
-    "stops_for_the_bug": false,
+    "stops_for_the_bug": true,
     "false_vetoes": 0,
-    "cost": 0.4766838,
-    "herding": null,
+    "cost": 1.00753,
+    "herding": 1,
     "seats": [
      {
       "ok": true,
@@ -90,22 +90,22 @@
       "cost": 0.4766838
      },
      {
-      "ok": false,
-      "caught": false,
-      "caught_blocking": false,
-      "blockers": 0,
+      "ok": true,
+      "caught": true,
+      "caught_blocking": true,
+      "blockers": 1,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 2,
+      "cost": 0.25613280000000005
      },
      {
-      "ok": false,
-      "caught": false,
-      "caught_blocking": false,
-      "blockers": 0,
+      "ok": true,
+      "caught": true,
+      "caught_blocking": true,
+      "blockers": 1,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 2,
+      "cost": 0.27471340000000005
      }
     ]
    },
@@ -117,8 +117,16 @@
     "cost": 1.4127936,
     "herding": 1
    },
+   "described": {
+    "single": 1,
+    "panel3": 1,
+    "panel5": 1,
+    "blind3": true,
+    "open3": true
+   },
    "runs": 7,
-   "run_cost": 2.3844657000000002
+   "failed": 2,
+   "run_cost": 2.9153119000000003
   },
   {
    "id": "die-with-parent",
@@ -192,12 +200,12 @@
     "cost": 1.5713458999999999
    },
    "open3": {
-    "outcome": "no_quorum",
-    "caught": false,
+    "outcome": "approve",
+    "caught": true,
     "stops_for_the_bug": false,
     "false_vetoes": 0,
-    "cost": 0.37483039999999995,
-    "herding": null,
+    "cost": 1.0764192000000001,
+    "herding": 0.5,
     "seats": [
      {
       "ok": true,
@@ -209,22 +217,22 @@
       "cost": 0.37483039999999995
      },
      {
-      "ok": false,
-      "caught": false,
+      "ok": true,
+      "caught": true,
       "caught_blocking": false,
       "blockers": 0,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 1,
+      "cost": 0.5064982000000001
      },
      {
-      "ok": false,
-      "caught": false,
+      "ok": true,
+      "caught": true,
       "caught_blocking": false,
       "blockers": 0,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 1,
+      "cost": 0.1950906
      }
     ]
    },
@@ -236,8 +244,16 @@
     "cost": 0.8745558999999999,
     "herding": null
    },
+   "described": {
+    "single": 0,
+    "panel3": 0,
+    "panel5": 0,
+    "blind3": false,
+    "open3": false
+   },
    "runs": 7,
-   "run_cost": 1.5713458999999999
+   "failed": 2,
+   "run_cost": 2.2729347
   },
   {
    "id": "keychain-found-time",
@@ -272,51 +288,51 @@
      "cost": 0.7814999999999999
     },
     {
-     "ok": false,
+     "ok": true,
      "caught": false,
      "caught_blocking": false,
      "blockers": 0,
      "false_blockers": 0,
-     "findings": 0,
-     "cost": 0.8278453999999997
+     "findings": 1,
+     "cost": 0.5412195000000001
     },
     {
-     "ok": false,
-     "caught": false,
+     "ok": true,
+     "caught": true,
      "caught_blocking": false,
      "blockers": 0,
      "false_blockers": 0,
-     "findings": 0,
-     "cost": 0.4938310999999999
+     "findings": 2,
+     "cost": 0.8472655999999998
     }
    ],
    "single": {
-    "caught": 0.6,
+    "caught": 0.8,
     "caught_blocking": 0,
     "false_blockers": 0,
-    "cost": 0.7610113
+    "cost": 0.77437302
    },
    "panel3": {
     "n": 10,
     "caught": 1,
     "stops": 0,
     "false_vetoes": 0,
-    "cost": 2.2830338999999995
+    "cost": 2.32311906
    },
    "panel5": {
     "n": 1,
     "caught": 1,
     "stops": 0,
     "false_vetoes": 0,
-    "cost": 3.8050564999999996
+    "cost": 3.8718651
    },
    "open3": {
-    "outcome": "no_quorum",
+    "outcome": "approve",
     "caught": true,
     "stops_for_the_bug": false,
     "false_vetoes": 0,
-    "cost": 1.0951915,
-    "herding": null,
+    "cost": 1.8359078000000002,
+    "herding": 1,
     "seats": [
      {
       "ok": true,
@@ -328,22 +344,22 @@
       "cost": 1.0951915
      },
      {
-      "ok": false,
-      "caught": false,
+      "ok": true,
+      "caught": true,
       "caught_blocking": false,
       "blockers": 0,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 3,
+      "cost": 0.4173489
      },
      {
-      "ok": false,
-      "caught": false,
+      "ok": true,
+      "caught": true,
       "caught_blocking": false,
       "blockers": 0,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 3,
+      "cost": 0.3233674
      }
     ]
    },
@@ -355,8 +371,16 @@
     "cost": 2.48338,
     "herding": 0.75
    },
+   "described": {
+    "single": 0,
+    "panel3": 0,
+    "panel5": 0,
+    "blind3": false,
+    "open3": false
+   },
    "runs": 7,
-   "run_cost": 3.8050564999999996
+   "failed": 4,
+   "run_cost": 5.9342579
   },
   {
    "id": "blocking-none",
@@ -370,7 +394,16 @@
      "blockers": 0,
      "false_blockers": 0,
      "findings": 0,
-     "cost": 0.4332693
+     "cost": 1.5711141
+    },
+    {
+     "ok": true,
+     "caught": true,
+     "caught_blocking": false,
+     "blockers": 0,
+     "false_blockers": 0,
+     "findings": 2,
+     "cost": 1.3985007000000005
     },
     {
      "ok": false,
@@ -379,63 +412,54 @@
      "blockers": 0,
      "false_blockers": 0,
      "findings": 0,
-     "cost": 0
+     "cost": 1.5188235999999997
     },
     {
-     "ok": false,
+     "ok": true,
      "caught": false,
      "caught_blocking": false,
      "blockers": 0,
      "false_blockers": 0,
-     "findings": 0,
-     "cost": 0
+     "findings": 1,
+     "cost": 1.2341184
     },
     {
-     "ok": false,
+     "ok": true,
      "caught": false,
      "caught_blocking": false,
      "blockers": 0,
      "false_blockers": 0,
-     "findings": 0,
-     "cost": 0
-    },
-    {
-     "ok": false,
-     "caught": false,
-     "caught_blocking": false,
-     "blockers": 0,
-     "false_blockers": 0,
-     "findings": 0,
-     "cost": 0
+     "findings": 3,
+     "cost": 1.4004087
     }
    ],
    "single": {
-    "caught": 0,
+    "caught": 0.2,
     "caught_blocking": 0,
     "false_blockers": 0,
-    "cost": 0.08665386
+    "cost": 1.4245930999999998
    },
    "panel3": {
     "n": 10,
-    "caught": 0,
+    "caught": 0.6,
     "stops": 0,
     "false_vetoes": 0,
-    "cost": 0.25996158
+    "cost": 4.273779299999999
    },
    "panel5": {
     "n": 1,
-    "caught": 0,
+    "caught": 1,
     "stops": 0,
     "false_vetoes": 0,
-    "cost": 0.4332693
+    "cost": 7.122965499999999
    },
    "open3": {
     "outcome": "no_quorum",
-    "caught": false,
+    "caught": true,
     "stops_for_the_bug": false,
     "false_vetoes": 0,
-    "cost": 0.4332693,
-    "herding": null,
+    "cost": 4.3470337,
+    "herding": 0,
     "seats": [
      {
       "ok": false,
@@ -444,7 +468,7 @@
       "blockers": 0,
       "false_blockers": 0,
       "findings": 0,
-      "cost": 0.4332693
+      "cost": 1.5711141
      },
      {
       "ok": false,
@@ -453,29 +477,37 @@
       "blockers": 0,
       "false_blockers": 0,
       "findings": 0,
-      "cost": 0
+      "cost": 1.5789252999999999
      },
      {
-      "ok": false,
-      "caught": false,
+      "ok": true,
+      "caught": true,
       "caught_blocking": false,
       "blockers": 0,
       "false_blockers": 0,
-      "findings": 0,
-      "cost": 0
+      "findings": 1,
+      "cost": 1.1969943
      }
     ]
    },
    "blind3_first": {
     "outcome": "no_quorum",
-    "caught": false,
+    "caught": true,
     "stops_for_the_bug": false,
     "false_vetoes": 0,
-    "cost": 0.4332693,
-    "herding": null
+    "cost": 4.4884384,
+    "herding": 0
+   },
+   "described": {
+    "single": 0,
+    "panel3": 0,
+    "panel5": 0,
+    "blind3": false,
+    "open3": false
    },
    "runs": 7,
-   "run_cost": 0.4332693
+   "failed": 7,
+   "run_cost": 10.3321544
   }
  ]
 }

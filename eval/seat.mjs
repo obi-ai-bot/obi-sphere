@@ -151,6 +151,7 @@ export function runSeat({ oby, c, name, model, budget, earlier = null }) {
         turns: r.num_turns ?? null,
         duration_ms: r.duration_ms ?? null,
         usage: r.usage ?? null,
+        error: r.is_error || !s.outcome ? String(r.result ?? "").slice(0, 300) || undefined : undefined,
         stderr: err.slice(0, 500) || undefined,
       });
     });
