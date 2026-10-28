@@ -39,9 +39,10 @@ describe("health", () => {
     expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby-sphere/blob/main/spec/sphere-api.md#21-invite-links">sphere-api.md, section 2.1</a>`);
     expect(csp).toContain("frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
     expect(page).toContain(`<a href="https://github.com/obi-ai-bot/oby-sphere#who-can-join-today">Who can join today</a>`);
-    // Nothing on it is about one client: no product but the ones listed (none listed by default),
-    // the standards' own repository aside.
-    expect(page.replaceAll("obi-ai-bot/oby-sphere", "")).not.toMatch(/\boby\b|Mac|Settings ›/i);
+    // Nothing on it is about one client: the Clients list names the clients that publish a report
+    // (a factual list, tested below), and the rest of the page names no product, the standards' own
+    // repository aside.
+    expect(page.replace(/<ul>[\s\S]*?<\/ul>/, "").replaceAll("obi-ai-bot/oby-sphere", "")).not.toMatch(/\boby\b|Mac|Settings ›/i);
     // Its one script, the only one the CSP allows, reads the page's own address and sends nothing.
     const script = /<script>(.*)<\/script>/s.exec(page)![1]!;
     expect(script).not.toMatch(/fetch|XMLHttpRequest|sendBeacon|WebSocket|src=/);
