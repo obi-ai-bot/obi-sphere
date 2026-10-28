@@ -39,7 +39,7 @@ const ACCEPTABLE = ["question", "review_request", "handoff"];
 function parseArgs(argv: string[]) {
   const positional: string[] = [];
   const flags = new Map<string, string[]>();
-  const BOOLEAN = new Set(["--passphrase-stdin", "--no-seal", "--all", "--ask-always", "--help"]);
+  const BOOLEAN = new Set(["--passphrase-stdin", "--no-seal", "--all", "--ask-always", "--announce", "--help"]);
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a.startsWith("--")) {
@@ -198,6 +198,8 @@ async function card(home: Home, p: Parsed) {
   const cardSeq = Math.max(kept, self?.trusted ? self.cardSeq : 0) + 1;
   const carries = !!self?.trusted && self.features.length > 0 && !!self.runtime;
   let extra: { features: string[]; runtime: { id: string; version: string }; vendors: string[] } | undefined;
+  // A card never drops a feature while its agent takes it (identity.md 2.3): announcing again would.
+  if (announce && carries) throw new ConnectorError("this member's card already says what runs it; change that with card --runtime … --vendor …");
   if (!announce) {
     if (!(await api.features()).includes("card_runtime")) throw new ConnectorError(`${new URL(file.base).host} doesn't take card_runtime yet: the card can't say what runs this member (\`card --announce\` says the connector takes it)`);
     // A card that carries the addition already keeps it (identity.md 2.3); else every other active member must take it.
