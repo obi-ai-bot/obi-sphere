@@ -238,6 +238,10 @@ export class Member {
       throw new Error(`this invitation is for ${link.obi} of ${link.owner}`);
     }
     const api = new SphereApi(link.base, o.fetch ? { fetch: o.fetch } : {});
+    // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
+    // Read and signed before the redeem, so nothing after it can fail.
+    const aud = (await api.features()).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
+    const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
     const card = await o.owner.card({
       base: api.base, sphere: link.sphere, obi_id: o.obi, public_key: o.key.publicKey, key_id: o.key.keyId,
       ...(o.sealKey ? { seal_public_key: o.sealKey.publicKey, seal_key_id: o.sealKey.keyId } : {}),
@@ -250,9 +254,6 @@ export class Member {
     memory.memberOwners[o.obi] = { owner: o.owner.id, owner_key: o.owner.key.publicKey };
     memory.cardSeq[o.obi] = 1;
     memory.cardKeys[o.obi] = [o.key.keyId];
-    // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
-    const aud = (await api.features().catch(() => [] as string[])).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
-    const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
     // Nothing after the redeem throws: the Sphere has bound this member to these keys, so the caller must get them.
     return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
   }

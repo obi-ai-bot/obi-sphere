@@ -229,13 +229,13 @@ export class SphereApi {
     return this.call("GET", "/v0.1/health", { schema: "wire/health.response" });
   }
 
-  /** The additions to obi/0.1 the Obysphere takes (`GET /v0.1/features`); none when it answers anything but a valid 200, as an older one does. */
+  /** The additions to obi/0.1 the Obysphere takes (`GET /v0.1/features`); none when it answers a 4xx or a 200 that isn't the list, as an older one does. */
   async features(): Promise<string[]> {
     try {
       return (await this.call<{ features: string[] }>("GET", "/v0.1/features", { schema: "wire/features.response" })).features;
     } catch (e) {
-      // An Obysphere that answers, but not with a valid list, takes none; one that doesn't answer says nothing.
-      if (e instanceof SphereError && e.code !== "unreachable") return [];
+      // An Obysphere that answers, but not with a valid list, takes none; one that doesn't answer, or fails (a 5xx), says nothing.
+      if (e instanceof SphereError && e.status !== 0 && e.status < 500) return [];
       throw e;
     }
   }

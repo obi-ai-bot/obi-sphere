@@ -125,10 +125,10 @@ async function join(home: Home, p: Parsed) {
   const failed = await member.accessToken().then(() => null, (e: unknown) => e);
   if (failed !== null) {
     say(`\nJoined, but the first token exchange failed: ${failed instanceof Error ? failed.message : String(failed)}`);
-    const refused = failed instanceof SphereError && (failed.code === "invalid_request" || failed.code === "invalid_dpop_proof");
-    say(refused
-      ? `The member's files are kept. A server refuses tokens bound to another address than the one it knows itself by: if that isn't ${new URL(link.base).host}, ask its operator which it is.`
-      : "The member's files are kept: the next call tries again.");
+    const passing = failed instanceof SphereError && (failed.status === 0 || failed.status >= 500);
+    const address = failed instanceof SphereError && (failed.code === "invalid_request" || failed.code === "invalid_dpop_proof");
+    say(`The member's files are kept${passing ? ": the next call tries again." : "."}`);
+    if (address) say(`A server refuses tokens bound to another address than the one it knows itself by: if that isn't ${new URL(link.base).host}, ask its operator which it is.`);
   }
   say(`\n${failed === null ? "Joined. " : ""}The owner's key fingerprint (compare it with the other members' owners out of band): ${ownerSigning.keyId}`);
   say(`The member's folder: ${home.dir} (keep it this user's only, and out of the host agent's reach).`);
@@ -261,7 +261,7 @@ async function renew(home: Home, p: Parsed) {
   const lifetime = Math.floor(days * 86400);
   // Bound to the server too when it takes that (identity.md section 4.1); offline, it names the Sphere alone.
   const features = await new SphereApi(file.base).features().catch(() => null);
-  if (features === null) say(`${new URL(file.base).host} didn't answer: the new delegation names the Sphere alone, not the server.`);
+  if (features === null) say(`${new URL(file.base).host} didn't say what it takes: the new delegation names the Sphere alone, not the server.`);
   const aud = features?.includes("sphere_url_aud") ? serverAudience(file.base, file.sphere) : undefined;
   const delegation = await owner.delegation(file.sphere, file.obi, { lifetime, ...(aud ? { aud } : {}) });
   const exp = parseJwt(delegation)!.claims.exp as number;

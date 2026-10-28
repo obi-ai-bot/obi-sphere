@@ -4,7 +4,7 @@
 
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { DpopKey, Member, Owner, SigningKey, SphereApi, b64url, fromB64url, keyIdOf, parseJwt, serverAudience, sha256, utf8, verifyEd25519 } from "../src/index.ts";
+import { DpopKey, Member, Owner, SigningKey, SphereApi, SphereError, b64url, fromB64url, keyIdOf, parseJwt, serverAudience, sha256, utf8, verifyEd25519 } from "../src/index.ts";
 
 const BASE = "https://sphere.example.com";
 const SPHERE = "team";
@@ -98,17 +98,20 @@ test("calls that overlap at the start share one DPoP key, and every proof is sig
 });
 
 test("join binds the delegation to the server it lists sphere_url_aud on, and nothing after the redeem throws", async () => {
-  // features: listed, not listed, or the call dropped. The token endpoint fails throughout: join never reaches it.
-  for (const features of [["sphere_url_aud"], [], null] as const) {
+  // features: listed, not listed, a 404 (an older server), a 503, or the call dropped. The token endpoint fails throughout: join never reaches it.
+  for (const features of [["sphere_url_aud"], [], 404, 503, null] as const) {
     let exchanges = 0;
+    let redeemed = false;
     const fetch = async (url: string, init: RequestInit) => {
       const p = new URL(url).pathname;
       const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
       if (p === "/v0.1/features") {
         if (features === null) throw new TypeError("fetch failed");
+        if (typeof features === "number") return json(features, { error: { code: "not_found", message: "no" } });
         return json(200, { features });
       }
       if (p.endsWith("/redeem")) {
+        redeemed = true;
         const body = JSON.parse(String(init.body));
         const params = body.card.capabilities.extensions[0].params;
         return json(201, {
@@ -124,8 +127,15 @@ test("join binds the delegation to the server it lists sphere_url_aud on, and no
     };
     const owner = await Owner.generate("ada");
     const link = `${BASE}/join#sphere=${SPHERE}&id=9187a87a-3126-424c-8861-8811bba1a5ec&secret=${"A".repeat(43)}`;
-    const m = await Member.join({ link, owner, obi: "ada-agent", key: await SigningKey.generate(), accepts: ["question"], name: "A", description: "a", version: "0.1.0", fetch });
-    assert.equal(parseJwt(m.delegation)!.claims.aud, features?.length ? serverAudience(BASE, SPHERE) : `obi-sphere:${SPHERE}`, `features: ${JSON.stringify(features)}`);
+    const joining = Member.join({ link, owner, obi: "ada-agent", key: await SigningKey.generate(), accepts: ["question"], name: "A", description: "a", version: "0.1.0", fetch });
+    if (features === null || features === 503) {
+      // Not knowing what the server takes, join stops before the redeem binds anything.
+      await assert.rejects(joining, (e) => e instanceof SphereError && e.status === (features ?? 0));
+      assert.equal(redeemed, false);
+      continue;
+    }
+    const m = await joining;
+    assert.equal(parseJwt(m.delegation)!.claims.aud, Array.isArray(features) && features.length ? serverAudience(BASE, SPHERE) : `obi-sphere:${SPHERE}`, `features: ${JSON.stringify(features)}`);
     assert.equal(exchanges, 0);
   }
 });
