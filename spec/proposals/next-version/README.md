@@ -33,6 +33,7 @@ The next protocol constant is **`sphere/0.2`** ([decision D1](https://github.com
 | [core-and-profiles.md](core-and-profiles.md) | Core and the profiles; the actions and the exchange rules; `work_request` and its conditions; references; scopes, policy and remembered decisions; the Code profile; why the compute and share actions are dropped. |
 | [owners.md](owners.md) | Organisations and projects as owners: the charter, the people who answer, cards signed by them, what such an owner's agent may do, and how the Council counts it. |
 | [runtimes.md](runtimes.md) | Runtime and vendor ids: open, bounded, with a registry. |
+| [a2a-card.md](a2a-card.md) | The agent card in A2A 1.0's shape: one interface, the binding's, at the member's directory entry; how a caller authenticates; a signature any A2A 1.0 verifier checks; and the binding served by every Obysphere. |
 | [migration.md](migration.md) | What every implementation changes, what carries over, and how an Obysphere switches from `obi/0.1`. |
 
 The schema sketches are in each document, as JSON. They show shapes and bounds; they are not schemas, and nothing checks them against an implementation yet.
@@ -91,6 +92,7 @@ Each is this Draft's own, written into the document named with its reason, and n
 - tokens bound by DPoP required for an agent's tokens, bound to its own key, once the #60 addition defines them (below);
 - policy matched scope by scope, and no remembered accept keyed by a topic ([core-and-profiles.md, section 8](core-and-profiles.md#8-scopes-policy-and-remembered-decisions));
 - a result consistent with its request, checked by the Obysphere at send, the chain's verifier and the requester ([core-and-profiles.md, section 5](core-and-profiles.md#5-a-request-for-work));
+- the card in A2A 1.0's shape names the Obysphere's token as its security scheme, `DPoP`, and lists the binding's one interface; and every Obysphere serves the A2A binding, so the interface a card lists is always there ([a2a-card.md, sections 2 and 3](a2a-card.md#2-the-card));
 - still for the maintainers to accept: #54's last clause, a runtime named in a request, which has nothing left to apply to once the compute and share actions are dropped ([runtimes.md, section 4](runtimes.md#4-done-when)).
 
 Accepted with the decisions, on [#51](https://github.com/obi-ai-bot/oby-sphere/issues/51#issuecomment-6456517079): #51's two exceptions in the next version's fixtures, the old marker `by Oby:` and agent ids carried over ([identifiers.md, section 6](identifiers.md#6-done-when)).
@@ -108,15 +110,16 @@ These come to `obi/0.1` behind features: #54 (obi-ai-bot/oby-sphere#70), #57's c
 | Introductions | [#53](https://github.com/obi-ai-bot/oby-sphere/issues/53) | A Core request type, whose `accept` ends its exchange. |
 | Topics on a card | [#53](https://github.com/obi-ai-bot/oby-sphere/issues/53) | A Core card field, and the `topic` scope kind ([core-and-profiles.md, section 8](core-and-profiles.md#8-scopes-policy-and-remembered-decisions)), which uses topic ids as they are. |
 | A defined invite link; the phone relay as an optional extension | [#62](https://github.com/obi-ai-bot/oby-sphere/issues/62) | As defined, under `/v0.2`. The relay stays an extension, outside Core. |
+| The A2A binding: a member reached over A2A 1.0 at its card's URL, the signed envelope as the message's one data part | [#59](https://github.com/obi-ai-bot/oby-sphere/issues/59) | As defined ([a2a.md](../../a2a.md)), under `/v0.2`, at the one interface the card lists ([a2a-card.md](a2a-card.md)), and served by every Obysphere rather than offered as an extension. |
 | Sign-in with any OpenID Connect provider; DPoP-bound tokens; an assertion audience that names the server | [#60](https://github.com/obi-ai-bot/oby-sphere/issues/60) | As defined. The old audience form `obi-sphere:<sphere>` is dropped ([identifiers.md](identifiers.md#1-every-product-named-identifier)). Recommended: tokens bound by DPoP become required for an agent's tokens, bound to the agent's own key. |
 
 Where an addition's merged text and this Draft disagree, the addition wins and this Draft is corrected.
 
 ## Other breaking changes to gather
 
-These belong in the same version if they are ready, so implementers migrate once. This Draft doesn't design them.
+These belong in the same version if they are ready, so implementers migrate once. This Draft designs the first ([a2a-card.md](a2a-card.md)), and not the others.
 
-- **The card on A2A 1.x** ([#59](https://github.com/obi-ai-bot/oby-sphere/issues/59)). The card profile follows A2A 0.3.0 today; moving it changes `protocolVersion` and the card's shape.
+- **The card on A2A 1.0** ([#59](https://github.com/obi-ai-bot/oby-sphere/issues/59)): designed in [a2a-card.md](a2a-card.md). The card profile follows A2A 0.3.0 in `obi/0.1`; A2A 1.0's card has no top-level `protocolVersion`, `url` or `preferredTransport`, and requires `supportedInterfaces`, so neither version's card is valid under the other's schema. The A2A binding itself is an addition to `obi/0.1` ([a2a.md](../../a2a.md)).
 - **Membership and policy in the record.** `obi/0.1`'s chain records relayed messages only (protocol.md section 16). New entry kinds would break `obi/0.1` chain verifiers, so they belong at a version boundary. Organisation charters ([owners.md](owners.md)) would be the first membership facts worth recording.
 - **The rest of Exchange** ([#44](https://github.com/obi-ai-bot/oby-sphere/issues/44)): lending secrets, standard cryptography, a cosigned record. These wait for the maintainers.
 

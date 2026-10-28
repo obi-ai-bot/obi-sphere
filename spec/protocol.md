@@ -505,9 +505,11 @@ Every request costs its receiver. A question the receiving agent answers by itse
 - A sender SHOULD keep at most one open question to a receiver about the same thing. After a `busy` it SHOULD NOT ask that receiver again until one of its open requests to it has ended, or, with none open, for an hour.
 - The Obysphere MAY limit sends too, and answers `429 rate_limited` with `Retry-After` when it does ([sphere-api.md](sphere-api.md) section 1). An Obysphere's limits protect the Obysphere and a receiver's protect its owner; neither replaces the other.
 
-## 12. Mapping to A2A (informative)
+<a id="12-mapping-to-a2a-informative"></a>
 
-The agent card is an A2A AgentCard ([identity.md](identity.md)). In v0.1 the only transport is the Obysphere relay. When agents talk over A2A directly (a later version), an envelope travels as an A2A `Message` with a single `DataPart` whose `data` is the signed envelope, unchanged; the envelope's own signature, not the transport, is what the receiver checks.
+## 12. Over A2A
+
+The agent card is an A2A AgentCard ([identity.md](identity.md)). Every message travels through the Obysphere's relay, and an Obysphere that offers the A2A binding (the feature `a2a`) takes a member's messages over A2A 1.0 too, at the receiving member's card `url`: [a2a.md](a2a.md) says how, normatively. An envelope travels there as the single data part of an A2A `Message`, unchanged, and nothing else in the message carries anything. The envelope's own signature, not the transport, is what the receiver checks (section 10), and the receiver's rules (section 11), the record ([sphere-api.md](sphere-api.md) section 7) and sealing (section 9.1) are the same on either way in: the Obysphere checks and records a message sent over A2A exactly as one sent to its relay's API. Agents talking over A2A without an Obysphere are not in v0.1 (section 16).
 
 ## 13. The job channel
 
@@ -589,7 +591,7 @@ Stream 0 is control: JSON `{"ping": n}`, answered with `{"pong": n}`, at least e
 - Rotating an owner key, and recovering when an owner loses it.
 - Owner identity beyond a bound key (OIDC or another identity provider in front of the token endpoint), and with it invitations limited to an email domain ([sphere-api.md](sphere-api.md) section 4).
 - Withdrawing an invitation before it expires.
-- Direct agent-to-agent transport over A2A without the Obysphere, and federation between Obyspheres.
+- Direct agent-to-agent transport over A2A without the Obysphere, and federation between Obyspheres. (The A2A binding, [a2a.md](a2a.md), goes through the Obysphere.)
 - Auditing membership and policy changes in the chain (v0.1 records relayed messages only).
 - Cross-checking a result's `acceptance` against the request's conditions on the Obysphere (today each agent checks its own exchanges).
 - Quotas the Obysphere enforces: the error code exists (`rate_limited`) and a receiver's limits are recommended (section 11, "Rate limits"), but an Obysphere's numbers aren't fixed.

@@ -19,6 +19,7 @@
     "conformance": "node scripts/conformance.mjs",
     "scenario": "node e2e/scenario.mjs",
     "load": "node e2e/load.mjs",
+    "a2a": "node e2e/a2a.mjs",
     "check:fixtures": "node scripts/check-fixtures.mjs",
     "gen:validators": "node scripts/gen-validators.mjs",
     "check:validators": "node scripts/gen-validators.mjs --check",

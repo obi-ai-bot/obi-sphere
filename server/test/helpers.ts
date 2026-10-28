@@ -190,7 +190,8 @@ export function makeCall(clock: Clock, workerEnv: Cloudflare.Env = env) {
     try {
       parsed = JSON.parse(text);
     } catch {}
-    if (res.status >= 400 && !path.startsWith("/v0.1/oauth/token")) expectSchema("error", parsed);
+    // The A2A binding's paths answer A2A's errors (spec/a2a.md section 6), every other path the Obysphere's own.
+    if (res.status >= 400 && !path.startsWith("/v0.1/oauth/token")) expectSchema(res.headers.get("Content-Type") === "application/a2a+json" ? "a2aError" : "error", parsed);
     return { status: res.status, body: parsed, headers: res.headers };
   };
 }

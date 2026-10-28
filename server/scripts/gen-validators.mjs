@@ -58,6 +58,11 @@ const EXPORTS = {
   deliveriesResponse: "wire/deliveries.response.schema.json",
   ackResponse: "wire/ack.response.schema.json",
   auditResponse: "wire/audit.response.schema.json",
+  // The A2A binding (spec/a2a.md): what it reads, and what it answers.
+  a2aSendRequest: "wire/a2a-send.request.schema.json",
+  a2aSendResponse: "wire/a2a-send.response.schema.json",
+  a2aTask: "wire/a2a-task.schema.json",
+  a2aError: "wire/a2a-error.schema.json",
   relay: "wire/relay.schema.json",
   error: "wire/error.schema.json",
 };

@@ -12,6 +12,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import * as rules from "../../../client/src/rules.ts";
+import { verifyA2aSend } from "./a2a.mjs";
 
 export const PROTOCOL = rules.PROTOCOL;
 export const ENVELOPE_SIGNING_PREFIX = rules.ENVELOPE_SIGNING_PREFIX;
@@ -883,6 +884,8 @@ export function judge(testCase) {
       return verifyWire(testCase.input, testCase.context);
     case "host_approval":
       return verifyHostApproval(testCase.input, testCase.context);
+    case "a2a":
+      return verifyA2aSend(testCase.input, testCase.context);
     default:
       return fail("bad_request", `unknown case kind ${testCase.case}`);
   }

@@ -1,7 +1,7 @@
 # The client library (client/): types, unit tests, the conformance suite with the library as the
 # implementation, its example against a local Sphere (`pnpm run e2e`), and its build. Then the MCP
 # connector built on it (connector/): types, unit tests, its end-to-end run against a local Sphere,
-# and its build.
+# and its build. Last, the A2A binding's run (server/e2e/a2a.mjs), with the connector as its member.
 #
 # A draft pull request runs the workflow but skips its jobs, unless it has the `full-ci` label
 # (that takes effect on the next push after labelling); marking it ready for review runs
@@ -87,6 +87,10 @@ jobs:
       - name: The connector against a local Sphere, a scripted Oby and a scripted MCP client
         working-directory: connector
         run: pnpm run e2e
+
+      - name: The A2A binding against a local Sphere, an A2A agent asking and the connector answering (spec/a2a.md)
+        working-directory: server
+        run: pnpm run a2a
 
       - name: Connector build and pack
         working-directory: connector

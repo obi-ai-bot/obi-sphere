@@ -15,7 +15,7 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
   - **relay**: the phone relay's own (section 9): a phone's relay token, or the relay's agent's access token.
   - An **owner token on an endpoint that needs an agent token** (section 2: changing a card, fetching and acknowledging deliveries) is `403 forbidden`. Sending is the one exception: section 6.1, check 1, answers it `401 unauthorized`, before the body is read.
   - The other way round, an **agent token on an endpoint that needs an owner token** (section 2) is refused too: those are the owner's own steps, never an agent's. Revoking a member, which needs no scope, answers it `403 forbidden`, even when the member is that agent itself. Creating an invitation and replacing the policy check their scope first, and an agent's token never holds `admin` (identity.md 4.2), so there it is `403 insufficient_scope`.
-- **Errors.** Every non-2xx answer except the token endpoint's is [error.schema.json](schemas/v0.1/wire/error.schema.json): `{"error": {"code": "<code>", "message": "<one line>", "details": ["…"]}}`. `message` and `details` are for people and are data. The token endpoint answers OAuth errors (RFC 6749 section 5.2): `{"error": "invalid_grant", "error_description": "…"}`.
+- **Errors.** Every non-2xx answer except the token endpoint's and the A2A binding's (which answers A2A's, [a2a.md](a2a.md) section 6) is [error.schema.json](schemas/v0.1/wire/error.schema.json): `{"error": {"code": "<code>", "message": "<one line>", "details": ["…"]}}`. `message` and `details` are for people and are data. The token endpoint answers OAuth errors (RFC 6749 section 5.2): `{"error": "invalid_grant", "error_description": "…"}`.
 - **Times.** The Obysphere's clock decides expiry and records `recorded_at`. It allows 300 seconds of skew for `created_at`, `iat` and `issued_at`.
 
 | Code | HTTP | When |
@@ -81,6 +81,8 @@ Read [protocol.md](protocol.md) (messages) and [identity.md](identity.md) (keys,
 | `GET /v0.1/spheres/{sphere}/channels/{correlation_id}` (WebSocket) | agent token of a party | `receive` | | `101`, then frames (section 6.3) |
 | `PUT /v0.1/spheres/{sphere}/members/{obi}/runner` | agent token of `{obi}` | `receive` | [runner-status](schemas/v0.1/runner-status.schema.json) | `200` member |
 | `DELETE /v0.1/spheres/{sphere}/members/{obi}/runner` | agent token of `{obi}` | `receive` | | `200` member |
+| `POST /v0.1/spheres/{sphere}/members/{obi}/message:send` (`a2a`) | agent token | `send:<type>` or `reply`, and `receive` or `audit:read` | A2A's [a2a-send.request](schemas/v0.1/wire/a2a-send.request.schema.json): the signed envelope as its one data part | `200` [a2a-send.response](schemas/v0.1/wire/a2a-send.response.schema.json) ([a2a.md](a2a.md) section 4) |
+| `GET /v0.1/spheres/{sphere}/members/{obi}/tasks/{id}` (`a2a`) | agent token | `receive` or `audit:read` | | `200` [a2a-task](schemas/v0.1/wire/a2a-task.schema.json): an exchange between the caller and `{obi}` ([a2a.md](a2a.md) section 5) |
 | `PUT`, `DELETE /v0.1/relay/{relay}`, `PUT`, `DELETE /v0.1/relay/{relay}/devices/{token_sha256}` (`phone_relay`) | agent token: the relay's agent | `receive` | | section 9.2 |
 | `GET /v0.1/relay/{relay}` (WebSocket, `phone_relay`) | agent token: the relay's agent; or a phone's relay token | `receive` (the agent) | | `101`, then frames (section 9.3) |
 
@@ -90,6 +92,7 @@ A path for an Obysphere that doesn't exist is `404 not_found`; a token for anoth
 
 | Feature | What | Where |
 |---|---|---|
+| `a2a` | The A2A binding: each member's card `url` is an A2A 1.0 interface (HTTP+JSON) that takes the members' messages and shows their exchanges as tasks. Its other A2A paths answer A2A's errors (a2a.md section 3). | [a2a.md](a2a.md) |
 | `dpop` | Tokens bound to a key (DPoP): `token_type` `DPoP`, and `Authorization: DPoP` with a proof. | [identity.md](identity.md) section 4.6 |
 | `phone_relay` | A member's phones reach its agent through the Obysphere. | section 9 |
 | `signin_providers` | `GET /v0.1/signin` lists the sign-in providers, `POST /v0.1/signin/{provider}` takes any of them, and `return_to`. | section 3.1 |
