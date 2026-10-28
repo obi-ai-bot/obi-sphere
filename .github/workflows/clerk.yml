@@ -4,10 +4,10 @@ name: Clerk
 on:
   pull_request:
     branches: [dev]
-    paths: [clerk/**, Makefile, .github/workflows/clerk.yml]
+    paths: [clerk/**, spec/conformance/jcs-vectors.json, Makefile, .github/workflows/clerk.yml]
   push:
     branches: [dev]
-    paths: [clerk/**, Makefile, .github/workflows/clerk.yml]
+    paths: [clerk/**, spec/conformance/jcs-vectors.json, Makefile, .github/workflows/clerk.yml]
 
 # A newer push to the same pull request (or to dev) cancels the run it supersedes.
 concurrency:

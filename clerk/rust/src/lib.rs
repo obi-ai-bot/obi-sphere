@@ -3,7 +3,12 @@
 //! [`count`] takes a count request (JSON, `clerk/README.md`, "Input") and returns the count (JSON,
 //! "Output") or an error code. [`verify`] says whether a recorded verdict is exactly the count of its
 //! input. Everything is integer arithmetic; the same input always gives the same output, and the
-//! known-answer vectors in `clerk/vectors/count.json` pin every rule down.
+//! known-answer vectors in `clerk/vectors/count.json` pin every rule down. The [`draw`] module draws a
+//! panel's seats by lot (`spec/council/draw.md`), pinned down by `clerk/vectors/draw.json`, and [`review`]
+//! tallies a review panel's envelopes into a count input (`spec/council/review.md`, `clerk/vectors/review.json`).
+
+pub mod draw;
+pub mod review;
 
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
