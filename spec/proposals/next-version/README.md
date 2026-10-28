@@ -74,7 +74,7 @@ GOVERNANCE.md asks a breaking change to say why an addition wouldn't do ("How a 
 - `work_request`, its conditions, and the new reference kinds: a new request type and new kinds, with every earlier message unchanged;
 - `scopes` next to `repos` in a policy rule.
 
-**Proposed here:** a message that uses an addition is relayed only once every active member's card lists its feature, since every member verifies the whole chain. (spec/README.md's rule 1, since #70, says an addition is used only once the members who must read it take it, and identity.md section 2.3 says every other active member for what a card carries.) So an addition reaches an Obysphere when its last member has it. A version switch is the same idea: it comes once every member has a card for the new version (D8, migration.md section 4).
+**In `obi/0.1` since #53 (obi-ai-bot/oby-sphere#76):** a card, a policy rule or a message that uses an addition goes in only once every active member's card lists its feature (`409 feature_not_taken`, sphere-api.md section 1), since every member verifies the whole chain. So an addition reaches an Obysphere when its last member has it. A version switch is the same idea: it comes once every member has a card for the new version (D8, migration.md section 4).
 
 **D13, decided:** organisation owners come to `obi/0.1` first, as an addition behind a feature, as #61 plans, with this design. `work_request` and its references come as an addition when an implementation that doesn't work on code needs them, and otherwise with the next version: no standard ahead of use. Everything breaking waits for the version.
 
@@ -97,7 +97,7 @@ Accepted with the decisions, on [#51](https://github.com/obi-ai-bot/oby-sphere/i
 
 ## Additions to `obi/0.1`, folded in
 
-These are being added to `obi/0.1` behind features: #54 is merged (obi-ai-bot/oby-sphere#70), #62 is open as obi-ai-bot/oby-sphere#69, and the others have no pull request yet. The next version takes each as its addition defines it, without the feature flag, unless this table says otherwise. Where an addition has no text yet, the shape in this Draft is its own assumption.
+These are added to `obi/0.1` behind features: #54 (obi-ai-bot/oby-sphere#70), #57's classes on the card (obi-ai-bot/oby-sphere#74) and #53 (obi-ai-bot/oby-sphere#76) are merged, and #62 is open as obi-ai-bot/oby-sphere#69. The next version takes each as its addition defines it, without the feature flag, unless this table says otherwise. Where an addition has no merged text yet, the shape in this Draft is its own assumption.
 
 | Addition | Issue | In the next version |
 |---|---|---|
