@@ -1,4 +1,4 @@
-# Obi Sphere: the spec's checks. Node 22 or later and pnpm are needed.
+# Obi Sphere: the spec's checks. Node 22.18 or later and pnpm are needed.
 .PHONY: spec-check spec-generate spec-conformance clerk-check
 
 # Compile and lint the schemas, check the fixtures are reproducible and judged as they say.

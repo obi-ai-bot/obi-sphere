@@ -95,7 +95,7 @@ Seventeen types: six requests start an exchange, and eleven replies continue or 
 
 ## Checking it
 
-With Node 22 or later and pnpm:
+With Node 22.18 or later and pnpm:
 
 ```sh
 make spec-check            # from the repository root, or:

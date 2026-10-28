@@ -512,10 +512,11 @@ export function appendEntry(entries, sphere, envelope, recordedAt) {
 
 // reply: the reply envelope; request: the envelope its in_reply_to names, or undefined; earlier: the
 // replies to that request that came before it, in order. Why the reply breaks the rules, or null.
+const withBody = (e) => ({ ...e, body: e.body ?? {} });
 export const exchangeProblem = (reply, request, earlier) =>
-  rules.exchangeProblem(rules.exchangeMessage(reply), request && rules.exchangeMessage(request), earlier.map(rules.exchangeMessage));
+  rules.exchangeProblem(rules.exchangeMessage(withBody(reply)), request && rules.exchangeMessage(withBody(request)), earlier.map((e) => rules.exchangeMessage(withBody(e))));
 
-export const followUpProblem = (request, earlier) => rules.followUpProblem(request, earlier);
+export const followUpProblem = (request, earlier) => rules.followUpProblem(withBody(request), earlier);
 
 // chain: { sphere, entries }, ctx: { keys: { [key_id]: { obi, public_key, valid_from_seq, valid_until_seq } } }
 export function verifyChain(chain, ctx) {
