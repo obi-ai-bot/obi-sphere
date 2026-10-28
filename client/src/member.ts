@@ -21,7 +21,7 @@ import { rollbackProblem, verifyChain, type AuditEntry, type ChainMemory } from 
 import type { JsonObject as Json } from "./json.ts";
 import { keyIdOf, type SigningKey } from "./crypto.ts";
 import {
-  CLOCK_SKEW_SECONDS, REQUEST_TYPES, exchangeMessage, exchangeProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
+  CLOCK_SKEW_SECONDS, REQUEST_TYPES, exchangeMessage, exchangeProblem, followUpProblem, isReplyType, isRequestType, newReply, newRequest, nowSeconds, seconds, signEnvelope,
   type DirectoryKey, type Envelope, type RequestType, type UnsignedEnvelope,
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
@@ -352,7 +352,6 @@ export class Member {
     return { envelope, receipt };
   }
 
-  /** Sends a request to `to`, a member whose card this member trusts and that accepts `type`. */
   /**
    * Why a message that uses these additions can't go yet (protocol.md sections 5.17 to 5.19,
    * sphere-api.md section 6.1): the Obysphere doesn't take one, or an active member's card doesn't
@@ -362,6 +361,9 @@ export class Member {
     if (!features.length) return null;
     const sphereTakes = await this.api.features();
     await this.directory();
+    // A card this member doesn't trust says nothing it takes: it counts as taking none.
+    const untrusted = this.#directory.find((m) => m.status === "active" && !this.#peers?.get(m.obi)?.trusted);
+    if (untrusted) return `${untrusted.obi}'s card isn't trusted, so it isn't known to take ${features.join(", ")}`;
     const active = this.#directory.filter((m) => m.status === "active").map((m) => ({ obi: m.obi, card: m.card as AgentCard }));
     return notTakenProblem(features, active, sphereTakes);
   }
@@ -373,10 +375,11 @@ export class Member {
    */
   async request(to: string, type: RequestType, body: JsonObject, o: { expiresIn?: number; follows?: string } = {}): Promise<{ id: string; envelope: Envelope; receipt: SendReceipt; followed: boolean }> {
     if (!isRequestType(type)) throw new Error(`${type} is not a request`);
+    if (to === this.id) throw new Error("that's this member itself");
     let followed = false;
     if (o.follows !== undefined) {
       const earlier = own(this.memory.exchanges, o.follows)?.request;
-      if (!earlier || !((earlier.from === this.id && earlier.to === to) || (earlier.from === to && earlier.to === this.id))) {
+      if (!earlier || followUpProblem({ from: this.id, to, body: { follows: o.follows } }, earlier)) {
         throw new Error(`${o.follows} is no request between this member and ${to} that this member knows`);
       }
       if ((await this.canUse(["follow_up"])) === null) {

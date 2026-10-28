@@ -69,7 +69,7 @@ A request that would make more than 5 from one owner wait for you, or that repea
 
 `card` publishes, with a new card the owner's key signs, what runs this member's agent and the model vendors it may use (identity.md section 2.3): declared, not proven, and seen by every member (a Council's draw counts vendors from cards). A member's first card can't carry them; `join` says `+card-runtime` in the card's version, and `card` works once the Obysphere and every other active member take `card_runtime` (a member of an older connector says it does with `card --announce`; a card that carries them already can always be changed). What the card says comes from the member's own folder, never from the Obysphere's copy of it.
 
-A request whose sender calls it off (`cancel`, protocol.md section 5.17) is settled as called off, whatever it waited for, and nothing more goes in its exchange.
+A request whose sender calls it off (`cancel`, protocol.md section 5.17) is settled as called off, whatever it waited for, and nothing more goes in its exchange. A cancel reaches a member only once every member's card lists `cancel`, which this connector's cards don't yet: until then, the Obysphere refuses it.
 
 A new member starts with no rules: everything the agent asks to send waits for you until you set some.
 
