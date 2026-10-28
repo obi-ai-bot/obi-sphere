@@ -749,7 +749,7 @@ export function buildFixtures() {
   wireCase("invalid-invitation-max-uses-zero", "max_uses 0.", INV, { expires_in: 3600, max_uses: 0 }, "reject");
   wireCase("invalid-invitation-max-uses-too-many", "max_uses over 1,000.", INV, { expires_in: 3600, max_uses: 1001 }, "reject");
   wireCase("invalid-invitation-email-domain", "A domain limit under another name: it is `domain`.", INV, { expires_in: 3600, max_uses: 50, email_domain: "example.com" }, "reject");
-  wireCase("valid-invitation-open-domain", "An open invitation for one Google Workspace's people.", INV, { expires_in: 604800, max_uses: 1000, domain: "example.com" }, "accept");
+  wireCase("valid-invitation-open-domain", "An open invitation for one domain's people.", INV, { expires_in: 604800, max_uses: 1000, domain: "example.com" }, "accept");
   wireCase("invalid-invitation-named-domain", "A named invitation with a domain: only an open one takes it.", INV, { owner: "owner-c", obi: "obi-c", expires_in: 3600, domain: "example.com" }, "reject");
   wireCase("invalid-invitation-domain-upper-case", "A domain in upper case: domains are written lower case.", INV, { expires_in: 3600, domain: "Example.com" }, "reject");
   wireCase("valid-create-sphere-with-signin", "Creating a Sphere with a sign-in instead of the operator token.", "wire/create-sphere.request", { sphere: SPHERE, name: "Conformance sphere", admin: { owner: "owner-a", owner_key: A.publicKey }, signin: { state: "S".repeat(43), code: "C".repeat(43) } }, "accept");
@@ -806,7 +806,8 @@ export function buildFixtures() {
   const SIGNIN = "wire/signin.request";
   wireCase("valid-signin-request", "Start a sign-in for an owner key, the code going back to obi-sphere://signin.", SIGNIN, { owner_key: OA.publicKey }, "accept");
   wireCase("valid-signin-request-loopback", "The code going back to the client, on this machine.", SIGNIN, { owner_key: OA.publicKey, return_to: "http://127.0.0.1:53682/signed-in" }, "accept");
-  wireCase("valid-signin-request-scheme", "The code going back to a scheme of the client's own.", SIGNIN, { owner_key: OA.publicKey, return_to: "example-client:/signin" }, "accept");
+  wireCase("valid-signin-request-scheme", "The code going back to a scheme of the client's own (one the server knows).", SIGNIN, { owner_key: OA.publicKey, return_to: "com.example.client:/signin" }, "accept");
+  wireCase("invalid-signin-request-return-not-ascii", "A return_to with a character outside ! to ~.", SIGNIN, { owner_key: OA.publicKey, return_to: "com.example.client:/caf\u00e9" }, "reject");
   wireCase("invalid-signin-request-return-query", "A return_to with a query of its own.", SIGNIN, { owner_key: OA.publicKey, return_to: "http://127.0.0.1:53682/cb?next=1" }, "reject");
   wireCase("valid-signin-providers", "The providers a server signs people in with.", "wire/signin-providers.response", { providers: [{ id: "google", name: "Google" }, { id: "acme-sso", name: "Acme SSO" }] }, "accept");
   wireCase("invalid-signin-providers-id", "A provider id that can't be a path segment.", "wire/signin-providers.response", { providers: [{ id: "Acme SSO", name: "Acme SSO" }] }, "reject");

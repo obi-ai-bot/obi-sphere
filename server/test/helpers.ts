@@ -27,6 +27,9 @@ const googleJwk = { ...((await crypto.subtle.exportKey("jwk", GOOGLE_KEY.publicK
 export const IDP = { issuer: "https://idp.test", authorize: "https://idp.test/authorize", jwks: "https://idp.test/keys", kid: "test-idp-key" };
 export const IDP_KEY = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
 const idpJwk = { ...((await crypto.subtle.exportKey("jwk", IDP_KEY.publicKey)) as JsonWebKey), kid: IDP.kid, use: "sig", alg: "ES256" };
+/** The test provider's Ed25519 key, for EdDSA ID tokens. */
+export const IDP_ED_KEY = (await crypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
+const idpEdJwk = { ...((await crypto.subtle.exportKey("jwk", IDP_ED_KEY.publicKey)) as JsonWebKey), kid: "test-idp-ed-key" };
 
 /** What the Sphere fetches from issuers, answered here: Google's keys, and the test provider's discovery and keys. */
 export const ISSUERS = new Issuers(async (url) => {
@@ -34,7 +37,10 @@ export const ISSUERS = new Issuers(async (url) => {
   if (url === `${IDP.issuer}/.well-known/openid-configuration`) {
     return Response.json({ issuer: IDP.issuer, authorization_endpoint: IDP.authorize, jwks_uri: IDP.jwks, response_types_supported: ["code", "id_token"], response_modes_supported: ["query", "fragment", "form_post"], id_token_signing_alg_values_supported: ["ES256"] });
   }
-  if (url === IDP.jwks) return Response.json({ keys: [idpJwk, { kty: "oct", kid: "a-shared-secret", k: "c2VjcmV0" }] });
+  if (url === IDP.jwks) return Response.json({ keys: [idpJwk, idpEdJwk, { kty: "oct", kid: "a-shared-secret", k: "c2VjcmV0" }] });
+  // An issuer whose document names another issuer, and one whose endpoints aren't https.
+  if (url === "https://other-idp.test/.well-known/openid-configuration") return Response.json({ issuer: IDP.issuer, authorization_endpoint: IDP.authorize, jwks_uri: IDP.jwks });
+  if (url === "https://plain-idp.test/.well-known/openid-configuration") return Response.json({ issuer: "https://plain-idp.test", authorization_endpoint: "http://127.0.0.1:9/authorize", jwks_uri: "http://127.0.0.1:9/keys" });
   return new Response("not found", { status: 404 });
 });
 

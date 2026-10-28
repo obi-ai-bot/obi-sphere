@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handle } from "../src/app";
 import { b64url } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
-import { BASE, GOOGLE_KEY, IDP, IDP_KEY, ISSUERS, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
+import { BASE, GOOGLE_KEY, IDP, IDP_ED_KEY, IDP_KEY, ISSUERS, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
 
 const CLIENT = env.GOOGLE_CLIENT_ID;
 
@@ -279,18 +279,29 @@ describe("signing in with any OpenID Connect provider", () => {
     expect(await env.DB.prepare("SELECT account FROM owners WHERE sphere = 'acme-team'").first()).toEqual({ account: "acme:u-7" });
   });
 
-  it("goes back to a scheme of the client's own, or to obi-sphere://signin when the client names nowhere", async () => {
+  it("goes back to a scheme the server knows, or to obi-sphere://signin when the client names nowhere", async () => {
     const w = new World();
-    const e = withProviders([ACME]);
-    expect((await signInWith(w, e, await newKey(), { returnTo: "example-client:/signin" })).location).toMatch(/^example-client:\/signin\?state=[A-Za-z0-9_-]{43}&code=/);
+    const e = withProviders([ACME], { SIGNIN_RETURN_SCHEMES: "com.example.client, org.example.other" });
+    expect((await signInWith(w, e, await newKey(), { returnTo: "com.example.client:/signin" })).location).toMatch(/^com\.example\.client:\/signin\?state=[A-Za-z0-9_-]{43}&code=/);
+    expect((await signInWith(w, e, await newKey(), { returnTo: "obi-sphere://signin" })).location).toMatch(/^obi-sphere:\/\/signin\?state=/);
     expect((await signInWith(w, e, await newKey())).location).toMatch(/^obi-sphere:\/\/signin\?state=/);
+    // A loopback URL goes back as the URL parser writes it.
+    expect((await signInWith(w, e, await newKey(), { returnTo: "http://LOCALHOST:53682/cb" })).location).toMatch(/^http:\/\/localhost:53682\/cb\?state=/);
+    // A backslash a URL parser reads as a slash: still this machine, and it goes back as parsed.
+    expect((await signInWith(w, e, await newKey(), { returnTo: "http://127.0.0.1\\@attacker.example/" })).location).toMatch(/^http:\/\/127\.0\.0\.1\/@attacker\.example\/\?state=/);
   });
 
-  it("refuses to hand a code to anywhere off the person's machine, or with a query of its own", async () => {
+  it("refuses to hand a code to anywhere off the person's machine, or to a scheme it doesn't know", async () => {
     const w = new World();
-    const call = makeCall(w.clock, withProviders([ACME]) as never);
+    const call = makeCall(w.clock, withProviders([ACME], { SIGNIN_RETURN_SCHEMES: "com.example.client, https" }) as never);
     const key = await newKey();
-    for (const returnTo of ["https://attacker.example/cb", "http://sphere.example/cb", "javascript:alert(1)", "data:text/html,x", "http://127.0.0.1:5000/cb?next=1", "example-client:/x#y", "http://me@127.0.0.1/cb", "no-scheme"]) {
+    for (const returnTo of [
+      "https://attacker.example/cb", "http://sphere.example/cb", "javascript:alert(1)", "data:text/html,x", "http://127.0.0.1:5000/cb?next=1", "com.example.client:/x#y", "http://me@127.0.0.1/cb", "no-scheme",
+      // Schemes of apps that open a web address they carry, code and all.
+      "microsoft-edge:https://attacker.example/cb", "x-safari-https://attacker.example/cb", "googlechromes://attacker.example/cb", "steam://openurl/https://attacker.example/x",
+      "ms-word:ofe|u|https://attacker.example/x", "android-app://com.android.chrome/https/attacker.example/cb", "example-client:/signin",
+      "com.example.client:/sign in", "com.example.client:/caf\u00e9",
+    ]) {
       const r = await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: returnTo } });
       expect(r.status, returnTo).toBe(400);
       expect(r.body.error.code).toBe("bad_request");
@@ -333,6 +344,57 @@ describe("signing in with any OpenID Connect provider", () => {
     expect(await env.DB.prepare("SELECT account, workspace FROM sign_ins WHERE state = ?1").bind(s.state).first()).toEqual({ account: "keycloak:u-7", workspace: "acme.example" });
     const unverified = await signInWith(w, e, await newKey(), { id: "keycloak", claims: { org_domain: "acme.example" } });
     expect(unverified.location).toMatch(/error=failed$/);
+    vi.restoreAllMocks();
+  });
+
+  it("refuses a token signed wrongly, and takes EdDSA from a listed key", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    const call = makeCall(w.clock, e as never);
+    const sign = async (claims: Record<string, unknown>, header: Record<string, unknown>, key: CryptoKey, alg: { name: string; hash?: string }) => {
+      const head = b64url(utf8(JSON.stringify(header)));
+      const body = b64url(utf8(JSON.stringify(claims)));
+      return `${head}.${body}.${b64url(new Uint8Array(await crypto.subtle.sign(alg, key, utf8(`${head}.${body}`))))}`;
+    };
+    const run = async (make: (nonce: string) => Promise<string>) => {
+      const start = await call("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } });
+      const nonce = new URL(start.body.url).searchParams.get("nonce")!;
+      const back = await call("POST", "/v0.1/signin/acme/callback", { raw: new URLSearchParams({ state: start.body.state, id_token: await make(nonce) }).toString(), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      return back.headers.get("Location")!;
+    };
+    const claims = (nonce: string) => ({ iss: IDP.issuer, aud: "acme-client", sub: "u-9", nonce, iat: w.clock.s, exp: w.clock.s + 600 });
+    // A listed kid, a signature by another key: refused.
+    const stranger = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"])) as CryptoKeyPair;
+    expect(await run((n) => sign(claims(n), { alg: "ES256", kid: IDP.kid, typ: "JWT" }, stranger.privateKey, { name: "ECDSA", hash: "SHA-256" }))).toMatch(/error=failed$/);
+    // The signature of a token, put on another token's claims: refused.
+    expect(await run(async (n) => {
+      const real = await es256({ ...claims(n), sub: "u-real" });
+      const [head, , sig] = real.split(".");
+      return `${head}.${b64url(utf8(JSON.stringify({ ...claims(n), sub: "u-forged" })))}.${sig}`;
+    })).toMatch(/error=failed$/);
+    // EdDSA, by the issuer's listed Ed25519 key: taken.
+    expect(await run((n) => sign(claims(n), { alg: "EdDSA", kid: "test-idp-ed-key", typ: "JWT" }, IDP_ED_KEY.privateKey, { name: "Ed25519" }))).toMatch(/&code=/);
+    // A domain claim that isn't a domain: refused.
+    const claimed = withProviders([{ ...ACME, id: "claimed", domain: undefined, domain_claim: "org" }]);
+    expect((await signInWith(w, claimed, await newKey(), { id: "claimed", claims: { org: "not a domain" } })).location).toMatch(/error=failed$/);
+  });
+
+  it("refuses an issuer whose document names another, or whose endpoints aren't https", async () => {
+    const w = new World();
+    for (const issuer of ["https://other-idp.test", "https://plain-idp.test"]) {
+      const r = await makeCall(w.clock, withProviders([{ ...ACME, issuer }]) as never)("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } });
+      expect(r.status, issuer).toBe(429);
+    }
+  });
+
+  it("leaves out a provider that would take Google's id, or a domain on an issuer that signs in anyone", async () => {
+    const w = new World();
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const e = withProviders([
+      { id: "google", name: "Not Google", issuer: IDP.issuer, client_id: "x" },
+      { id: "everyone", name: "Everyone", issuer: "https://login.microsoftonline.com/common/v2.0", client_id: "x", domain: "acme.example" },
+    ]);
+    expect((await makeCall(w.clock, e as never)("GET", "/v0.1/signin")).body).toEqual({ providers: [{ id: "google", name: "Google" }] });
     vi.restoreAllMocks();
   });
 

@@ -5,9 +5,11 @@
 // issuer, the client id, the nonce). Only the account (`<provider>:<sub>`) and its domain are
 // kept, never the email or the token.
 
+import { ownOrigin } from "./auth.ts";
 import type { Deps, Env } from "./env.ts";
 import { apiError, json, rateLimited, readJson } from "./http.ts";
 import { constantTimeEqual, fromB64url, randomToken, sha256, sha256Hex } from "./protocol/crypto.ts";
+import { CLIENTS } from "./clients.ts";
 import { utf8 } from "./protocol/json.ts";
 import { schemaErrors } from "./protocol/schemas.ts";
 
@@ -22,8 +24,8 @@ const SLUG = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
 const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 /** Hosts an issuer, or a `return_to`, may name over plain http: this machine only. */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
-/** Schemes a `return_to` may not use: the web's, where a code would leave the person's machine, and those a browser runs. */
-const NOT_RETURN = new Set(["http", "https", "ws", "wss", "ftp", "file", "data", "javascript", "vbscript", "about", "blob", "mailto", "tel"]);
+/** Oby's scheme, where a sign-in returns when the client names nowhere: always one this server knows. */
+const OBY_SCHEME = "obi-sphere";
 
 // ---------------------------------------------------------------------------------------------
 // The providers
@@ -50,6 +52,9 @@ export interface Provider {
   email_verified: boolean;
 }
 
+/** Issuers that sign in anyone, or any organisation's people. */
+const MULTI_TENANT = ["https://accounts.google.com", "accounts.google.com", "https://login.microsoftonline.com/common", "https://login.microsoftonline.com/organizations", "https://login.microsoftonline.com/consumers", "https://login.microsoftonline.com/9188040d-6c67-4c5b-b112-36a304b66dad"];
+
 const google = (client: string): Provider => ({
   id: "google",
   name: "Google",
@@ -62,8 +67,8 @@ const google = (client: string): Provider => ({
   email_verified: true,
 });
 
-/** An https URL, or http to this machine; no user name, query or fragment. */
-function webUrl(text: unknown): URL | null {
+/** An https URL, or http to this machine when `loopback` allows it; no user name, query or fragment. */
+function webUrl(text: unknown, loopback = true): URL | null {
   if (typeof text !== "string" || text.length > 300) return null;
   let url: URL;
   try {
@@ -71,7 +76,7 @@ function webUrl(text: unknown): URL | null {
   } catch {
     return null;
   }
-  const ok = url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK.has(url.hostname));
+  const ok = url.protocol === "https:" || (loopback && url.protocol === "http:" && LOOPBACK.has(url.hostname));
   return ok && !url.username && !url.password && !url.search && !url.hash ? url : null;
 }
 
@@ -90,6 +95,10 @@ function provider(entry: unknown): Provider | string {
   if (e.domain_claim !== undefined && (typeof e.domain_claim !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(e.domain_claim))) return "domain_claim names a claim";
   if (e.domain !== undefined && e.domain_claim !== undefined) return "domain and domain_claim don't go together";
   if (e.email_verified !== undefined && typeof e.email_verified !== "boolean") return "email_verified is true or false";
+  // `google` is Google's id, and its accounts (`google:<sub>`) are Google's: no other issuer takes it.
+  if (e.id === "google" && !google("").issuers.includes(e.issuer as string)) return "the id google is Google's own";
+  // A domain is every account's only on an issuer that signs in no one else; these sign in anyone.
+  if (e.domain !== undefined && MULTI_TENANT.some((m) => (e.issuer as string).startsWith(m))) return "domain can't be every account's on an issuer that signs in anyone: use domain_claim";
   return {
     id: e.id, name: e.name, issuer: e.issuer as string, issuers: [e.issuer as string], client_id: e.client_id,
     ...(e.domain !== undefined ? { domain: e.domain as string } : {}),
@@ -155,6 +164,7 @@ const usable = (k: Jwk): boolean =>
 export class KeyCache {
   private keys: Jwk[] = [];
   private fetchedAt = Number.NEGATIVE_INFINITY;
+  private triedAt = Number.NEGATIVE_INFINITY;
   private readonly fetchKeys: () => Promise<Jwk[]>;
 
   constructor(fetchKeys: () => Promise<Jwk[]>) {
@@ -164,7 +174,9 @@ export class KeyCache {
   async key(kid: string, nowS: number): Promise<Jwk | undefined> {
     const stale = nowS - this.fetchedAt > DAY_S;
     const unknown = !this.keys.some((k) => k.kid === kid) && nowS - this.fetchedAt > 60;
-    if (stale || unknown) {
+    if ((stale || unknown) && nowS - this.triedAt >= 60) {
+      // At most one try a minute, whether or not it works.
+      this.triedAt = nowS;
       try {
         const keys = (await this.fetchKeys()).filter(usable);
         if (keys.length) {
@@ -188,6 +200,7 @@ interface Endpoints {
 export class Issuers {
   private readonly get: (url: string) => Promise<Response>;
   private readonly discovered = new Map<string, { at: number; endpoints: Endpoints }>();
+  private readonly tried = new Map<string, number>();
   private readonly keyCaches = new Map<string, KeyCache>();
 
   constructor(get: (url: string) => Promise<Response> = (url) => fetch(url)) {
@@ -199,12 +212,18 @@ export class Issuers {
     if (p.authorize && p.jwks) return { authorize: p.authorize, jwks: p.jwks };
     const kept = this.discovered.get(p.issuer);
     if (kept && nowS - kept.at < DAY_S) return kept.endpoints;
+    // At most one try a minute while an issuer can't be read.
+    const tried = this.tried.get(p.issuer) ?? Number.NEGATIVE_INFINITY;
+    if (nowS - tried < 60) return kept?.endpoints ?? null;
+    this.tried.set(p.issuer, nowS);
     try {
       const r = await this.get(`${p.issuer.replace(/\/+$/, "")}/.well-known/openid-configuration`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const doc = (await r.json()) as Record<string, unknown>;
       if (doc.issuer !== p.issuer) throw new Error("its issuer is another");
-      const authorize = webUrl(doc.authorization_endpoint), jwks = webUrl(doc.jwks_uri);
+      // http to this machine only for an issuer on this machine (one under test).
+      const local = new URL(p.issuer).protocol === "http:";
+      const authorize = webUrl(doc.authorization_endpoint, local), jwks = webUrl(doc.jwks_uri, local);
       if (!authorize || !jwks) throw new Error("no authorization endpoint or keys");
       const modes = doc.response_modes_supported, types = doc.response_types_supported;
       if (Array.isArray(modes) && !modes.includes("form_post")) throw new Error("no form_post");
@@ -245,16 +264,28 @@ export function listSignIns(_request: Request, env: Env): Response {
 // ---------------------------------------------------------------------------------------------
 // POST /v0.1/signin/{provider}
 
-/** Where a sign-in's code may go back to: a loopback http URL, or a scheme of the client's own; no query or fragment. Null when it may not. */
-export function returnTo(text: string): string | null {
-  if (text.length > 300 || /[\s#?]/.test(text)) return null;
+/**
+ * Where a sign-in's code may go back to, normalised; or null. Only places on the person's own
+ * machine: an http URL on 127.0.0.1, localhost or [::1], or a URL in a scheme this server knows,
+ * Oby's (`obi-sphere`), a listed client's (src/clients.ts) or one the operator names
+ * (SIGNIN_RETURN_SCHEMES). Any other scheme may belong to an app that opens a web address it
+ * carries, and so hand the code to a server. Printable ASCII, at most 300, no query or fragment.
+ */
+export function returnTo(text: string, env: Env): string | null {
+  if (!/^[\x21-\x7e]{3,300}$/.test(text) || /[#?]/.test(text)) return null;
   const scheme = /^([a-z][a-z0-9+.-]*):/.exec(text)?.[1];
   if (!scheme) return null;
   if (scheme === "http") {
     const url = webUrl(text);
-    return url && LOOPBACK.has(url.hostname) ? text : null;
+    return url && url.protocol === "http:" && LOOPBACK.has(url.hostname) ? url.href : null;
   }
-  return NOT_RETURN.has(scheme) ? null : text;
+  return returnSchemes(env).has(scheme) ? text : null;
+}
+
+/** The schemes a sign-in may return to: Oby's, the listed clients', and SIGNIN_RETURN_SCHEMES (comma-separated). */
+export function returnSchemes(env: Env): Set<string> {
+  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9+.-]*$/.test(x) && x !== "http" && x !== "https");
+  return new Set([OBY_SCHEME, ...CLIENTS.flatMap((c) => (c.scheme ? [c.scheme] : [])), ...named]);
 }
 
 export async function startSignIn(request: Request, env: Env, deps: Deps, providerId: string): Promise<Response> {
@@ -263,8 +294,8 @@ export async function startSignIn(request: Request, env: Env, deps: Deps, provid
   const errors = schemaErrors("signinRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match signin.request", errors);
   const req = body as unknown as { owner_key: string; return_to?: string };
-  const back = req.return_to === undefined ? null : returnTo(req.return_to);
-  if (req.return_to !== undefined && !back) throw apiError("bad_request", "return_to is an http URL on this machine (127.0.0.1, localhost or [::1]) or a scheme of the client's own, with no query");
+  const back = req.return_to === undefined ? null : returnTo(req.return_to, env);
+  if (req.return_to !== undefined && !back) throw apiError("bad_request", "return_to is an http URL on this machine (127.0.0.1, localhost or [::1]), or a scheme this server knows, with no query");
   const nowS = Math.floor(deps.now() / 1000);
   const endpoints = await (deps.issuers ?? shared).endpoints(p, nowS);
   if (!endpoints) throw rateLimited(`${p.name} can't be reached now`, 60);
@@ -279,11 +310,11 @@ export async function startSignIn(request: Request, env: Env, deps: Deps, provid
   const url = new URL(endpoints.authorize);
   for (const [k, v] of Object.entries({
     client_id: p.client_id,
-    redirect_uri: `${new URL(request.url).origin}/v0.1/signin/${p.id}/callback`,
+    redirect_uri: `${ownOrigin(env, request)!}/v0.1/signin/${p.id}/callback`,
     response_type: "id_token",
     response_mode: "form_post",
     scope: "openid email",
-    prompt: "select_account",
+    ...(p.id === "google" ? { prompt: "select_account" } : {}),
     state,
     nonce,
   })) url.searchParams.set(k, v);

@@ -1,7 +1,7 @@
 // POST /v0.1/oauth/token: OAuth 2.0 Token Exchange (RFC 8693), the subject an owner and the
 // actor, when there is one, an Obi acting for them (spec/identity.md section 4.3).
 
-import { SCOPES, canonicalScope, isScope, tokenHash } from "./auth.ts";
+import { SCOPES, canonicalScope, isScope, ownOrigin, ownUrl, tokenHash } from "./auth.ts";
 import { constraintFailure, getMember, getOwner, getSphere, unforeseen } from "./db.ts";
 import type { Deps, Env } from "./env.ts";
 import { MAX_BODY_BYTES, json, readBody } from "./http.ts";
@@ -9,7 +9,7 @@ import { randomToken } from "./protocol/crypto.ts";
 import { CLOCK_SKEW_SECONDS, MAX_LIFETIME_SECONDS } from "./protocol/envelope.ts";
 import { parseJwt, verifyJws, type CompactJws } from "./protocol/jws.ts";
 import { matches } from "./protocol/schemas.ts";
-import { PROOF_SECONDS, checkProof, type Proof } from "./dpop.ts";
+import { TOKEN_PROOF_BEHIND, checkProof, type Proof } from "./dpop.ts";
 
 const GRANT_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange";
 const JWT_TYPE = "urn:ietf:params:oauth:token-type:jwt";
@@ -53,7 +53,7 @@ function parseScopes(text: string, what: string): Set<string> {
  * The Obysphere an assertion's `aud` names: `obi-sphere:<id>`, or `<origin>/v0.1/spheres/<id>` for
  * this server's own origin only (null for another's). The claims schema has checked its form.
  */
-export function audSphere(aud: string, origin: string): string | null {
+export function audSphere(aud: string, origin: string | null): string | null {
   if (aud.startsWith("obi-sphere:")) return aud.slice("obi-sphere:".length);
   const m = /^(https?:\/\/[^/]+)\/v0\.1\/spheres\/([a-z0-9-]+)$/.exec(aud);
   if (!m) return null;
@@ -63,7 +63,7 @@ export function audSphere(aud: string, origin: string): string | null {
   } catch {
     return null;
   }
-  return named === origin ? m[2]! : null;
+  return origin !== null && named === origin ? m[2]! : null;
 }
 
 export async function tokenEndpoint(request: Request, env: Env, deps: Deps): Promise<Response> {
@@ -124,7 +124,8 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   }
   // `aud` names the Obysphere: `obi-sphere:<id>`, or its own URL, which binds the assertion to this
   // server (identity.md 4.1). Both assertions name the same one.
-  const origin = new URL(request.url).origin;
+  // This server's own origin, as configured; null when it doesn't know it, and then only `obi-sphere:<id>` names it.
+  const origin = ownOrigin(env, request, true);
   const sphereId = audSphere(sc.aud, origin);
   if (sphereId === null) throw new OAuthError("invalid_request", "subject_token's aud names an Obysphere on another server");
   if (ac && audSphere(ac.aud, origin) !== sphereId) throw new OAuthError("invalid_request", "the two assertions are for different Spheres");
@@ -181,7 +182,7 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   let proof: Proof | null = null;
   const dpop = request.headers.get("DPoP");
   if (dpop !== null) {
-    const checked = await checkProof(dpop, "POST", request.url, now);
+    const checked = await checkProof(dpop, "POST", ownUrl(env, request), now, { behind: TOKEN_PROOF_BEHIND });
     if (typeof checked === "string") throw new OAuthError("invalid_dpop_proof", checked);
     proof = checked;
   }
@@ -194,7 +195,7 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
       env.DB.prepare("DELETE FROM tokens WHERE expires_at_s < ?1").bind(now - 86400),
       env.DB.prepare("DELETE FROM dpop_proofs WHERE exp_s < ?1").bind(now),
       env.DB.prepare("INSERT INTO used_jtis (sphere, iss, jti, exp_s) VALUES (?1, ?2, ?3, ?4)").bind(sphere.id, issuer, single.jti, single.exp),
-      ...(proof ? [env.DB.prepare("INSERT INTO dpop_proofs (jkt, jti, exp_s) VALUES (?1, ?2, ?3)").bind(proof.jkt, proof.jti, proof.iat + PROOF_SECONDS)] : []),
+      ...(proof ? [env.DB.prepare("INSERT INTO dpop_proofs (jkt, jti, exp_s) VALUES (?1, ?2, ?3)").bind(proof.jkt, proof.jti, proof.iat + TOKEN_PROOF_BEHIND)] : []),
       env.DB.prepare("INSERT INTO tokens (sha256, sphere, subject, actor, scope, expires_at_s, jkt) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)").bind(
         await tokenHash(accessToken), sphere.id, sc.iss, actorObi, scope, now + expiresIn, proof?.jkt ?? null,
       ),

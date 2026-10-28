@@ -1,10 +1,11 @@
 // Who is calling: the operator (creating Spheres) or the holder of an access token
 // (spec/sphere-api.md section 1, "Authentication"; spec/identity.md section 4).
 
-import { apiError } from "./http.ts";
+import { ApiError, apiError } from "./http.ts";
 import type { Env } from "./env.ts";
 import type { SphereRow } from "./db.ts";
-import { checkProof } from "./dpop.ts";
+import { PROOF_BEHIND, checkProof } from "./dpop.ts";
+import { constraintFailure } from "./db.ts";
 import { constantTimeEqual, sha256Hex } from "./protocol/crypto.ts";
 import { utf8 } from "./protocol/json.ts";
 
@@ -33,6 +34,24 @@ const PRESENTED = /^(Bearer|DPoP) ([A-Za-z0-9._~-]{1,512})$/;
 
 export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(token));
 
+/**
+ * This server's origin: SPHERE_URL's when it is set, else the request's (on Workers, a host
+ * Cloudflare routes to this Worker). With `known`, null when SPHERE_URL is set but empty: the
+ * server doesn't know its own address, so nothing that must name it is taken.
+ */
+export function ownOrigin(env: Env, request: Request, known = false): string | null {
+  const fromRequest = new URL(request.url).origin;
+  if (env.SPHERE_URL === undefined) return fromRequest;
+  try {
+    return env.SPHERE_URL ? new URL(env.SPHERE_URL).origin : known ? null : fromRequest;
+  } catch {
+    return known ? null : fromRequest;
+  }
+}
+
+/** The URL a DPoP proof for `request` must name: this server's origin and the request's path. */
+export const ownUrl = (env: Env, request: Request): string => ownOrigin(env, request)! + new URL(request.url).pathname;
+
 /** The access token in `Authorization`, as `Bearer <token>` or, for a token bound to a key, `DPoP <token>`; null for neither. */
 export function presented(request: Request): { scheme: "Bearer" | "DPoP"; token: string } | null {
   const m = PRESENTED.exec(request.headers.get("Authorization") ?? "");
@@ -58,17 +77,33 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow | nul
   if (!row || row.revoked || row.expires_at_s <= nowS) throw apiError("unauthorized", "the access token is unknown, expired or revoked");
   // A token bound to a key (identity.md 4.6) works only with a new proof from that key; a bearer
   // token only as Bearer.
-  if (row.jkt === null && given.scheme === "DPoP") throw apiError("unauthorized", "this access token isn't bound to a key: Authorization: Bearer <token>");
+  if (row.jkt === null && given.scheme === "DPoP") throw dpopRefused("invalid_token", "this access token isn't bound to a key: Authorization: Bearer <token>");
   if (row.jkt !== null) {
-    if (given.scheme !== "DPoP") throw apiError("unauthorized", "this access token is bound to a key: Authorization: DPoP <token>, with a DPoP proof");
-    const proof = await checkProof(request.headers.get("DPoP"), request.method, request.url, nowS, given.token);
-    if (typeof proof === "string") throw apiError("unauthorized", proof);
-    if (proof.jkt !== row.jkt) throw apiError("unauthorized", "the DPoP proof is signed by another key than the token's");
+    if (given.scheme !== "DPoP") throw dpopRefused("invalid_token", "this access token is bound to a key: Authorization: DPoP <token>, with a DPoP proof");
+    const proof = await checkProof(request.headers.get("DPoP"), request.method, ownUrl(env, request), nowS, { accessToken: given.token });
+    if (typeof proof === "string") throw dpopRefused("invalid_dpop_proof", proof);
+    if (proof.jkt !== row.jkt) throw dpopRefused("invalid_dpop_proof", "the DPoP proof is signed by another key than the token's");
+    // A call that changes something, or opens a socket, takes each proof once (identity.md 4.6).
+    if (request.method !== "GET" || (request.headers.get("Upgrade") ?? "").toLowerCase() === "websocket") {
+      try {
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM dpop_proofs WHERE exp_s < ?1").bind(nowS),
+          env.DB.prepare("INSERT INTO dpop_proofs (jkt, jti, exp_s) VALUES (?1, ?2, ?3)").bind(proof.jkt, proof.jti, proof.iat + PROOF_BEHIND),
+        ]);
+      } catch (e) {
+        if (constraintFailure(e)?.startsWith("UNIQUE constraint failed: dpop_proofs.")) throw dpopRefused("invalid_dpop_proof", "this DPoP proof was used before");
+        throw e;
+      }
+    }
   }
   if (sphere && row.sphere !== sphere.id) throw apiError("unauthorized", "the access token is for another Sphere");
   if (row.actor !== null && row.actor_status !== "active") throw apiError("unauthorized", "the token's Obi is no longer an active member");
   return { sphere: row.sphere, subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
 }
+
+/** A 401 for a DPoP token or proof, with the challenge RFC 9449 section 7.1 asks for. */
+const dpopRefused = (error: "invalid_token" | "invalid_dpop_proof", message: string) =>
+  new ApiError("unauthorized", message, [], undefined, { "WWW-Authenticate": `DPoP error="${error}", algs="EdDSA ES256"` });
 
 export function requireScope(caller: Caller, ...anyOf: Scope[]): void {
   if (!anyOf.some((s) => caller.scopes.has(s))) throw apiError("insufficient_scope", `this call needs the scope ${anyOf.join(" or ")}`);

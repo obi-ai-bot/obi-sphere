@@ -20,6 +20,15 @@ export interface Env {
    * No provider at all: no sign-in, and every sign-in call is 403.
    */
   SIGNIN_PROVIDERS?: string | unknown[];
+  /** More schemes a sign-in's code may go back to, comma-separated, beside Oby's and the listed clients' (src/signin.ts, `returnTo`): only schemes of clients installed on people's own machines. */
+  SIGNIN_RETURN_SCHEMES?: string;
+  /**
+   * This server's public address. Set, its origin is the server's own: the one an assertion's `aud`
+   * URL must name, and the one DPoP proofs and the sign-in's callback are for. Unset, a Worker takes
+   * the request's own (Cloudflare routes only its own hosts to it). The Node build sets it from
+   * SPHERE_URL, and leaves it empty without one, which refuses the URL form of `aud`.
+   */
+  SPHERE_URL?: string;
   /** The domains, comma-separated, whose people may create a Sphere with a sign-in (a Google Workspace, or a provider's `domain`). Empty: only the operator creates. */
   CREATOR_WORKSPACES?: string;
   /** How many Spheres one account may be the admin owner of before a create with a sign-in is 429. Unset: 3. */

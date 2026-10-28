@@ -62,6 +62,10 @@ const env: Record<string, unknown> = {
   CREATOR_WORKSPACES: setting("CREATOR_WORKSPACES"),
   SPHERE_CREATE_LIMIT: setting("SPHERE_CREATE_LIMIT"),
   PHONE_RELAY: setting("PHONE_RELAY"),
+  SIGNIN_RETURN_SCHEMES: setting("SIGNIN_RETURN_SCHEMES"),
+  // Its own address, never read from a request's Host, which a client may set here. Without
+  // SPHERE_URL, an assertion's aud can't name this server's URL, only `obi-sphere:<id>`.
+  SPHERE_URL: setting("SPHERE_URL") ?? "",
 };
 env.DOORBELLS = namespace(Doorbell, env);
 env.RELAYS = namespace(PhoneRelay, env);

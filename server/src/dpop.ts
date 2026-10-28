@@ -5,8 +5,11 @@
 import { b64url, fromB64url, sha256 } from "./protocol/crypto.ts";
 import { canonicalBytes, utf8 } from "./protocol/json.ts";
 
-/** How far a proof's `iat` may be from the Obysphere's clock, either way (its 300 seconds of skew). */
-export const PROOF_SECONDS = 300;
+/** How far ahead of the Obysphere's clock a proof's `iat` may be. */
+export const PROOF_AHEAD = 60;
+/** How old a proof may be on an API call, and at the token endpoint (which remembers every proof it takes). */
+export const PROOF_BEHIND = 120;
+export const TOKEN_PROOF_BEHIND = 300;
 const MAX_PROOF = 4096;
 
 /** The keys a proof may be signed with, and how WebCrypto checks each. */
@@ -35,7 +38,8 @@ const decode = (part: string): unknown => JSON.parse(new TextDecoder("utf-8", { 
  * The DPoP proof in `header` for a `method` call to `url`, and with `accessToken` for any call but
  * the token endpoint's: checked, or why it isn't one (a line for the error, never the proof).
  */
-export async function checkProof(header: string | null, method: string, url: string, nowS: number, accessToken?: string): Promise<Proof | string> {
+export async function checkProof(header: string | null, method: string, url: string, nowS: number, o: { accessToken?: string; behind?: number } = {}): Promise<Proof | string> {
+  const { accessToken, behind = PROOF_BEHIND } = o;
   if (header === null) return "a DPoP proof is needed: the DPoP header";
   const parts = header.split(".");
   if (header.length > MAX_PROOF || parts.length !== 3 || !parts.every((p) => /^[A-Za-z0-9_-]+$/.test(p))) return "the DPoP header isn't one proof";
@@ -68,9 +72,11 @@ export async function checkProof(header: string | null, method: string, url: str
   } catch {
     return "the DPoP proof's htu isn't a URL";
   }
+  // A WebSocket's proof may name its ws: or wss: URL: it is the http: or https: one.
+  if (htu.protocol === "ws:" || htu.protocol === "wss:") htu = new URL(htu.href.replace(/^ws/, "http"));
   const target = new URL(url);
   if (htu.origin !== target.origin || htu.pathname !== target.pathname) return "the DPoP proof is for another URL";
-  if (typeof claims.iat !== "number" || !Number.isInteger(claims.iat) || Math.abs(claims.iat - nowS) > PROOF_SECONDS) return `a DPoP proof's iat is within ${PROOF_SECONDS} seconds of the Obysphere's clock`;
+  if (typeof claims.iat !== "number" || !Number.isInteger(claims.iat) || claims.iat > nowS + PROOF_AHEAD || claims.iat < nowS - behind) return `a DPoP proof's iat is at most ${PROOF_AHEAD} seconds ahead of the Obysphere's clock and ${behind} behind it`;
   if (accessToken !== undefined && claims.ath !== b64url(await sha256(utf8(accessToken)))) return "the DPoP proof is for another access token (ath)";
   return { jkt: await thumbprint(jwk), jti: claims.jti, iat: claims.iat };
 }
