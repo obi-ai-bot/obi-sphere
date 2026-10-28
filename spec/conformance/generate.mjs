@@ -444,6 +444,8 @@ export function buildFixtures() {
   ok("review-request-sealed", "A review request whose goal, summary and condition note are sealed for obi-a's seal key: obi-a opens them.", signed(sealedRequest), sealCtx(SA));
   ok("result-sealed", "A review's result sealed for obi-b: its summary and each finding's title and detail.", signed(sealedResult), sealCtx(SB));
   ok("answer-sealed", "The owner's answer, its words sealed for obi-b.", signed(sealFor(unsigned("answer", clone(bodies.answer)), SB, "answer")), sealCtx(SB));
+  ok("introduction-sealed", "An introduction whose note is sealed for obi-a: the member introduced and what it is about stay in the clear, for the Obysphere to check.", signed(sealFor(unsigned("introduction", clone(bodies.introduction)), SA, "introduction")), sealCtx(SA));
+  ok("follow-up-sealed", "A question that follows up an earlier one, its words sealed for obi-a: follows stays in the clear, for the Obysphere to check.", signed(sealFor(unsigned("question", { ...clone(bodies.question), follows: uuidFor("earlier-question") }), SA, "follow-up")), sealCtx(SA));
   ok("accept-sealed", "An accept has no words: sealed all the same, as everything to an Obi that seals is.", signed(sealedAccept), sealCtx(SB));
   ok("plain-from-an-obi-that-doesnt-seal", "Words in the clear to an Obi that seals, from one whose card has no seal key yet: valid until that Obi's owner signs it a card with one.", valid.review_request, sealCtx(SA, false));
   bad("not-sealed", "Words in the clear between two Obis whose cards both have a seal key.", valid.review_request, "not_sealed", sealCtx(SA));
@@ -688,6 +690,7 @@ export function buildFixtures() {
   // Calling a request off (protocol.md section 4, rule 10).
   const cancel = (request, name) => replyTo(request, "cancel", {}, name);
   auditCase("valid-chain-review-cancelled", "A review its sender calls off after the accept.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, cancel(valid.review_request, "audit-review-cancel")]) }, "accept");
+  auditCase("valid-chain-handoff-cancelled", "A handoff its sender calls off after the accept, before its result.", { sphere: SPHERE, entries: recordAll([valid.handoff, replyTo(valid.handoff, "accept", {}, "audit-handoff-accept"), cancel(valid.handoff, "audit-handoff-cancel")]) }, "accept");
   auditCase("valid-chain-question-cancelled", "A question its sender calls off before it is answered.", { sphere: SPHERE, entries: recordAll([reqQ, replyTo(reqQ, "status", { state: "waiting_on_owner" }, "audit-question-waiting"), cancel(reqQ, "audit-question-cancel")]) }, "accept");
   auditCase("invalid-chain-cancel-by-receiver", "The receiver \"cancels\" the request: only its sender may.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, signed({ ...cancel(valid.review_request, "audit-cancel-wrong"), from: "obi-a", to: "obi-b", key_id: A.keyId })]) }, "reject", "bad_reply");
   auditCase("invalid-chain-reply-after-cancel", "A result after the review was called off: a cancel ends the exchange.", { sphere: SPHERE, entries: recordAll([valid.review_request, valid.accept, cancel(valid.review_request, "audit-review-cancel"), valid.result]) }, "reject", "bad_reply");

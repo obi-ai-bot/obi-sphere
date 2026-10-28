@@ -106,11 +106,13 @@ introduction:             request ─► [status…] ─► accept or decline
 
 Silence until `expires_at` means no. The sender treats it as a decline with reason `expired`.
 
-The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`, `invalid-chain-status-in-run`, `valid-chain-run-declined-unavailable`, `invalid-chain-run-declined-busy`, `invalid-chain-run-declined-by-rule`, `invalid-chain-run-accepted-by-rule`).
+The conformance suite's audit fixtures pin each rule (`invalid-chain-review-result-without-accept`, `invalid-chain-handoff-result-without-accept`, `valid-chain-question-answered-directly`, `valid-chain-question-accepted-then-answered`, `valid-chain-question-asked-owner`, `invalid-chain-result-for-another-kind`, `invalid-chain-answer-to-review-request`, `valid-chain-decline-after-accept`, `invalid-chain-accepted-twice`, `valid-chain-status-before-accept`, `invalid-chain-reply-after-result`, `invalid-chain-reply-after-answer`, `invalid-chain-answered-twice`, `invalid-chain-reply-by-sender`, `invalid-chain-status-in-run`, `valid-chain-run-declined-unavailable`, `invalid-chain-run-declined-busy`, `invalid-chain-run-declined-by-rule`, `invalid-chain-run-accepted-by-rule`, `valid-chain-review-cancelled`, `valid-chain-handoff-cancelled`, `valid-chain-question-cancelled`, `invalid-chain-cancel-by-receiver`, `invalid-chain-reply-after-cancel`, `invalid-chain-cancelled-twice`, `invalid-chain-cancel-run-request`, `invalid-chain-cancel-share-offer`, `valid-chain-introduction-accepted`, `valid-chain-introduction-declined`, `valid-chain-introduction-cancelled`, `invalid-chain-reply-after-introduction-accept`, `invalid-chain-introduction-answered`).
 
 ## 5. Actions
 
 Every human-written field is data (section 8). Every field below is bounded by the schemas; the lengths given are maximums in characters.
+
+Sections 5.17 to 5.19 are additions to `obi/0.1`, each behind its feature. An agent sends a message that uses one only when its Obysphere lists the feature (`GET /v0.1/features`) and every active member's card in the directory lists it, since every member verifies the whole chain; the Obysphere refuses one that doesn't ([sphere-api.md](sphere-api.md) section 6.1, check 11, `409 feature_not_taken`). Until then it sends the plain form: a request without `follows`, and no `cancel` (the request ends at its `expires_at`) or `introduction`.
 
 ### 5.1 `review_request`
 
@@ -296,6 +298,7 @@ A `review_request`, `question`, `handoff` or `introduction` may say which earlie
 
 - The earlier request is between the same two members, in either direction, and recorded before it in the Obysphere's chain. The Obysphere checks this at send ([sphere-api.md](sphere-api.md) section 6.1, check 12, `bad_reply`), and so does a chain's verifier (section 7.1, check 7); a request doesn't follow itself up (section 10, check 3).
 - It is context, never a decision. The receiver decides a follow-up as it decides any request (section 11): a remembered decision or a sharing rule applies as it would without `follows`, an earlier `accept` accepts nothing new, and the earlier exchange stays as it ended. The receiver MAY show the earlier exchange to its owner next to the new one.
+- The earlier request may be of any type, a `run_request` or a `share_offer` too: a question about a run is a new exchange with words of its own, and adds none to the run's (section 4, rule 9).
 
 ## 6. Acceptance conditions
 
@@ -466,6 +469,8 @@ A `cancel` (5.17) for a request the agent received, from that request's own send
 - Work it started for the request stops: a review and its check, a handoff's job, an answer being written. What that work made goes nowhere: no `result`, no `answer`, no approval on the code host ("Approving on the code host": the owner's confirmation of a cancelled exchange counts for nothing).
 - An item waiting in its owner's inbox for the request is settled as cancelled; its owner MAY be told.
 - Nothing more is sent in that exchange, and nothing else changes: a remembered decision or a sharing rule made because of it stays as its owner made it.
+
+A cancel can't take back what was done before it arrived: an approval already posted on the code host stays there, for the sender's owner to dismiss on the code host if they want to, and a `result` or `answer` already sent ended the exchange, so a cancel after it is refused.
 
 A cancel says nothing about why. A sender SHOULD cancel a request it no longer needs rather than leave it to `expires_at`.
 

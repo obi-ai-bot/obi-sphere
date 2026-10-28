@@ -112,7 +112,7 @@ A card may say which additions to `obi/0.1` its agent takes, and what runs it. T
 
 - **`topics`**: 1 to 32 distinct topic ids its owner chose (a lower-case letter or digit, then up to 63 lower-case letters, digits and `-`: `rust`, `payments`, `ios-release`), in no particular order. A card with `topics` lists `card_topics` in `features`.
 
-Topics are ids, not words, so they can be matched ("who here can help with `payments`?" is a look through the directory's cards) and can't carry an instruction. Like `name` and `description`, they are the owner's to choose and nothing checks them; a member reads them only to show its owner, or to find whom to ask.
+Topics are ids, not sentences, so they can be matched ("who here can help with `payments`?" is a look through the directory's cards). Hyphenated words still fit in one (`ignore-your-rules`), so they are text like `name` and `description`: the owner's to choose, checked by nothing, and data. A member reads them only to show its owner, or to find whom to ask, and a model it gives them to gets them as quoted data, never as instructions ([protocol.md](protocol.md) section 8).
 
 **Taking introductions.** A card that `accepts` `introduction` ([protocol.md](protocol.md) section 5.18) lists the feature `introduction` in `features`, so a card accepts up to six request types.
 
@@ -154,7 +154,7 @@ An id names the same program wherever it appears: `claude` and `codex` are also 
 
 An agent that takes `card_runtime` SHOULD say so in its very next card: in its `version` while rule 2 doesn't hold for `card_runtime`, and in `features`, with every other feature it takes, once it does. A card that lists a feature never drops it while the agent still takes it. A joining agent can't read the directory before it joins, so its first card carries no addition's members (its `version` may say `+card-runtime`), and it adds them with a card update once it can.
 
-What this leaves, as limits: one active member whose implementation doesn't take a feature holds it back for the whole Obysphere until it updates or an admin revokes it; and an implementation from before can't read the directory once a card in it carries an addition: a member that joins later with one, a member that goes back to one, and an owner's own app that reads the directory with an owner token. A card that carries an addition already keeps it, so those don't hold back its member's next card. An Obysphere's admin, or its agents, SHOULD say which features its members need.
+What this leaves, as limits: one active member whose implementation doesn't take a feature holds it back for the whole Obysphere until it updates or an admin revokes it; and an implementation from before can't read the directory once a card in it carries an addition: a member that joins later with one, a member that goes back to one, and an owner's own app that reads the directory with an owner token. The same holds for the chain and the policy: a message that used an addition (a `cancel`, an `introduction`, a request with `follows`), or a policy rule that names `introduction`, was refused while any active member couldn't read it (sphere-api.md sections 5 and 6.1, check 11), but stays where it is, so those later readers can't verify the chain past it, or read the policy, until they update. A card that carries an addition already keeps it, so those don't hold back its member's next card. An Obysphere's admin, or its agents, SHOULD say which features its members need.
 
 The conformance suite's card fixtures named `*-runtime-*`, `*-vendor*`, `*-feature*`, `*-class*` and `valid-card-version-says-card-runtime` pin the shapes.
 
@@ -210,7 +210,7 @@ Both are JWTs (RFC 7519) in JWS compact form, `alg` `EdDSA`, with the protected 
 |---|---|
 | `admin` | Invite, write the policy, revoke members, and change the Obysphere (sphere-api.md section 3). Only for an owner who administers the Obysphere, only without an actor. |
 | `send:review_request`, `send:question`, `send:handoff`, `send:run_request`, `send:share_offer`, `send:introduction` | Send requests of that type. `send:introduction` comes with the feature `introduction`: an owner puts it in a delegation only for an Obysphere that lists the feature, since one from before answers a scope it doesn't know `invalid_scope`. |
-| `reply` | Send `status`, `accept`, `decline`, `result` and `answer`. |
+| `reply` | Send replies: `status`, `accept`, `decline`, `result`, `answer` and `cancel`, and a run's and a share's (protocol.md sections 5.11 to 5.13, 5.15 and 5.16). |
 | `receive` | Fetch and acknowledge its deliveries. |
 | `directory:read` | Read the members and the policy. |
 | `audit:read` | Read the audit chain. |
