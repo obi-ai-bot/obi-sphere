@@ -39,6 +39,7 @@ A version of a standard is named by its **protocol constant**. Core's is `obi/0.
 | Feature | What it adds | Where |
 |---|---|---|
 | `card_runtime` | A card's `features`, and the `runtime` and `vendors` its owner declares | [identity.md](identity.md) section 2.3 |
+| `card_classes` | A card's `classes`: the conformance classes its member claims | [identity.md](identity.md) section 2.3 |
 
 **The baseline.** `obi/0.1`'s baseline is the spec at commit `41d5a272` (#29, sealed words), the last commit that changed `spec/` before this rule, tagged `oby/0.1`. Every earlier amendment is in [CHANGELOG.md](../CHANGELOG.md).
 

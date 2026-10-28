@@ -27,6 +27,8 @@ export interface CardParams {
   features?: string[];
   runtime?: { id: string; version: string };
   vendors?: string[];
+  /** The conformance classes its member claims (identity.md section 2.3). */
+  classes?: string[];
 }
 
 export interface AgentCard {
@@ -43,9 +45,15 @@ export const cardParams = (card: AgentCard): CardParams => card.capabilities.ext
 /** The feature a card's `features`, `runtime` and `vendors` come with (identity.md section 2.3). */
 export const CARD_RUNTIME = "card_runtime";
 
+/** The feature a card's `classes` come with (identity.md section 2.3). */
+export const CARD_CLASSES = "card_classes";
+
 /** The additions a card's own members need its readers to take (identity.md section 2.3). */
 export function featuresUsed(p: CardParams): string[] {
-  return p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined ? [CARD_RUNTIME] : [];
+  const used: string[] = [];
+  if (p.features !== undefined || p.runtime !== undefined || p.vendors !== undefined || p.classes !== undefined) used.push(CARD_RUNTIME);
+  if (p.classes !== undefined) used.push(CARD_CLASSES);
+  return used;
 }
 
 /** The additions a card says its agent takes: its `features`, and `card_runtime` when its

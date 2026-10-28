@@ -21,7 +21,7 @@ describe("health", () => {
     const call = makeCall(new Clock());
     const r = await call("GET", "/v0.1/features");
     expect(r.status).toBe(200);
-    expect(r.body).toEqual({ features: ["card_runtime"] });
+    expect(r.body).toEqual({ features: ["card_classes", "card_runtime"] });
     expectSchema("featuresResponse", r.body);
   });
 
