@@ -60,12 +60,16 @@ node eval/live/panel.mjs --recheck <the run folder it kept>
 - **Its state** goes under `$TMPDIR/obysphere-council/`, one folder per run, deleted when the run passes unless `--keep`.
 - **Secrets on this machine.** The invitation link, secret included, is on the connector's command line while each member joins, so other users of the machine can see it in `ps`; it expires within the hour. A kept run folder holds every member's keys (the owners' encrypted with passphrases the script made and didn't keep) and the Obysphere's state: delete it when you are done. Ctrl-C stops the Obysphere, the connectors and the `claude` runs with the script.
 
+## What the runs have shown
+
+- **Agreement, and a split.** In most runs the three seats agreed (3 to 0, reject). In one run, two seats approved and rated the bug `major`, and one called it a `blocker`. The verifier found the blocker stands, so the veto made the verdict `reject` against the 2-to-1 vote, and the record keeps the minority's ballot and finding (the PR's evidence).
+
 ## What it doesn't show yet
 
 - **Two vendors.** Every seat runs Anthropic's models through `claude -p`, and every card declares `anthropic`. So the panel asks for 1 vendor, and the draw's vendor count is exercised with one vendor only. A panel with seats on a second vendor (`cursor-agent` with a non-Anthropic model) waits for that subscription. A second Claude model would not be a second vendor.
 - **Oby as a seat or the convener.** The convener here is the scripted client, not Oby's `obid`. Oby's convener ([obi-ai-bot/oby#1546](https://github.com/obi-ai-bot/oby/pull/1546)) sends the seats' requests, but not the calls or the draw.
 - **A refuted finding.** The verifier tries to refute each finding, but in the runs so far every blocker it checked stood. The tally's vectors cover refutation (clerk/vectors/review.json).
-- **Dissent.** The seats so far agreed (3 to 0). A split vote, and the minority's findings in the record, are in the count's and the tally's vectors, not in a live run.
+
 - **A replacement.** No seat or verifier declined its request, so every live run so far had one draw. The re-check handles later runs (a forged chain where two seats decline one after the other re-checks its three runs), and the draw's vectors cover replacements (clerk/vectors/draw.json); a live run doesn't.
 - **Standing aside by answer.** `fay` stands aside by declining her call. Answering it with choice 1 ("stand aside") counts the same (review.md section 4), but the connector's `answer` command isn't used here.
 - **The receivers' own checks.** Each seat would check its request's words against the motion's `words`, each called member its choices, and the verifier each condition against the chain (review.md section 9). The connector doesn't do these yet; the seats here are told what to do by their prompt.
