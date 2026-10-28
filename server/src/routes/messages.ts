@@ -129,7 +129,10 @@ export async function send(request: Request, env: Env, deps: Deps, sphereId: str
     // 12. The policy for a request; the exchange rules for a reply.
     if (request_) {
       const from = rows<MemberRow>(4)[0]!;
-      if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, requestRepo(env_))) throw apiError("policy_denied", "no policy rule allows this request");
+      const fromCard = cardParams(JSON.parse(from.card) as AgentCard);
+      // The policy may require a conformance class of either side (spec/sphere-api.md section 5, the
+      // policy_classes feature): a rule's from_classes/to_classes must be among the member's card classes.
+      if (!policyAllows(JSON.parse(sphere.policy_rules) as PolicyRule[], from.owner, to.owner, env_.type, requestRepo(env_), fromCard.classes ?? [], toCard.classes ?? [])) throw apiError("policy_denied", "no policy rule allows this request");
       // A follow-up names an earlier request between the same two members (protocol.md section 5.19).
       if (follows !== null) {
         const earlier = rows<AuditRow>(at.follows)[0];

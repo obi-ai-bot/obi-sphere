@@ -15,8 +15,20 @@ export const policyJson = (s: SphereRow) => ({ version: s.policy_version, update
 /**
  * Whether a rule allows a request of `type` from an Obi of `fromOwner` to an Obi of `toOwner`
  * about `repo` (undefined when the body has none). Repository comparisons ignore ASCII case.
+ * `fromClasses`/`toClasses` are the conformance classes the sending and receiving members' current
+ * cards claim; a rule with `from_classes`/`to_classes` matches only when the member claims every one
+ * (spec/sphere-api.md section 5, the policy_classes feature). A member whose card has no `classes`
+ * claims none, so a rule that requires a class never matches it.
  */
-export function policyAllows(rules: PolicyRule[], fromOwner: string, toOwner: string, type: string, repo: string | undefined): PolicyRule | null {
+export function policyAllows(
+  rules: PolicyRule[],
+  fromOwner: string,
+  toOwner: string,
+  type: string,
+  repo: string | undefined,
+  fromClasses: string[] = [],
+  toClasses: string[] = [],
+): PolicyRule | null {
   const lower = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
   const repoOk = (pattern: string) => {
     if (pattern === "*") return true;
@@ -26,13 +38,16 @@ export function policyAllows(rules: PolicyRule[], fromOwner: string, toOwner: st
     if (p.endsWith("/*")) return r.split("/")[0] === p.slice(0, -2);
     return r === p;
   };
+  const claims = (required: string[] | undefined, held: string[]) => !required || required.every((c) => held.includes(c));
   return (
     rules.find(
       (rule) =>
         (rule.from_owner === "*" || rule.from_owner === fromOwner) &&
         (rule.to_owner === "*" || rule.to_owner === toOwner) &&
         rule.actions.includes(type) &&
-        rule.repos.some(repoOk),
+        rule.repos.some(repoOk) &&
+        claims(rule.from_classes, fromClasses) &&
+        claims(rule.to_classes, toClasses),
     ) ?? null
   );
 }
@@ -73,7 +88,11 @@ export async function putPolicy(request: Request, env: Env, deps: Deps, sphereId
     }
     const version = sphere.policy_version + 1;
     const updatedAt = timestamp(nowS(deps));
-    const rules = req.rules.map((r) => ({ id: r.id, from_owner: r.from_owner, to_owner: r.to_owner, actions: r.actions, repos: r.repos }));
+    const rules = req.rules.map((r) => ({
+      id: r.id, from_owner: r.from_owner, to_owner: r.to_owner, actions: r.actions, repos: r.repos,
+      ...(r.from_classes ? { from_classes: r.from_classes } : {}),
+      ...(r.to_classes ? { to_classes: r.to_classes } : {}),
+    }));
     const written = await guardedWrite(env.DB, sphere.id, sphere.rev, [
       env.DB.prepare("UPDATE spheres SET policy_version = ?1, policy_rules = ?2, policy_updated_at = ?3 WHERE id = ?4").bind(version, JSON.stringify(rules), updatedAt, sphere.id),
     ]);

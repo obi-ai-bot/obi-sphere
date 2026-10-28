@@ -788,6 +788,18 @@ export function buildFixtures() {
   wireCase("invalid-invitation-preview-request-short-secret", "A secret that isn't 43 base64url characters.", "wire/invitation-preview.request", { secret: "A".repeat(42) }, "reject");
   wireCase("valid-invitation-preview-response", "The Sphere's name, its active members and the invitation's expiry.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 2, expires_at: NOW }, "accept");
   wireCase("invalid-invitation-preview-response-members", "A preview that lists members: it gives only their count.", "wire/invitation-preview.response", { sphere: SPHERE, name: "Conformance sphere", member_count: 1, expires_at: NOW, members: ["obi-a"] }, "reject");
+  // Policy, with a rule that may require a conformance class (sphere-api.md section 5, the
+  // policy_classes feature): from_classes/to_classes are 1 to 16 distinct class ids.
+  const POLICY_PUT = "wire/policy-put.request", POLICY = "wire/policy";
+  const rule = (extra) => ({ id: "team-reviews", from_owner: "*", to_owner: "*", actions: ["review_request"], repos: ["*"], ...extra });
+  wireCase("valid-policy-put", "A policy with one plain allow rule.", POLICY_PUT, { expected_version: 0, rules: [rule()] }, "accept");
+  wireCase("valid-policy-put-classes", "A rule that requires a class of the sending and the receiving side.", POLICY_PUT, { expected_version: 1, rules: [rule({ actions: ["run_request"], from_classes: ["holder"], to_classes: ["executor"] })] }, "accept");
+  wireCase("invalid-policy-put-class-not-an-id", "A class id with a capital: class ids are lower case.", POLICY_PUT, { expected_version: 0, rules: [rule({ to_classes: ["Executor"] })] }, "reject");
+  wireCase("invalid-policy-put-classes-empty", "An empty to_classes list: a rule that lists classes lists at least one.", POLICY_PUT, { expected_version: 0, rules: [rule({ to_classes: [] })] }, "reject");
+  wireCase("invalid-policy-put-classes-repeated", "The same class twice.", POLICY_PUT, { expected_version: 0, rules: [rule({ to_classes: ["executor", "executor"] })] }, "reject");
+  wireCase("invalid-policy-put-seventeen-classes", "One class more than a rule may list.", POLICY_PUT, { expected_version: 0, rules: [rule({ to_classes: ids(17, "class_") })] }, "reject");
+  wireCase("valid-policy-classes-response", "A GET /policy answer carrying a class rule.", POLICY, { version: 2, updated_at: NOW, rules: [rule({ actions: ["run_request"], to_classes: ["executor"] })] }, "accept");
+
   // A phone relay as its Mac sees it (sphere-api.md section 9.2).
   const RELAY = "wire/relay", relayId = b64url(sha256(Buffer.from("obi-conformance-relay", "utf8")).subarray(0, 16));
   const deviceIds = (n) => Array.from({ length: n }, (_, i) => sha256(Buffer.from(`obi-conformance-relay-token-${i}`, "utf8")).toString("hex")).sort();

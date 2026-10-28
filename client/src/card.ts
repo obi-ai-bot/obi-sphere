@@ -224,9 +224,13 @@ export function notTakenProblem(features: string[], active: { obi: string; card:
   return null;
 }
 
-/** The additions a policy's rules use: `introduction`, when a rule names it. */
-export function policyFeatures(rules: { actions: string[] }[]): string[] {
-  return rules.some((r) => r.actions.includes("introduction")) ? ["introduction"] : [];
+/** The additions a policy's rules use, so every member can read the policy: `introduction`, when a
+ *  rule names it; `policy_classes`, when a rule carries `from_classes` or `to_classes`. */
+export function policyFeatures(rules: { actions: string[]; from_classes?: string[]; to_classes?: string[] }[]): string[] {
+  const used = new Set<string>();
+  if (rules.some((r) => r.actions.includes("introduction"))) used.add("introduction");
+  if (rules.some((r) => r.from_classes !== undefined || r.to_classes !== undefined)) used.add("policy_classes");
+  return [...used];
 }
 
 /** Whether a card's agent takes an addition: what `featuresTaken` says. */

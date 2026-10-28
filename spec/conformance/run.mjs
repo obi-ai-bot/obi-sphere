@@ -8,19 +8,23 @@
 //   node conformance/run.mjs --receiver "<cmd>" run the receiver track (receiver/README section): a
 //                                               live implementation, enrolled through its adapter
 //                                               command, against scripted adversarial peers
+//   node conformance/run.mjs --badge <report.json>  write an SVG badge from a report to stdout
 //   options: --kinds envelope,card,audit,wire,host_approval   only these case kinds (impl mode)
 //            --verbose                     print every case, not only the failures
+//            --report <file> --label <impl>   with --impl or --receiver: write/merge a per-class
+//                                             report (conformance/report.mjs) an impl can publish
 //            receiver track: --server <dir> (the Sphere server; default ../server),
 //                            --sphere-url <loopback url> (a Sphere already running) with
 //                            --operator-token <t>, --corpus <file>, --only <id,id>, --keep
 //
 // Exit status 0 when every check passes, 1 otherwise.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildFixtures } from "./generate.mjs";
+import { badgeSvg, classOfFixture, loadOrNew, recordImpl, recordReceiver, writeReport } from "./report.mjs";
 import {
   ACTION_TYPES, REPLY_TYPES, SCHEMA_DIR, canonicalize, channelKeys, fromB64url, helloSigningInput, judge, openFrame, schemas, sealFrame,
   x25519FromPrivate, x25519Shared, SEAL_INFO_PREFIX, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce,
@@ -32,6 +36,16 @@ const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const option = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 const verbose = flag("--verbose");
+
+// The commit the suite ran at, for a published report (best-effort): $GITHUB_SHA, else `git rev-parse`.
+function suiteCommit() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA;
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: here, stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return null;
+  }
+}
 
 function listFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -86,13 +100,21 @@ function runImpl(command, testCase) {
 async function implMode(command, kinds, label = "implementation") {
   const cases = loadCases(kinds);
   let passed = 0;
+  const byClass = {}; // per conformance class, for a report (classOfFixture): {class: {ran, passed}}
+  const tally = (cls, ok) => {
+    const b = (byClass[cls] ??= { ran: 0, passed: 0 });
+    b.ran++;
+    if (ok) b.passed++;
+  };
   const queue = [...cases];
   const workers = Array.from({ length: 8 }, async () => {
     while (queue.length) {
       const c = queue.shift();
       const r = await runImpl(command, c.data);
       const got = r.code === 0 ? "accept" : r.code === null ? "error" : "reject";
-      if (got === c.data.expect) {
+      const ok = got === c.data.expect;
+      tally(classOfFixture(c.data), ok);
+      if (ok) {
         passed++;
         if (verbose) console.log(`ok   ${c.path} (${got})`);
       } else {
@@ -102,7 +124,7 @@ async function implMode(command, kinds, label = "implementation") {
   });
   await Promise.all(workers);
   console.log(`${label}: ${passed} of ${cases.length} cases as expected.`);
-  return passed === cases.length;
+  return { ok: passed === cases.length, byClass };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -311,6 +333,13 @@ function checkCoverage(cases) {
   for (const n of ["valid-chain-question-asked-owner", "invalid-chain-answer-to-review-request", "invalid-chain-reply-after-answer", "invalid-chain-answered-twice"]) need.push(`audit/${n}`);
   for (const n of ["valid-key-rotated-after-relay", "invalid-key-not-valid-at-seq", "invalid-key-not-current-at-send", "invalid-wrong-recipient", "invalid-wrong-recipient-reply"]) need.push(`envelope/${n}`);
   need.push("card/valid-card", "card/invalid-card-changed-after-signing");
+  // The card's runtime, vendors and features (#54, identity.md section 2.3): each is declared behind
+  // the card_runtime feature, and a card listing an addition's members without its feature is invalid.
+  for (const n of ["valid-card-with-runtime-and-vendors", "valid-card-with-features-only", "valid-card-with-an-unknown-feature", "valid-card-runtime-nobody-listed", "invalid-card-features-without-card-runtime", "invalid-card-runtime-without-features", "invalid-card-vendors-without-features", "invalid-card-features-empty", "invalid-card-vendors-empty", "invalid-card-runtime-without-version", "invalid-card-feature-repeated", "invalid-card-vendor-repeated"]) need.push(`card/${n}`);
+  // The Obysphere's features (sphere-api.md, GET /v0.1/features; health stays closed).
+  for (const n of ["valid-features-card-runtime", "valid-features-takes-none", "valid-features-unknown-id", "invalid-features-list-missing", "invalid-features-id-repeated", "invalid-health-lists-features"]) need.push(`wire/${n}`);
+  // A policy rule may require a conformance class (sphere-api.md section 5, the policy_classes feature).
+  for (const n of ["valid-policy-put", "valid-policy-put-classes", "valid-policy-classes-response", "invalid-policy-put-class-not-an-id", "invalid-policy-put-classes-empty", "invalid-policy-put-classes-repeated", "invalid-policy-put-seventeen-classes"]) need.push(`wire/${n}`);
   // Invitations, named and open (sphere-api.md section 4).
   for (const n of ["valid-invitation-named", "valid-invitation-open", "invalid-invitation-owner-without-obi", "invalid-invitation-named-max-uses", "invalid-invitation-email-domain", "valid-invitation-preview-response"]) need.push(`wire/${n}`);
   // Approving on the code host (protocol.md section 11): the owner's confirmation counts only for
@@ -366,7 +395,7 @@ async function selfCheck() {
 // ---------------------------------------------------------------------------------------------
 // The receiver track (receiver/harness.mjs): a live implementation against scripted peers.
 
-async function receiverMode(command) {
+async function receiverMode(command, reportPath, label) {
   const { runReceiverTrack } = await import("./receiver/harness.mjs");
   console.log("Obi-to-Obi protocol v0.1: conformance receiver track");
   const result = await runReceiverTrack({
@@ -390,13 +419,27 @@ async function receiverMode(command) {
   console.log("\nPer class:");
   for (const [cls, c] of Object.entries(byClass)) console.log(`  ${cls}: ${c.pass} passed, ${c.fail} failed, ${c["n/a"]} not applicable`);
   if (result.root) console.log(`Kept the run folder at ${result.root}`);
+  if (reportPath) {
+    const report = recordReceiver(loadOrNew(reportPath, label), result.results);
+    report.commit = suiteCommit();
+    writeReport(reportPath, report);
+    console.log(`Wrote the behaviour part of the report to ${reportPath}.`);
+  }
   console.log(result.ok ? "\nThe receiver track passed." : `\n${result.results.filter((r) => r.status === "fail").length} case(s) failed.`);
   return result.ok;
 }
 
 const impl = option("--impl");
 const receiver = option("--receiver");
+const badge = option("--badge");
+const reportPath = option("--report");
+const label = option("--label");
 const kinds = option("--kinds")?.split(",");
+if (badge) {
+  // Print an SVG badge from an existing report file, and do nothing else.
+  process.stdout.write(badgeSvg(JSON.parse(readFileSync(badge, "utf8"))) + "\n");
+  process.exit(0);
+}
 if (args.includes("--impl") && !impl) {
   console.error('--impl needs a command, like --impl "node conformance/verify.mjs"');
   process.exit(64);
@@ -405,5 +448,19 @@ if (args.includes("--receiver") && !receiver) {
   console.error('--receiver needs an adapter command, like --receiver "node conformance/receiver/receivers/receiver.mjs careful"');
   process.exit(64);
 }
-const passed = receiver ? await receiverMode(receiver) : impl ? await implMode(impl, kinds) : await selfCheck();
+let passed;
+if (receiver) {
+  passed = await receiverMode(receiver, reportPath, label);
+} else if (impl) {
+  const res = await implMode(impl, kinds);
+  if (reportPath) {
+    const report = recordImpl(loadOrNew(reportPath, label), res.byClass);
+    report.commit = suiteCommit();
+    writeReport(reportPath, report);
+    console.log(`Wrote the message part of the report to ${reportPath}.`);
+  }
+  passed = res.ok;
+} else {
+  passed = await selfCheck();
+}
 process.exit(passed ? 0 : 1);
