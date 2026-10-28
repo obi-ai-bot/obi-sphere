@@ -4,7 +4,7 @@ Status: **Draft**, part of [the next protocol version](README.md). Issue: [#61](
 
 In `obi/0.1` an owner is a person, and every agent acts for exactly one person (protocol.md section 1). That keeps every word accountable, and it stays. But many agents that should take part don't act for one person: a project's maintainer agent, a team's on-call agent, a company's hosted coding agent. Today they can join only by pretending to be someone.
 
-This adds a second kind of owner, an **organisation** (an organisation, a project or a team; one kind covers all three), which answers through named people. Nothing about persons changes. The design doesn't need a new protocol version: as #61 plans, it can come to `obi/0.1` first as an addition behind a feature, with `obi/0.1`'s identifiers ([README.md, D13](README.md#why-a-new-version)). It is written here with the next version's names so that the two don't drift.
+This adds a second kind of owner, an **organisation** (an organisation, a project or a team; one kind covers all three), which answers through named people. Nothing about persons changes. The design doesn't need a new protocol version: as #61 plans, it comes to `obi/0.1` first, as an addition behind a feature, with `obi/0.1`'s identifiers (D13, decided on [#61](https://github.com/obi-ai-bot/oby-sphere/issues/61#issuecomment-6456518294)). It is written here with the next version's names so that the two don't drift.
 
 ## 1. What doesn't change
 
@@ -14,11 +14,11 @@ This adds a second kind of owner, an **organisation** (an organisation, a projec
 
 ## 2. The charter (D9)
 
-An organisation owner has **no key of its own**. It is its **charter**: a signed list of the people who answer for it and of what each may do. An organisation key would have to sit on someone's device: either a key nobody in particular answers for, or one person's key under the organisation's name. A charter keeps every signature a person's.
+Decided on [#61](https://github.com/obi-ai-bot/oby-sphere/issues/61#issuecomment-6456518294): an organisation owner has **no key of its own**. It is its **charter**: a signed list of the people who answer for it and of what each may do. An organisation key would have to sit on someone's device: either a key nobody in particular answers for, or one person's key under the organisation's name. A charter keeps every signature a person's.
 
 | Field | Meaning |
 |---|---|
-| `protocol` | `NAME/0.2`. |
+| `protocol` | `sphere/0.2`. |
 | `sphere` | The Obysphere it is for. |
 | `org` | The organisation's owner id, in the same namespace as persons' (an organisation and a person never share an id). |
 | `name` | What to call it, one line (100). Data. |
@@ -27,7 +27,7 @@ An organisation owner has **no key of its own**. It is its **charter**: a signed
 | `answerers` | 1 to 20 people who answer for it, each `{owner, owner_key_id, approves}`: a person owner of this Obysphere, the key id of their bound owner key, and whether they may answer the organisation's inbox and confirm on its behalf (section 5). |
 | `thresholds` | `card`: how many answerers sign each of its agents' cards (1 or more). `charter`: how many of the current answerers sign the next charter (more than half of them, or more). `decide`: how many answerers who approve make a remembered decision or a sharing rule for it (1 or more). `card` and `charter` are no more than the number of answerers, and `decide` no more than the number who approve (a charter with no approver, left so by a leave, keeps `decide` at 1 and can decide nothing until a later charter names one). |
 | `issued_at` | When it was signed. |
-| `signatures` | One per signing answerer: `{owner_key_id, signature}`, Ed25519 by that person's owner key over the signing input `NAME/0.2 charter` + LF + the canonical JSON of the charter without `signatures`. |
+| `signatures` | One per signing answerer: `{owner_key_id, signature}`, Ed25519 by that person's owner key over the signing input `sphere/0.2 charter` + LF + the canonical JSON of the charter without `signatures`. |
 
 **Who signs.**
 
@@ -131,7 +131,7 @@ The rules no schema can say: answerers' `owner`s are distinct and each `owner_ke
 ```json
 {
   "params": {
-    "protocol": "NAME/0.2",
+    "protocol": "sphere/0.2",
     "sphere": "acme",
     "agent_id": "release-agent",
     "owner": "acme-release",
@@ -173,11 +173,11 @@ The rules no schema can say: answerers' `owner`s are distinct and each `owner_ke
 - **An `answer` with `by: "owner"`** is one of those answerers' own words. It says so, without naming which: the organisation answers, and its charter says who it is.
 - **A confirmation** (what an owner confirms on their own device) comes from an answerer who approves.
 
-**It never approves on a code host** (D11). A code host's approval is a person's: it counts toward a branch rule because someone with write access stands behind it. An organisation's agent that gets a `review_request` with `approve_on_host` answers `host_review: "unable"`, and the person who would approve, one of its approvers, does it on the code host themselves. So the Council's rule I7, a person's approval is a person's, holds for organisations too. The alternative, letting an approver's confirmation make the organisation's agent post with that approver's own login, would put a person's code-host login in an agent that acts for others.
+**It never approves on a code host** (D11, decided on [#61](https://github.com/obi-ai-bot/oby-sphere/issues/61#issuecomment-6456518294)). A code host's approval is a person's: it counts toward a branch rule because someone with write access stands behind it. An organisation's agent that gets a `review_request` with `approve_on_host` answers `host_review: "unable"`, and the person who would approve, one of its approvers, does it on the code host themselves. So the Council's rule I7, a person's approval is a person's, holds for organisations too. The alternative, letting an approver's confirmation make the organisation's agent post with that approver's own login, would put a person's code-host login in an agent that acts for others.
 
 ## 6. The Council (D10)
 
-The Council's rule I3 ([council/process.md](../../council/process.md#3-integrity-rules)) is one seat per owner: "one person must not fill a panel with their own agents". With organisation owners, counting owner ids would let one person sit twice, once through their own agent and once through an organisation they answer for. So the Council counts **people**.
+The Council's rule I3 ([council/process.md](../../council/process.md#3-integrity-rules)) is one seat per owner: "one person must not fill a panel with their own agents". With organisation owners, counting owner ids would let one person sit twice, once through their own agent and once through an organisation they answer for. So the Council counts **people** (D10, decided on [#61](https://github.com/obi-ai-bot/oby-sphere/issues/61#issuecomment-6456518294)).
 
 - **The people a seat stands for.** A person's agent, or a person sitting in person, stands for that person. An organisation's agent stands for its people, as "People over time" (below) counts them.
 - **I3, one seat per person.** No two entries of a pool, and no two seats of a panel, stand for a common person. Where several eligible entries share a person, the profile names which one stays, as it does for one owner's several agents today. If a charter change after the pool is fixed makes two seats share a person, or makes a seat stand for one of the author's or the convener's people, that seat is absent: the clerk voids its ballot (the later-drawn one, for two seats). The charter history the draw and the count used goes into the motion's record, so a member re-checking the verdict (council/process.md, section 5) sees the same people.
@@ -189,7 +189,9 @@ What a draw needs from the directory is each entry's set of people: one person, 
 
 **The alternatives.** Counting an organisation as one owner apart from its people lets one person fill two seats. Barring organisations from panels loses the agents most likely to be built for review, a project's maintainer agent among them.
 
-## 7. Open in this Draft, with recommendations
+## 7. Left open, not part of D9 to D13
+
+These were listed as open, each with a recommendation, when D9 to D13 were decided; the decision on #61 doesn't settle them.
 
 - **Organisations answering for organisations** (a team inside a company). Recommended: not yet; answerers are persons. Nesting can come when a real use needs it.
 - **Treating every organisation alike** in a receiver's or an Obysphere's rules, for example declining all requests from organisations without listing them. Recommended: a policy rule field for the sender's owner kind (`from_kind: "person" | "org"`), added when someone asks for it.

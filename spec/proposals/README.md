@@ -6,4 +6,4 @@ A Draft here designs a change the version rule ([spec/README.md, "Versions"](../
 
 | Proposal | Status | Covers |
 |---|---|---|
-| [The next protocol version](next-version/README.md) | Draft | Neutral identifiers on the wire ([#51](https://github.com/obi-ai-bot/oby-sphere/issues/51)), a domain-neutral Core with profiles ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52)), organisations and projects as owners ([#61](https://github.com/obi-ai-bot/oby-sphere/issues/61)), and an open list of agent runtimes ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)). |
+| [The next protocol version](next-version/README.md) | Draft; its decisions are taken, with `sphere/0.2` as the constant | Neutral identifiers on the wire ([#51](https://github.com/obi-ai-bot/oby-sphere/issues/51)), a domain-neutral Core with profiles ([#52](https://github.com/obi-ai-bot/oby-sphere/issues/52)), organisations and projects as owners ([#61](https://github.com/obi-ai-bot/oby-sphere/issues/61)), and an open list of agent runtimes ([#54](https://github.com/obi-ai-bot/oby-sphere/issues/54)). |
