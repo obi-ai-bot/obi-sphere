@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join as joinPath } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  Member, Owner, SealKey, SigningKey, SphereApi, cardParams, emptyMemory, fromB64url, nowSeconds, parseJwt, parseInviteLink, seconds, timestamp, type MemberMemory,
+  Member, Owner, SealKey, SigningKey, SphereApi, cardParams, emptyMemory, fromB64url, nowSeconds, parseJwt, parseInviteLink, seconds, serverAudience, timestamp, type MemberMemory,
 } from "@obysphere/client";
 import { Connector, ConnectorError, VERSION, itemDigest, type Item, type MemberFile } from "./connector.ts";
 import { scanOutgoing } from "./scan.ts";
@@ -248,7 +248,9 @@ async function renew(home: Home, p: Parsed) {
   const days = Number(p.flag("--days") ?? "30");
   if (!(days >= 1 && days <= 30)) throw new ConnectorError("--days is 1 to 30");
   const key = await ownerKey(home, p);
-  const delegation = await new Owner(file.owner, key).delegation(file.sphere, file.obi, { lifetime: Math.floor(days * 86400) });
+  // Bound to the server too when it takes that (identity.md section 4.1).
+  const aud = (await new SphereApi(file.base).features()).includes("sphere_url_aud") ? serverAudience(file.base, file.sphere) : undefined;
+  const delegation = await new Owner(file.owner, key).delegation(file.sphere, file.obi, { lifetime: Math.floor(days * 86400), ...(aud ? { aud } : {}) });
   const exp = parseJwt(delegation)!.claims.exp as number;
   home.writeJson("member.json", { ...file, delegation, delegation_expires_at: timestamp(exp) });
   say(`A new delegation, good until ${timestamp(exp)}.`);

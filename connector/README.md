@@ -98,6 +98,8 @@ A review request may ask its receiver to approve the change on the code host (`a
 
 ## Where it keeps things
 
+With an Obysphere that takes them, the connector binds its assertions to the server (they name its URL) and its tokens to a key it makes for each run (DPoP, identity.md section 4.6), so a token copied out of a log opens nothing alone.
+
 The member's folder (`--home`, default `$OBYSPHERE_CONNECTOR_HOME` or `~/.obysphere-connector`), this user's only (folders 0700, files 0600; the connector refuses to run otherwise):
 
 | File | What |

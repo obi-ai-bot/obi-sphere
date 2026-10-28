@@ -26,7 +26,8 @@ import {
 } from "./envelope.ts";
 import { parseInviteLink, type InviteLink } from "./invite.ts";
 import type { JsonObject } from "./json.ts";
-import { actorAssertion } from "./jws.ts";
+import { actorAssertion, serverAudience } from "./jws.ts";
+import { DpopKey } from "./dpop.ts";
 import type { Owner } from "./owner.ts";
 import { SealKey, sealEnvelope, verifyAndOpen } from "./seal.ts";
 import { SphereApi, SphereError, type Delivery, type Fetch, type Member as DirectoryMember, type SendReceipt, type Signin } from "./sphere.ts";
@@ -179,6 +180,7 @@ export class Member {
   #delegation: string;
   memory: MemberMemory;
   #token: { value: string; until: number } | null = null;
+  #features: Promise<string[]> | null = null;
   #peers: Map<string, Peer> | null = null;
   #directory: DirectoryMember[] = [];
 
@@ -247,14 +249,28 @@ export class Member {
     memory.memberOwners[o.obi] = { owner: o.owner.id, owner_key: o.owner.key.publicKey };
     memory.cardSeq[o.obi] = 1;
     memory.cardKeys[o.obi] = [o.key.keyId];
-    const delegation = await o.owner.delegation(link.sphere, o.obi, o.scope ? { scope: o.scope } : {});
+    // Bound to the server too when it takes that (identity.md section 4.1); the delegation lives up to 30 days.
+    const aud = (await api.features().catch(() => [] as string[])).includes("sphere_url_aud") ? serverAudience(api.base, link.sphere) : undefined;
+    const delegation = await o.owner.delegation(link.sphere, o.obi, { ...(o.scope ? { scope: o.scope } : {}), ...(aud ? { aud } : {}) });
     return new Member({ api, sphere: link.sphere, obi: o.obi, owner: o.owner.id, key: o.key, sealKey: o.sealKey, delegation, memory });
   }
 
-  /** An access token: the one it has while it has more than a minute left, else a new exchange. */
+  /** The Obysphere's features, read once (`GET /v0.1/features`; none from an older one). */
+  async features(): Promise<string[]> {
+    return (this.#features ??= this.api.features());
+  }
+
+  /**
+   * An access token: the one it has while it has more than a minute left, else a new exchange. Its
+   * actor assertion names the server too when the Obysphere lists `sphere_url_aud`, and the token is
+   * bound to a key of this process (DPoP, identity.md section 4.6) when it lists `dpop`.
+   */
   async accessToken(): Promise<string> {
     if (this.#token && this.#token.until - 60 > nowSeconds()) return this.#token.value;
-    const t = await this.api.token({ subject: this.#delegation, actor: await actorAssertion(this.key, { obi: this.id, sphere: this.sphere }) });
+    const features = await this.features().catch(() => [] as string[]);
+    if (features.includes("dpop") && !this.api.dpop) this.api.dpop = await DpopKey.generate();
+    const aud = features.includes("sphere_url_aud") ? serverAudience(this.api.base, this.sphere) : undefined;
+    const t = await this.api.token({ subject: this.#delegation, actor: await actorAssertion(this.key, { obi: this.id, sphere: this.sphere, ...(aud ? { aud } : {}) }) });
     this.#token = { value: t.access_token, until: nowSeconds() + t.expires_in };
     return t.access_token;
   }

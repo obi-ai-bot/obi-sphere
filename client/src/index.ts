@@ -3,6 +3,7 @@
 
 export * from "./protocol.ts";
 export * from "./seal.ts";
+export * from "./dpop.ts";
 export * from "./text.ts";
 export * from "./invite.ts";
 export * from "./sphere.ts";

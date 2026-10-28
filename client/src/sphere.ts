@@ -14,6 +14,7 @@ import { parseStrict } from "./json.ts";
 import { matches, type SchemaName } from "./schemas.ts";
 import { sphereBase } from "./invite.ts";
 import { DataText } from "./text.ts";
+import type { DpopKey } from "./dpop.ts";
 
 export const TOKEN_EXCHANGE = "urn:ietf:params:oauth:grant-type:token-exchange";
 export const JWT_TYPE = "urn:ietf:params:oauth:token-type:jwt";
@@ -58,7 +59,7 @@ export interface Health {
 export interface TokenResponse {
   access_token: string;
   issued_token_type: string;
-  token_type: "Bearer";
+  token_type: "Bearer" | "DPoP";
   expires_in: number;
   scope: string;
 }
@@ -150,10 +151,19 @@ export interface SphereApiOptions {
   fetch?: Fetch;
 }
 
+/** A started sign-in (sphere-api.md section 3.1): the provider's page to open, and its `state`. */
+export interface SigninStarted {
+  url: string;
+  state: string;
+}
+
 /** The API of the Sphere server at `base` (its origin: `https://sphere.example.com`). */
 export class SphereApi {
   readonly base: string;
   readonly #fetch: Fetch;
+  /** A DPoP key (identity.md section 4.6): set it, and the token exchange sends a proof; the tokens it binds are sent as `DPoP` with a proof each time. */
+  dpop: DpopKey | null = null;
+  readonly #bound = new Set<string>();
 
   constructor(base: string, opts: SphereApiOptions = {}) {
     this.base = sphereBase(base);
@@ -168,7 +178,11 @@ export class SphereApi {
   ): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" };
     let body: string | undefined;
-    if (o.token) headers.Authorization = `Bearer ${o.token}`;
+    if (o.token && this.#bound.has(o.token) && this.dpop) {
+      headers.Authorization = `DPoP ${o.token}`;
+      headers.DPoP = await this.dpop.proof(method, this.base + path, o.token);
+    } else if (o.token) headers.Authorization = `Bearer ${o.token}`;
+    else if (path === "/v0.1/oauth/token" && this.dpop) headers.DPoP = await this.dpop.proof(method, this.base + path);
     if (o.form) {
       headers["Content-Type"] = "application/x-www-form-urlencoded";
       body = new URLSearchParams(o.form).toString();
@@ -233,11 +247,33 @@ export class SphereApi {
   }
 
   /** The token exchange (identity.md section 4.3): an owner's own token without `actor`, an Obi's with it. */
-  token(form: { subject: string; actor?: string; scope?: string }): Promise<TokenResponse> {
+  async token(form: { subject: string; actor?: string; scope?: string }): Promise<TokenResponse> {
     const f: Record<string, string> = { grant_type: TOKEN_EXCHANGE, subject_token: form.subject, subject_token_type: JWT_TYPE };
     if (form.actor) Object.assign(f, { actor_token: form.actor, actor_token_type: JWT_TYPE });
     if (form.scope) f.scope = form.scope;
-    return this.call("POST", "/v0.1/oauth/token", { form: f, schema: "wire/token.response" });
+    const t = await this.call<TokenResponse>("POST", "/v0.1/oauth/token", { form: f, schema: "wire/token.response" });
+    // Bound to the DPoP key only when the Obysphere says so: one that doesn't take DPoP issues a bearer token.
+    if (t.token_type === "DPoP") {
+      if (this.#bound.size >= 32) this.#bound.delete(this.#bound.values().next().value!);
+      this.#bound.add(t.access_token);
+    }
+    return t;
+  }
+
+  /** The sign-in providers this server offers (`GET /v0.1/signin`): their `name`s are data. An older server answers 404: then `google` only, if any. */
+  async signinProviders(): Promise<{ id: string; name: string }[]> {
+    return (await this.call<{ providers: { id: string; name: string }[] }>("GET", "/v0.1/signin", { schema: "wire/signin-providers.response" })).providers;
+  }
+
+  /**
+   * Starts a sign-in with `provider` for `ownerKey` (sphere-api.md section 3.1): the page to open in
+   * a browser, and the `state` to match the code that comes back. `returnTo` is where the browser
+   * comes back, a place on this machine the server knows; send it only to a server that lists
+   * `signin_providers` in its features.
+   */
+  signinStart(provider: string, ownerKey: string, returnTo?: string): Promise<SigninStarted> {
+    if (!/^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/.test(provider)) throw new Error(`${provider} is not a provider id`);
+    return this.call("POST", `/v0.1/signin/${provider}`, { json: { owner_key: ownerKey, ...(returnTo !== undefined ? { return_to: returnTo } : {}) }, schema: "wire/signin.response", ok: [201] });
   }
 
   sphere(token: string, sphere: string): Promise<SphereInfo> {

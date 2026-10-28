@@ -26,13 +26,13 @@ export class Owner {
   }
 
   /** A delegation to `obi` in `sphere` (identity.md 4.1): the owner lets that Obi act for them, with these scopes, for at most 30 days. */
-  delegation(sphere: string, obi: string, o: { scope?: string; lifetime?: number } = {}): Promise<string> {
-    return ownerAssertion(this.key, { owner: this.id, sphere, scope: o.scope ?? DEFAULT_OBI_SCOPES, mayAct: obi, lifetime: o.lifetime });
+  delegation(sphere: string, obi: string, o: { scope?: string; lifetime?: number; aud?: string } = {}): Promise<string> {
+    return ownerAssertion(this.key, { owner: this.id, sphere, scope: o.scope ?? DEFAULT_OBI_SCOPES, mayAct: obi, lifetime: o.lifetime, ...(o.aud ? { aud: o.aud } : {}) });
   }
 
   /** The owner's own token for `sphere`, from a new single-use assertion. */
-  async token(api: SphereApi, sphere: string, scope = ADMIN_SCOPES): Promise<TokenResponse> {
-    return api.token({ subject: await ownerAssertion(this.key, { owner: this.id, sphere, scope }) });
+  async token(api: SphereApi, sphere: string, scope = ADMIN_SCOPES, o: { aud?: string } = {}): Promise<TokenResponse> {
+    return api.token({ subject: await ownerAssertion(this.key, { owner: this.id, sphere, scope, ...(o.aud ? { aud: o.aud } : {}) }) });
   }
 
   /** A card for one of this owner's Obis, signed with this owner's key. */
