@@ -11,7 +11,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  ACTION_TYPES, CARD_EXTENSION_URI, PROTOCOL, appendEntry, b64url, canonicalize, entryHash, findingId,
+  ACTION_TYPES, CARD_EXTENSION_URI, PROTOCOL, appendEntry, b64url, canonicalize, cardSigningInput, entryHash, findingId, signBytes,
   keyFromSeedString, sha256, signCard, signEnvelope,
   channelKeys, sealFrame, signHello, x25519FromPrivate, x25519Shared,
   deriveSealedSchemas, deriveTextPaths, openBody, sealEnvelope, sealKey, sealKeyIdOf, sealNonce, SEAL_INFO_PREFIX,
@@ -501,6 +501,18 @@ export function buildFixtures() {
   cardTampered.capabilities.extensions[0].params.accepts = ["review_request", "question", "handoff"];
   cardTampered.skills.push({ id: "handoff", name: "Take work", description: "Takes work.", tags: ["obi-action"] });
   cardCase("invalid-card-changed-after-signing", "accepts was widened after the owner signed.", cardTampered, "reject", "bad_signature");
+  // A header its owner signed, read strictly (protocol.md section 2): a member twice, or bytes that
+  // aren't UTF-8, make it no JSON at all.
+  const signedWithHeader = (card, privateKey, headerBytes) => {
+    const { signatures, ...rest } = card;
+    const protectedHeader = b64url(headerBytes);
+    return { ...rest, signatures: [{ protected: protectedHeader, signature: signBytes(privateKey, cardSigningInput(rest, protectedHeader)) }] };
+  };
+  const headerFor = (kids) => Buffer.from(`{"alg":"EdDSA",${kids.map((k) => `"kid":"${k}"`).join(",")},"typ":"JOSE"}`, "utf8");
+  cardCase("invalid-card-header-repeated-member", "A header its owner signed that names kid twice, the owner key's id last: an object with a member twice isn't JSON.", signedWithHeader(cardFor("obi-a", "owner-a", A, OA), OA.privateKey, headerFor([A.keyId, OA.keyId])), "reject", "card_invalid");
+  const notUtf8 = headerFor([OA.keyId]);
+  notUtf8[notUtf8.indexOf("JOSE")] = 0xff;
+  cardCase("invalid-card-header-not-utf8", "A header its owner signed with a byte that isn't UTF-8 in it.", signedWithHeader(cardFor("obi-a", "owner-a", A, OA), OA.privateKey, notUtf8), "reject", "card_invalid");
   cardCase("invalid-card-signed-by-other-owner", "Signed by owner-b's key while naming owner-a's.", signCard(cardFor("obi-a", "owner-a", A, OA), OB.privateKey, OA.keyId), "reject", "bad_signature");
   cardCase("invalid-card-not-the-bound-owner-key", "Signed correctly, but by a key the Sphere did not bind for owner-a.", signCard(cardFor("obi-a", "owner-a", A, OB), OB.privateKey, OB.keyId), "reject", "card_invalid");
   const wrongKid = cardFor("obi-a", "owner-a", A, OA);
