@@ -30,32 +30,36 @@ export interface Caller {
   scopes: Set<string>;
 }
 
-const PRESENTED = /^(Bearer|DPoP) ([A-Za-z0-9._~-]{1,512})$/;
+/** The scheme is case-insensitive (RFC 9110 section 11.1). */
+const PRESENTED = /^(Bearer|DPoP) ([A-Za-z0-9._~-]{1,512})$/i;
 
 export const tokenHash = (token: string): Promise<string> => sha256Hex(utf8(token));
 
 /**
- * This server's origin: SPHERE_URL's when it is set, else the request's (on Workers, a host
- * Cloudflare routes to this Worker). With `known`, null when SPHERE_URL is set but empty: the
- * server doesn't know its own address, so nothing that must name it is taken.
+ * This server's origin: SPHERE_URL's when it is set; on a Worker, which leaves it unset, the
+ * request's (Cloudflare routes only the Worker's own hosts to it). Null when SPHERE_URL is set but
+ * empty or not a URL (the Node build without one): the server doesn't know its own address, so
+ * nothing that must name it is taken, and it is never read from a request's Host.
  */
-export function ownOrigin(env: Env, request: Request, known = false): string | null {
-  const fromRequest = new URL(request.url).origin;
-  if (env.SPHERE_URL === undefined) return fromRequest;
+export function ownOrigin(env: Env, request: Request): string | null {
+  if (env.SPHERE_URL === undefined) return new URL(request.url).origin;
   try {
-    return env.SPHERE_URL ? new URL(env.SPHERE_URL).origin : known ? null : fromRequest;
+    return env.SPHERE_URL ? new URL(env.SPHERE_URL).origin : null;
   } catch {
-    return known ? null : fromRequest;
+    return null;
   }
 }
 
-/** The URL a DPoP proof for `request` must name: this server's origin and the request's path. */
-export const ownUrl = (env: Env, request: Request): string => ownOrigin(env, request)! + new URL(request.url).pathname;
+/** The URL a DPoP proof for `request` must name: this server's origin and the request's path; null when it doesn't know its origin. */
+export function ownUrl(env: Env, request: Request): string | null {
+  const origin = ownOrigin(env, request);
+  return origin === null ? null : origin + new URL(request.url).pathname;
+}
 
 /** The access token in `Authorization`, as `Bearer <token>` or, for a token bound to a key, `DPoP <token>`; null for neither. */
 export function presented(request: Request): { scheme: "Bearer" | "DPoP"; token: string } | null {
   const m = PRESENTED.exec(request.headers.get("Authorization") ?? "");
-  return m ? { scheme: m[1] as "Bearer" | "DPoP", token: m[2]! } : null;
+  return m ? { scheme: m[1]!.toLowerCase() === "dpop" ? "DPoP" : "Bearer", token: m[2]! } : null;
 }
 
 /**
@@ -66,7 +70,7 @@ export function presented(request: Request): { scheme: "Bearer" | "DPoP"; token:
  */
 export async function bearer(request: Request, env: Env, sphere: SphereRow | null, nowS: number): Promise<Caller> {
   const given = presented(request);
-  if (!given) throw apiError("unauthorized", "an access token is needed: Authorization: Bearer <token>");
+  if (!given) throw new ApiError("unauthorized", "an access token is needed: Authorization: Bearer <token>", [], undefined, CHALLENGE);
   const row = await env.DB.prepare(
     `SELECT t.subject, t.actor, t.scope, t.expires_at_s, t.revoked, t.sphere, t.jkt, m.status AS actor_status
        FROM tokens t LEFT JOIN members m ON m.sphere = t.sphere AND m.obi = t.actor
@@ -74,13 +78,15 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow | nul
   )
     .bind(await tokenHash(given.token))
     .first<{ subject: string; actor: string | null; scope: string; expires_at_s: number; revoked: number; sphere: string; jkt: string | null; actor_status: string | null }>();
-  if (!row || row.revoked || row.expires_at_s <= nowS) throw apiError("unauthorized", "the access token is unknown, expired or revoked");
+  if (!row || row.revoked || row.expires_at_s <= nowS) throw new ApiError("unauthorized", "the access token is unknown, expired or revoked", [], undefined, { "WWW-Authenticate": 'Bearer error="invalid_token", DPoP error="invalid_token", algs="EdDSA ES256"' });
   // A token bound to a key (identity.md 4.6) works only with a new proof from that key; a bearer
   // token only as Bearer.
   if (row.jkt === null && given.scheme === "DPoP") throw dpopRefused("invalid_token", "this access token isn't bound to a key: Authorization: Bearer <token>");
   if (row.jkt !== null) {
     if (given.scheme !== "DPoP") throw dpopRefused("invalid_token", "this access token is bound to a key: Authorization: DPoP <token>, with a DPoP proof");
-    const proof = await checkProof(request.headers.get("DPoP"), request.method, ownUrl(env, request), nowS, { accessToken: given.token });
+    const url = ownUrl(env, request);
+    if (url === null) throw dpopRefused("invalid_dpop_proof", "this server doesn't know its own address (SPHERE_URL), so it takes no DPoP proof");
+    const proof = await checkProof(request.headers.get("DPoP"), request.method, url, nowS, { accessToken: given.token });
     if (typeof proof === "string") throw dpopRefused("invalid_dpop_proof", proof);
     if (proof.jkt !== row.jkt) throw dpopRefused("invalid_dpop_proof", "the DPoP proof is signed by another key than the token's");
     // A call that changes something, or opens a socket, takes each proof once (identity.md 4.6).
@@ -100,6 +106,9 @@ export async function bearer(request: Request, env: Env, sphere: SphereRow | nul
   if (row.actor !== null && row.actor_status !== "active") throw apiError("unauthorized", "the token's Obi is no longer an active member");
   return { sphere: row.sphere, subject: row.subject, actor: row.actor, scopes: new Set(row.scope.split(" ")) };
 }
+
+/** The challenge on a 401 with no token: either scheme (RFC 6750 section 3, RFC 9449 section 7.1). */
+const CHALLENGE = { "WWW-Authenticate": 'Bearer, DPoP algs="EdDSA ES256"' };
 
 /** A 401 for a DPoP token or proof, with the challenge RFC 9449 section 7.1 asks for. */
 const dpopRefused = (error: "invalid_token" | "invalid_dpop_proof", message: string) =>

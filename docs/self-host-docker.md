@@ -67,7 +67,7 @@ docker compose start sphere
 - **Nothing leaves the server:** no telemetry. Its log holds startup lines and the claim link, never a token or a message.
 - **Not served here:** job channels, which compute sharing used. Their path answers 404.
 - **Sign-in** works as on Cloudflare: set `GOOGLE_CLIENT_ID`, or `SIGNIN_PROVIDERS` for any other OpenID Connect provider (as JSON, on one line), and `CREATOR_WORKSPACES` in `.env` ([run-your-own.md](run-your-own.md#optional-let-your-team-create-obyspheres)), then `docker compose up -d`. `SIGNIN_RETURN_SCHEMES` names more clients' schemes a sign-in may return to.
-- **Its own address** is `SPHERE_URL`, which compose sets from `SPHERE_DOMAIN`: never the `Host` a request carries. An assertion that names this server's URL (`aud`) must name that one; without `SPHERE_URL`, only `obi-sphere:<id>` names an Obysphere here.
+- **Its own address** is `SPHERE_URL`, which compose sets from `SPHERE_DOMAIN`: never the `Host` a request carries. An assertion that names this server's URL (`aud`), a DPoP proof and a sign-in's callback must name that one; without `SPHERE_URL` the server signs nobody in and takes no DPoP proof or URL `aud`, only `obi-sphere:<id>`.
 - **The phone relay**, the optional extension that lets a member's phone reach their agent, is on; `PHONE_RELAY=off` in `.env` turns it off ([run-your-own.md](run-your-own.md#optional-turn-off-the-phone-relay)). Any other value turns it off too, with a line in the log.
 
 ## The claim

@@ -4,7 +4,8 @@
 // it keeps is under SPHERE_DATA: the database and, once claimed, the operator token's hash.
 //
 // Environment: PORT (8787), SPHERE_DATA (./data; /data in the image), SPHERE_URL (its public
-// address, only for the claim link it prints), and the Worker's own settings: SPHERE_OPERATOR_TOKEN,
+// address: the claim link it prints, and its own origin, which sign-in, DPoP and an assertion's
+// URL aud need; never read from a request), and the Worker's own settings: SPHERE_OPERATOR_TOKEN,
 // GOOGLE_CLIENT_ID, SIGNIN_PROVIDERS, CREATOR_WORKSPACES, SPHERE_CREATE_LIMIT, PHONE_RELAY (src/env.ts).
 //
 // Claiming: with no SPHERE_OPERATOR_TOKEN and no claim yet, it prints a one-time claim link to its
@@ -64,7 +65,7 @@ const env: Record<string, unknown> = {
   PHONE_RELAY: setting("PHONE_RELAY"),
   SIGNIN_RETURN_SCHEMES: setting("SIGNIN_RETURN_SCHEMES"),
   // Its own address, never read from a request's Host, which a client may set here. Without
-  // SPHERE_URL, an assertion's aud can't name this server's URL, only `obi-sphere:<id>`.
+  // SPHERE_URL it signs nobody in and takes no DPoP proof or URL aud, only `obi-sphere:<id>`.
   SPHERE_URL: setting("SPHERE_URL") ?? "",
 };
 env.DOORBELLS = namespace(Doorbell, env);

@@ -14,6 +14,7 @@ import { utf8 } from "./protocol/json.ts";
 import { schemaErrors } from "./protocol/schemas.ts";
 
 const SIGN_IN_SECONDS = 10 * 60;
+const MAX_PROVIDERS = 32;
 const TOKEN_SKEW_SECONDS = 60;
 const MAX_WAITING = 1000;
 /// Where the browser goes back to when the client names nowhere: Oby's scheme, from before `return_to`.
@@ -24,6 +25,8 @@ const SLUG = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
 const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 /** Hosts an issuer, or a `return_to`, may name over plain http: this machine only. */
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
+/** Schemes a browser handles itself, never a client's: an operator can't name them. */
+const BROWSER_SCHEMES = new Set(["http", "https", "ws", "wss", "javascript", "data", "file", "blob", "about", "intent", "ftp", "mailto", "tel", "view-source"]);
 /** Oby's scheme, where a sign-in returns when the client names nowhere: always one this server knows. */
 const OBY_SCHEME = "obi-sphere";
 
@@ -88,15 +91,15 @@ function provider(entry: unknown): Provider | string {
   const unknown = Object.keys(e).find((k) => !known.includes(k));
   if (unknown) return `an unknown setting, ${unknown}`;
   if (typeof e.id !== "string" || !SLUG.test(e.id)) return "id is 1 to 32 lower-case letters, digits and inner hyphens";
-  if (typeof e.name !== "string" || !/^[^\u0000-\u001f\u007f]{1,100}$/.test(e.name)) return "name is 1 to 100 characters on one line";
+  if (typeof e.name !== "string" || !/^[^\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069]+$/.test(e.name) || [...e.name].length > 100) return "name is 1 to 100 characters on one line";
   if (!webUrl(e.issuer)) return "issuer is an https URL";
   if (typeof e.client_id !== "string" || !/^[\x21-\x7e]{1,512}$/.test(e.client_id)) return "client_id is 1 to 512 printable characters";
   if (e.domain !== undefined && (typeof e.domain !== "string" || !DOMAIN.test(e.domain))) return "domain is a lower-case domain";
   if (e.domain_claim !== undefined && (typeof e.domain_claim !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(e.domain_claim))) return "domain_claim names a claim";
   if (e.domain !== undefined && e.domain_claim !== undefined) return "domain and domain_claim don't go together";
   if (e.email_verified !== undefined && typeof e.email_verified !== "boolean") return "email_verified is true or false";
-  // `google` is Google's id, and its accounts (`google:<sub>`) are Google's: no other issuer takes it.
-  if (e.id === "google" && !google("").issuers.includes(e.issuer as string)) return "the id google is Google's own";
+  // `google` is Google's, set up by GOOGLE_CLIENT_ID with Google's own endpoints and checks.
+  if (e.id === "google") return "the id google is GOOGLE_CLIENT_ID's";
   // A domain is every account's only on an issuer that signs in no one else; these sign in anyone.
   if (e.domain !== undefined && MULTI_TENANT.some((m) => (e.issuer as string).startsWith(m))) return "domain can't be every account's on an issuer that signs in anyone: use domain_claim";
   return {
@@ -126,8 +129,9 @@ export function providers(env: Env): Provider[] {
     else list.push(p);
   }
   const client = env.GOOGLE_CLIENT_ID?.trim();
-  if (client && !list.some((p) => p.id === "google")) list.unshift(google(client));
-  return list;
+  if (client) list.unshift(google(client));
+  if (list.length > MAX_PROVIDERS) console.warn(`sign-in: only the first ${MAX_PROVIDERS} providers are taken`);
+  return list.slice(0, MAX_PROVIDERS);
 }
 
 /** Whether this Obysphere server signs anyone in (an invitation with a `domain` needs it). */
@@ -279,17 +283,21 @@ export function returnTo(text: string, env: Env): string | null {
     const url = webUrl(text);
     return url && url.protocol === "http:" && LOOPBACK.has(url.hostname) ? url.href : null;
   }
+  // Oby's scheme only to its sign-in page, where Oby takes a code back.
+  if (scheme === OBY_SCHEME) return text === BACK ? text : null;
   return returnSchemes(env).has(scheme) ? text : null;
 }
 
 /** The schemes a sign-in may return to: Oby's, the listed clients', and SIGNIN_RETURN_SCHEMES (comma-separated). */
 export function returnSchemes(env: Env): Set<string> {
-  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9+.-]*$/.test(x) && x !== "http" && x !== "https");
+  const named = (env.SIGNIN_RETURN_SCHEMES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => /^[a-z][a-z0-9+.-]*$/.test(x) && !BROWSER_SCHEMES.has(x));
   return new Set([OBY_SCHEME, ...CLIENTS.flatMap((c) => (c.scheme ? [c.scheme] : [])), ...named]);
 }
 
 export async function startSignIn(request: Request, env: Env, deps: Deps, providerId: string): Promise<Response> {
   const p = named(env, providerId);
+  const origin = ownOrigin(env, request);
+  if (origin === null) throw apiError("forbidden", "this server doesn't know its own address (SPHERE_URL), so it signs nobody in");
   const body = await readJson(request);
   const errors = schemaErrors("signinRequest", body);
   if (errors.length) throw apiError("bad_request", "the body doesn't match signin.request", errors);
@@ -310,7 +318,7 @@ export async function startSignIn(request: Request, env: Env, deps: Deps, provid
   const url = new URL(endpoints.authorize);
   for (const [k, v] of Object.entries({
     client_id: p.client_id,
-    redirect_uri: `${ownOrigin(env, request)!}/v0.1/signin/${p.id}/callback`,
+    redirect_uri: `${origin}/v0.1/signin/${p.id}/callback`,
     response_type: "id_token",
     response_mode: "form_post",
     scope: "openid email",
@@ -342,8 +350,10 @@ export async function finishSignIn(request: Request, env: Env, deps: Deps, provi
     .bind(state)
     .first<{ nonce_sha256: string; provider: string; return_to: string | null; account: string | null; expires_at_s: number }>();
   // A sign-in another provider's callback finishes, or one not waiting, fails; its code goes nowhere.
-  const where = row?.provider === p.id ? (row.return_to ?? BACK) : BACK;
-  if (!row || row.provider !== p.id || row.account !== null || row.expires_at_s <= nowS || !token) return to(where, state, "error=failed");
+  const waiting = row !== null && row.provider === p.id && row.account === null && row.expires_at_s > nowS;
+  // Only a waiting sign-in's browser goes back to its return_to; any other, to Oby's scheme.
+  const where = waiting ? (row.return_to ?? BACK) : BACK;
+  if (!waiting || !token) return to(where, state, "error=failed");
   let account: { sub: string; workspace: string | null };
   try {
     const issuers = deps.issuers ?? shared;

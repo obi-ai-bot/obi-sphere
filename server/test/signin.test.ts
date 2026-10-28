@@ -4,6 +4,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it, vi } from "vitest";
 import { handle } from "../src/app";
+import { Issuers } from "../src/signin";
 import { b64url } from "../src/protocol/crypto";
 import { utf8 } from "../src/protocol/json";
 import { BASE, GOOGLE_KEY, IDP, IDP_ED_KEY, IDP_KEY, ISSUERS, OPERATOR, World, expectSchema, makeCall, makeCard, newKey, type Key } from "./helpers";
@@ -396,6 +397,64 @@ describe("signing in with any OpenID Connect provider", () => {
     ]);
     expect((await makeCall(w.clock, e as never)("GET", "/v0.1/signin")).body).toEqual({ providers: [{ id: "google", name: "Google" }] });
     vi.restoreAllMocks();
+  });
+
+  it("sends a finished or expired sign-in's browser to Oby's scheme, never its return_to", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    const done = await signInWith(w, e, await newKey(), { returnTo: "http://127.0.0.1:53682/cb" });
+    expect(done.location).toMatch(/^http:\/\/127\.0\.0\.1:53682\/cb\?state=.*&code=/);
+    const call = makeCall(w.clock, e as never);
+    const post = (state: string) => call("POST", "/v0.1/signin/acme/callback", { raw: new URLSearchParams({ state, id_token: "x.y.z" }).toString(), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+    // Finished already: a second post goes to obi-sphere://, with no code.
+    expect((await post(done.state)).headers.get("Location")).toMatch(/^obi-sphere:\/\/signin\?state=.*&error=failed$/);
+    // Expired while waiting.
+    const start = await call("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey, return_to: "http://127.0.0.1:53682/cb" } });
+    w.clock.advance(601);
+    expect((await post(start.body.state)).headers.get("Location")).toMatch(/^obi-sphere:\/\/signin\?state=.*&error=failed$/);
+  });
+
+  it("takes Oby's scheme only for its sign-in page, and no browser scheme from the operator", async () => {
+    const w = new World();
+    const call = makeCall(w.clock, withProviders([ACME], { SIGNIN_RETURN_SCHEMES: "javascript, data, com.example.client" }) as never);
+    const key = await newKey();
+    for (const returnTo of ["obi-sphere://join/attacker.example", "obi-sphere://claim/attacker.example", "javascript:alert(1)", "data:text/html,x"]) {
+      expect((await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: returnTo } })).status, returnTo).toBe(400);
+    }
+    expect((await call("POST", "/v0.1/signin/acme", { body: { owner_key: key.publicKey, return_to: "obi-sphere://signin" } })).status).toBe(201);
+  });
+
+  it("refuses an ID token issued in the future, and asks to pick an account only at Google", async () => {
+    const w = new World();
+    const e = withProviders([ACME]);
+    expect((await signInWith(w, e, await newKey(), { claims: { iat: w.clock.s + 61 } })).location).toMatch(/error=failed$/);
+    const acme = await makeCall(w.clock, e as never)("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } });
+    expect(new URL(acme.body.url).searchParams.has("prompt")).toBe(false);
+    const google = await makeCall(w.clock, e as never)("POST", "/v0.1/signin/google", { body: { owner_key: (await newKey()).publicKey } });
+    expect(new URL(google.body.url).searchParams.get("prompt")).toBe("select_account");
+  });
+
+  it("reads an issuer that can't be reached at most once a minute", async () => {
+    const w = new World();
+    let fetches = 0;
+    const down = new Issuers(async () => {
+      fetches++;
+      return new Response("down", { status: 503 });
+    });
+    const e = withProviders([ACME]);
+    const start = () => handle(new Request(`${BASE}/v0.1/signin/acme`, { method: "POST", body: JSON.stringify({ owner_key: OWNER_KEY }) }), e as never, { now: w.clock.now, issuers: down });
+    const OWNER_KEY = (await newKey()).publicKey;
+    for (let i = 0; i < 3; i++) expect((await start()).status).toBe(429);
+    expect(fetches).toBe(1);
+    w.clock.advance(61);
+    await start();
+    expect(fetches).toBe(2);
+  });
+
+  it("signs nobody in when the server doesn't know its own address", async () => {
+    const w = new World();
+    const r = await makeCall(w.clock, withProviders([ACME], { SPHERE_URL: "" }) as never)("POST", "/v0.1/signin/acme", { body: { owner_key: (await newKey()).publicKey } });
+    expect(r.status).toBe(403);
   });
 
   it("is 403 forbidden for a provider the server doesn't have", async () => {

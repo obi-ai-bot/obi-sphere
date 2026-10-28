@@ -125,7 +125,7 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   // `aud` names the Obysphere: `obi-sphere:<id>`, or its own URL, which binds the assertion to this
   // server (identity.md 4.1). Both assertions name the same one.
   // This server's own origin, as configured; null when it doesn't know it, and then only `obi-sphere:<id>` names it.
-  const origin = ownOrigin(env, request, true);
+  const origin = ownOrigin(env, request);
   const sphereId = audSphere(sc.aud, origin);
   if (sphereId === null) throw new OAuthError("invalid_request", "subject_token's aud names an Obysphere on another server");
   if (ac && audSphere(ac.aud, origin) !== sphereId) throw new OAuthError("invalid_request", "the two assertions are for different Spheres");
@@ -182,7 +182,8 @@ async function exchange(request: Request, env: Env, deps: Deps): Promise<Respons
   let proof: Proof | null = null;
   const dpop = request.headers.get("DPoP");
   if (dpop !== null) {
-    const checked = await checkProof(dpop, "POST", ownUrl(env, request), now, { behind: TOKEN_PROOF_BEHIND });
+    const url = ownUrl(env, request);
+    const checked = url === null ? "this server doesn't know its own address (SPHERE_URL), so it takes no DPoP proof" : await checkProof(dpop, "POST", url, now, { behind: TOKEN_PROOF_BEHIND });
     if (typeof checked === "string") throw new OAuthError("invalid_dpop_proof", checked);
     proof = checked;
   }

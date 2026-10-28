@@ -1,7 +1,7 @@
 // Spheres (spec/sphere-api.md section 3) and health: creating one, reading it, and what its admins
 // change afterwards (its name and picture, who else administers it, and deleting it).
 
-import { bearer, requireOperator, requireOwnerToken, requireScope, type Caller } from "../auth.ts";
+import { bearer, ownOrigin, requireOperator, requireOwnerToken, requireScope, type Caller } from "../auth.ts";
 import { constraintFailure, getOwner, getSphere, requireSphere, unforeseen, type SphereRow } from "../db.ts";
 import type { Deps, Env } from "../env.ts";
 import { apiError, json, readBody, readJson } from "../http.ts";
@@ -16,16 +16,15 @@ import { phoneRelay } from "./relays.ts";
 
 export const health = (): Response => json(200, { ok: true, protocol: PROTOCOL, seal: true });
 
-/** What this server always takes: tokens bound to a key, its sign-in providers' list, and assertions bound to it (identity.md 4.1 and 4.6, sphere-api.md 3.1). */
-const ALWAYS = ["dpop", "signin_providers", "sphere_url_aud"];
-
 /**
  * `GET /v0.1/features`: the additions to obi/0.1 this Obysphere takes (src/protocol/features.ts)
  * and the optional extensions it offers, in code-point order (sphere-api.md section 2). Not in
  * health, which implementations from before check against its closed schema.
  */
-export function features(_request: Request, env: Env): Response {
-  return json(200, { features: [...FEATURES, ...ALWAYS, ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
+export function features(request: Request, env: Env): Response {
+  // DPoP and the URL form of aud need this server to know its own address (SPHERE_URL on the Node build).
+  const known = ownOrigin(env, request) !== null;
+  return json(200, { features: [...FEATURES, "signin_providers", ...(known ? ["dpop", "sphere_url_aud"] : []), ...(phoneRelay(env) ? ["phone_relay"] : [])].sort() });
 }
 
 /** Where a client's author reads the invite link's format (spec/sphere-api.md section 2.1). */
@@ -127,7 +126,7 @@ export async function createSphere(request: Request, env: Env, deps: Deps): Prom
   let signin: SignIn | null = null;
   if (signedIn) {
     signin = await checkSignIn(env.DB, req.signin!, req.admin.owner_key, Math.floor(deps.now() / 1000));
-    if (!signin.workspace || !creatorWorkspaces(env).includes(signin.workspace)) throw apiError("forbidden", "this account's Workspace may not create Spheres here");
+    if (!signin.workspace || !creatorWorkspaces(env).includes(signin.workspace)) throw apiError("forbidden", "this account's domain may not create Obyspheres here");
     // ponytail: count, then insert; two creates racing can pass the limit by one each.
     const admin = await env.DB.prepare("SELECT COUNT(*) AS n FROM spheres s JOIN owners o ON o.sphere = s.id AND o.owner = s.admin_owner WHERE o.account = ?1")
       .bind(signin.account).first<{ n: number }>();

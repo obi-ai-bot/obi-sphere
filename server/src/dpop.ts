@@ -66,9 +66,10 @@ export async function checkProof(header: string | null, method: string, url: str
   if (!(await crypto.subtle.verify(alg.verifyAs, key, fromB64url(signature), utf8(`${head}.${body}`)))) return "the DPoP proof's signature doesn't verify";
   if (typeof claims.jti !== "string" || !/^[\x21-\x7e]{1,128}$/.test(claims.jti)) return "a DPoP proof has a jti";
   if (claims.htm !== method) return `the DPoP proof is for another method than ${method}`;
+  if (typeof claims.htu !== "string") return "a DPoP proof's htu is a URL";
   let htu: URL;
   try {
-    htu = new URL(String(claims.htu));
+    htu = new URL(claims.htu);
   } catch {
     return "the DPoP proof's htu isn't a URL";
   }

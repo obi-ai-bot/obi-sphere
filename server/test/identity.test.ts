@@ -178,6 +178,38 @@ describe("a proof's htu", () => {
   });
 });
 
+describe("DPoP's edges", () => {
+  it("gives RFC 8037's thumbprint for its example key", async () => {
+    expect(await thumbprint({ crv: "Ed25519", kty: "OKP", x: "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo" })).toBe("kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k");
+  });
+
+  it("refuses an htu that isn't a string, and takes the scheme in any case", async () => {
+    const key = await dpopKey();
+    const now = Math.floor(Date.parse("2026-10-14T12:00:00Z") / 1000);
+    expect(typeof (await checkProof(await key.proof("GET", ["https://sphere.example.com/x"] as never), "GET", "https://sphere.example.com/x", now))).toBe("string");
+    const w = new World();
+    await w.create();
+    const token = await w.ownerToken();
+    expect((await w.call("GET", "/v0.1/spheres/e2e", { headers: { Authorization: `bearer ${token}` } })).status).toBe(200);
+    expect((await w.call("GET", "/v0.1/spheres/e2e", { headers: {} })).headers.get("WWW-Authenticate")).toBe('Bearer, DPoP algs="EdDSA ES256"');
+  });
+
+  it("takes no proof, and lists neither dpop nor sphere_url_aud, where the server doesn't know its own address", async () => {
+    const w = new World();
+    await w.create();
+    const unknown = makeCall(w.clock, { ...env, SPHERE_URL: "" } as never);
+    const listed = (await unknown("GET", "/v0.1/features")).body.features as string[];
+    expect(listed).not.toContain("dpop");
+    expect(listed).not.toContain("sphere_url_aud");
+    expect(listed).toContain("signin_providers");
+    const key = await dpopKey();
+    const owner = await w.ownerKey("wellington");
+    const claims = { iss: "wellington", sub: "wellington", aud: "obi-sphere:e2e", iat: w.clock.s, exp: w.clock.s + 300, jti: crypto.randomUUID(), scope: "admin" };
+    const r = await unknown("POST", "/v0.1/oauth/token", { raw: form({ grant_type: TOKEN_EXCHANGE, subject_token: await signJwt(claims, owner), subject_token_type: JWT_TYPE }), headers: { ...FORM, DPoP: await key.proof("POST", TOKEN_URL) } });
+    expect(r.body.error).toBe("invalid_dpop_proof");
+  });
+});
+
 describe("assertions bound to one server", () => {
   it("takes the Obysphere's own URL as aud, and refuses another server's", async () => {
     const w = new World();
