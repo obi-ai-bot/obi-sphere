@@ -5,7 +5,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { InviteLinkError, formatInviteLink, parseInviteLink, sphereBase } from "../src/index.ts";
+import { InviteLinkError, formatInviteLink, openedInviteLink, parseInviteLink, sphereBase } from "../src/index.ts";
 
 const ID = "9187a87a-3126-424c-8861-8811bba1a5ec";
 const SECRET = "A".repeat(43);
@@ -20,6 +20,7 @@ test("the spec's invite-link vectors: every valid link reads as it says, every i
     assert.deepEqual(parseInviteLink(formatInviteLink(l)), l, `${c.name}, written and read again`);
   }
   for (const c of v.invalid) assert.throws(() => parseInviteLink(c.link), InviteLinkError, c.name);
+  for (const c of v.opened ?? []) assert.equal(openedInviteLink(c.opened, v.scheme), c.link ?? null, c.name);
 });
 
 test("an open invitation's link", () => {

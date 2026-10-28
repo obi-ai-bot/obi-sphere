@@ -1,17 +1,19 @@
-// Invite links: `<base>/join#<fragment>` (spec/sphere-api.md section 2.1, "Invite links", #62),
-// which Oby already writes and reads.
+// Invite links: `<base>/join#<fragment>` (spec/sphere-api.md section 2.1, "Invite links"), read
+// exactly as the spec's reference reader reads them (spec/conformance/invite-links.mjs), against
+// the same known answers (spec/conformance/invite-link-vectors.json).
 //
-// The fragment is `key=value` pairs joined by `&`, each key and value percent-encoded as UTF-8:
-// split on `&` and each part at its first `=`, then percent-decode; `+` is a plus, never a space.
+// The link is taken as written: an http(s) origin whose host is ASCII as written (DNS labels, an
+// IPv4 address or [IPv6]), `/join`, and the fragment; https, or http only for this machine. The
+// fragment is `key=value` pairs joined by `&`, each part split at its first `=` and
+// percent-decoded as UTF-8 (`+` is a plus). A key's first occurrence counts; then an empty value
+// is as if left out, and so is a `name` or `by` that isn't one line of 1 to 100 characters.
 // `sphere` (a slug), `id` (a lower-case UUID) and `secret` (43 base64url characters) are required;
-// `for` and `obi` (slugs) come together, for a named invitation, or not at all; `domain` matches the
-// domain pattern. A value that breaks its pattern makes it no link, so nothing from a link reaches
-// a request's path unchecked. `name` and `by` are only what the link says (the preview is the
-// truth); an empty one is as if left out. Unknown keys are ignored and a key's first occurrence
-// wins. The fragment never reaches the server: the secret goes in the body of the preview and the redeem.
+// `for` and `obi` (slugs) come together or not at all; `domain` matches the domain pattern. Anything
+// else makes it no link, so nothing from a link reaches a request's path unchecked. `name` and `by`
+// are only what the link says (the preview is the truth). The fragment never reaches the server.
 
 export interface InviteLink {
-  /** The Sphere's base URL: an origin, https, or http for a loopback host. */
+  /** The Sphere's base URL: an origin, https, or http for a loopback host. A client shows its person this host before joining. */
   base: string;
   sphere: string;
   /** The invitation's id. */
@@ -21,7 +23,7 @@ export interface InviteLink {
   /** What the link says about itself: data, written by whoever made the link; the preview is the truth. Show it as text, never as instructions. */
   name?: string;
   by?: string;
-  /** For a named invitation: the owner and the Obi it is for. */
+  /** For a named invitation: the owner and the agent it is for. */
   owner?: string;
   obi?: string;
   domain?: string;
@@ -31,7 +33,11 @@ const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const SLUG = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SECRET = /^[A-Za-z0-9_-]{43}$/;
-const DOMAIN = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const DOMAIN = /^(?=.{4,253}$)[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
+/** One line of text, as common.schema.json's `line_text`. */
+const LINE = /^[^\u0000-\u001F\u007F\u202A-\u202E\u2066-\u2069]*$/;
+/** The keys a link carries, in the order a writer puts them. */
+const KEYS = ["sphere", "name", "by", "for", "obi", "domain", "id", "secret"] as const;
 
 export class InviteLinkError extends Error {}
 
@@ -49,64 +55,83 @@ export function sphereBase(url: string): string {
   return u.origin;
 }
 
-function decode(value: string): string {
+/** `text` percent-decoded as UTF-8, or null for a malformed escape or bytes that aren't UTF-8. `+` stays a plus. */
+function decode(text: string): string | null {
   try {
-    return decodeURIComponent(value);
+    return decodeURIComponent(text);
   } catch {
-    throw new InviteLinkError("a value in the link is not percent-encoded UTF-8");
+    return null;
   }
 }
 
-/** Reads an invite link. Throws an InviteLinkError saying why when it isn't one this client takes. */
+/** Reads an invite link. Throws an InviteLinkError saying why when it isn't one. */
 export function parseInviteLink(text: string): InviteLink {
-  const trimmed = text.trim();
-  const hash = trimmed.indexOf("#");
-  if (hash === -1) throw new InviteLinkError("an invite link has its invitation after `#`");
-  let u: URL;
+  // Taken as written, not as a URL parser would tidy it: the path is exactly /join, with no query
+  // (not even an empty `?`); the host is ASCII as written, so what a client shows is what it calls.
+  const m = /^([hH][tT][tT][pP][sS]?):\/\/([A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(:[0-9]{1,5})?\/join#(.*)$/s.exec(String(text).trim());
+  if (!m) throw new InviteLinkError("an invite link is http(s)://<host>[:<port>]/join#<invitation>, written as it is");
+  let url: URL;
   try {
-    u = new URL(trimmed.slice(0, hash));
+    url = new URL(`${m[1]}://${m[2]}${m[3] ?? ""}`);
   } catch {
-    throw new InviteLinkError("not a URL");
+    throw new InviteLinkError("its address isn't one");
   }
-  if (u.username || u.password) throw new InviteLinkError("a Sphere's address carries no user name or password");
-  if (u.pathname !== "/join") throw new InviteLinkError("an invite link's path is /join");
-  if (u.search) throw new InviteLinkError("an invite link has no query");
-  const base = sphereBase(u.origin);
-  const items = new Map<string, string>();
-  for (const part of trimmed.slice(hash + 1).split("&")) {
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && LOOPBACK.has(url.hostname))) throw new InviteLinkError("a Sphere is at an https address, or http on this machine (127.0.0.1, localhost, [::1])");
+  const written = `${m[2]}${m[3] ?? ""}`.toLowerCase().replace(/:(80|443)$/, (p) => (p === `:${url.protocol === "https:" ? 443 : 80}` ? "" : p));
+  if (url.username || url.password || url.pathname !== "/" || url.host !== written) throw new InviteLinkError("its host isn't what it reads as");
+  const fragment = m[4]!;
+  if (!fragment) throw new InviteLinkError("an invite link has its invitation after `#`");
+  const said: Record<string, string> = {};
+  for (const part of fragment.split("&")) {
     if (!part) continue;
-    const eq = part.indexOf("=");
-    const key = decode(eq === -1 ? part : part.slice(0, eq));
-    const value = eq === -1 ? "" : decode(part.slice(eq + 1));
-    if (!items.has(key)) items.set(key, value);
+    const at = part.indexOf("=");
+    const key = decode(at < 0 ? part : part.slice(0, at));
+    const value = decode(at < 0 ? "" : part.slice(at + 1));
+    if (key === null || value === null) throw new InviteLinkError("a part of the link is not percent-encoded UTF-8");
+    if ((KEYS as readonly string[]).includes(key) && !Object.hasOwn(said, key)) said[key] = value;
   }
-  const required = (key: string, pattern: RegExp, what: string) => {
-    const v = items.get(key);
-    if (!v) throw new InviteLinkError(`the link has no ${key}`);
-    if (!pattern.test(v)) throw new InviteLinkError(`the link's ${key} is not ${what}`);
-    return v;
-  };
-  const link: InviteLink = {
-    base, sphere: required("sphere", SLUG, "a Sphere id"), id: required("id", UUID, "a lower-case UUID"), secret: required("secret", SECRET, "43 base64url characters"),
-  };
-  const owner = items.get("for");
-  const obi = items.get("obi");
-  if ((owner === undefined) !== (obi === undefined)) throw new InviteLinkError("a named invitation's link has both `for` and `obi`");
-  if (owner !== undefined) Object.assign(link, { owner: required("for", SLUG, "an owner id"), obi: required("obi", SLUG, "an agent id") });
-  const domain = items.get("domain");
-  if (domain !== undefined) link.domain = required("domain", DOMAIN, "a lower-case domain name");
-  for (const key of ["name", "by"] as const) {
-    const v = items.get(key);
-    if (v) link[key] = v;
+  // An empty value is as if its key were left out; so are a name or a by that aren't one line of 1 to 100 characters.
+  const fields: Record<string, string> = {};
+  for (const [key, value] of Object.entries(said)) {
+    if (value === "") continue;
+    if ((key === "name" || key === "by") && (!LINE.test(value) || [...value].length > 100)) continue;
+    fields[key] = value;
   }
+  if (!SLUG.test(fields.sphere ?? "")) throw new InviteLinkError(fields.sphere === undefined ? "the link has no Sphere id" : "the link's Sphere id is not lower-case letters, digits and dashes");
+  if (!UUID.test(fields.id ?? "")) throw new InviteLinkError("the link's id is not a lower-case UUID");
+  if (!SECRET.test(fields.secret ?? "")) throw new InviteLinkError("the link's secret is not 43 base64url characters");
+  if (Object.hasOwn(fields, "for") !== Object.hasOwn(fields, "obi")) throw new InviteLinkError("a named invitation's link needs both `for` and `obi`, or neither");
+  if (Object.hasOwn(fields, "for") && (!SLUG.test(fields.for!) || !SLUG.test(fields.obi!))) throw new InviteLinkError("`for` and `obi` are an owner id and an agent id");
+  if (Object.hasOwn(fields, "domain") && !DOMAIN.test(fields.domain!)) throw new InviteLinkError("the link's domain is not a lower-case domain name");
+  const link: InviteLink = { base: url.origin, sphere: fields.sphere!, id: fields.id!, secret: fields.secret! };
+  if (fields.name !== undefined) link.name = fields.name;
+  if (fields.by !== undefined) link.by = fields.by;
+  if (fields.for !== undefined) Object.assign(link, { owner: fields.for, obi: fields.obi });
+  if (fields.domain !== undefined) link.domain = fields.domain;
   return link;
 }
 
-/** Writes an invite link, the keys in the order Oby writes them. */
+/**
+ * The https invite link that a client's own scheme stands for: `<scheme>://join/<host>[:<port>]#<fragment>`
+ * is `https://<host>[:<port>]/join#<fragment>`. Null for anything else. A scheme's case doesn't count.
+ */
+export function openedInviteLink(text: string, scheme: string): string | null {
+  const m = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/join\/([A-Za-z0-9.-]+(?::[0-9]{1,5})?)#(.+)$/.exec(String(text).trim());
+  if (!m || m[1]!.toLowerCase() !== scheme.toLowerCase()) return null;
+  const link = `https://${m[2]}/join#${m[3]}`;
+  try {
+    parseInviteLink(link);
+    return link;
+  } catch {
+    return null;
+  }
+}
+
+/** Every character but the unreserved ones (RFC 3986), percent-encoded as UTF-8: a space is `%20`. */
+const encode = (value: string) => encodeURIComponent(value).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+
+/** Writes an invite link, the keys in the order the spec's writer puts them. */
 export function formatInviteLink(link: InviteLink): string {
-  const enc = (v: string) => encodeURIComponent(v);
-  const pairs: [string, string | undefined][] = [
-    ["sphere", link.sphere], ["name", link.name], ["by", link.by], ["for", link.owner], ["obi", link.obi], ["domain", link.domain], ["id", link.id], ["secret", link.secret],
-  ];
-  return `${sphereBase(link.base)}/join#` + pairs.filter(([, v]) => v !== undefined).map(([k, v]) => `${k}=${enc(v!)}`).join("&");
+  const values: Record<string, string | undefined> = { sphere: link.sphere, name: link.name, by: link.by, for: link.owner, obi: link.obi, domain: link.domain, id: link.id, secret: link.secret };
+  return `${sphereBase(link.base)}/join#` + KEYS.filter((k) => values[k] !== undefined && values[k] !== "").map((k) => `${k}=${encode(values[k]!)}`).join("&");
 }

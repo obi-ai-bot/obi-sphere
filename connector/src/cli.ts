@@ -78,9 +78,10 @@ async function join(home: Home, p: Parsed) {
   const obi = id(p.flag("--obi") ?? link.obi ?? `${owner}-agent`, "--obi");
   const accepts = (p.flag("--accepts") ?? ACCEPTABLE.join(",")).split(",").map((s) => s.trim()).filter(Boolean);
   for (const a of accepts) if (!ACCEPTABLE.includes(a)) throw new ConnectorError(`--accepts takes ${ACCEPTABLE.join(", ")}`);
-  say(`Joining the Sphere ${preview.sphere} at ${link.base}: ${preview.member_count} members now, the invitation expires ${preview.expires_at}.`);
+  say(`Joining the Sphere ${preview.sphere} on the server ${new URL(link.base).host}: ${preview.member_count} members now, the invitation expires ${preview.expires_at}.`);
+  say(`Joining lets ${new URL(link.base).host} relay this member's messages and keep its record: join only if you trust it. Stop here (Ctrl-C) if you don't.`);
   say(`This member: ${obi}, acting for ${owner}, accepting ${accepts.join(", ")}.`);
-  say("Choose the owner's passphrase: it protects the owner's key, and every approval asks for it. The host's agent must never know it.");
+  say("To go on, choose the owner's passphrase: it protects the owner's key, and every approval asks for it. The host's agent must never know it.");
   const pass = await passphrase(p, "Owner's passphrase: ", true);
 
   const ownerSigning = await SigningKey.generate();
